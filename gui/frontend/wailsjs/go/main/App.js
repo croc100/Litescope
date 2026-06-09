@@ -10,6 +10,14 @@ export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
 }
 
+export function QueryTable(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['QueryTable'](arg1, arg2, arg3, arg4);
+}
+
 export function Schema(arg1) {
   return window['go']['main']['App']['Schema'](arg1);
+}
+
+export function TableDiffRows(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['TableDiffRows'](arg1, arg2, arg3, arg4, arg5);
 }
