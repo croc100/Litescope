@@ -60,7 +60,7 @@ changelog:
 
 brews:
   - name: litescope
-    homepage: "https://litescope.dev"
+    homepage: "https://github.com/croc100/Litescope"
     description: "SQLite production operations — diff, validate, backup check, schema drift monitoring"
     license: "Elastic-2.0"
     repository:
@@ -95,5 +95,5 @@ release:
     Download the binary for your platform from the assets below.
 
     ---
-    **Full docs**: https://litescope.dev/docs
-    **Pricing**: https://litescope.dev/pricing
+    **Full docs**: https://github.com/croc100/Litescope#readme
+    **Pricing**: https://github.com/croc100/Litescope#pricing

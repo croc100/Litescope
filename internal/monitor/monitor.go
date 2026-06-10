@@ -145,7 +145,7 @@ func slackPayload(r *DriftResult) map[string]interface{} {
 			{
 				"type": "context",
 				"elements": []map[string]string{
-					{"type": "mrkdwn", "text": "Sent by <https://litescope.dev|Litescope> · Pro"},
+					{"type": "mrkdwn", "text": "Sent by <https://github.com/croc100/Litescope|Litescope> · Pro"},
 				},
 			},
 		},

@@ -192,7 +192,7 @@ Examples:
   litescope monitor watch d1://TOKEN@ACC/prod --baseline baseline.json --webhook https://hooks.slack.com/...
 
   Set license: export LITESCOPE_LICENSE=lsc_pro_<key>
-  Get license: https://litescope.dev/pricing`,
+  Get license: https://github.com/croc100/Litescope#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// ── License gate ──────────────────────────────────────
@@ -298,7 +298,7 @@ Examples:
   litescope monitor history reports/drift.jsonl --last 10
   litescope monitor history reports/drift.jsonl --format json
 
-  Get Cloud: https://litescope.dev/pricing`,
+  Get Cloud: https://github.com/croc100/Litescope#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := license.RequireCloud(); err != nil {
