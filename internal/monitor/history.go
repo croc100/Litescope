@@ -23,6 +23,7 @@ func LoadHistory(path string) ([]HistoryEntry, error) {
 
 	var entries []HistoryEntry
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024) // 10MB max line — large drift payloads
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

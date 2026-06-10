@@ -315,6 +315,9 @@ Examples:
 				return nil
 			}
 
+			// Summarize over full history before slicing
+			summary := monitor.Summarize(entries)
+
 			// Slice to --last N
 			if last > 0 && last < len(entries) {
 				entries = entries[len(entries)-last:]
@@ -327,7 +330,6 @@ Examples:
 			}
 
 			// Terminal output
-			summary := monitor.Summarize(entries)
 			fmt.Printf("\n  %s  %s\n", styleDim.Render("source"), summary.Source)
 			fmt.Printf("  %s  %d checks · %s drift events · last checked %s\n\n",
 				styleDim.Render("·"),
