@@ -57,6 +57,12 @@ func Compare(oldPath, newPath string) (*Result, error) {
 	return &Result{Schema: schemaDiffs, Data: dataDiffs}, nil
 }
 
+// CompareSchemas compares two schemas loaded via connectors.
+// Data diff is skipped for remote sources.
+func CompareSchemas(oldSchema, newSchema *schema.Schema) *Result {
+	return &Result{Schema: diffSchema(oldSchema, newSchema)}
+}
+
 func diffSchema(old, new *schema.Schema) []TableDiff {
 	oldMap := old.TableMap()
 	newMap := new.TableMap()
