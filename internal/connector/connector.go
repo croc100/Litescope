@@ -21,12 +21,15 @@ type Connector interface {
 //
 // Supported formats:
 //
-//	path/to/file.db              — local SQLite file
-//	turso://TOKEN@ORG/DBNAME     — Turso (libSQL) database
+//	path/to/file.db                        — local SQLite file
+//	turso://TOKEN@ORG/DBNAME               — Turso (libSQL) database
+//	d1://TOKEN@ACCOUNT_ID/DATABASE_ID      — Cloudflare D1 database
 func Open(dsn string) (Connector, error) {
 	switch {
 	case strings.HasPrefix(dsn, "turso://"):
 		return openTurso(dsn)
+	case strings.HasPrefix(dsn, "d1://"):
+		return openD1(dsn)
 	default:
 		return openFile(dsn)
 	}
