@@ -92,9 +92,12 @@ class LitescopeEditorProvider implements vscode.CustomReadonlyEditorProvider {
 
     switch (msg.type) {
       case "getSchema": {
+        // payload.path overrides currentPath (e.g. after user picks a different file)
+        const targetPath =
+          (msg.payload as { path?: string } | undefined)?.path ?? currentPath;
         try {
           const raw = await runBinary(binPath, [
-            "schema", currentPath, "--format", "json",
+            "schema", targetPath, "--format", "json",
           ]);
           webview.postMessage({ type: "schema", payload: JSON.parse(raw) });
         } catch (e) {

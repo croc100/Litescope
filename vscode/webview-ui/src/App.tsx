@@ -8,22 +8,26 @@ import { postMessage, initialPath } from './vscode'
 type View = 'diff' | 'explorer'
 
 // ── VS Code message bus ───────────────────────────────────────────────────────
+// Multiple listeners per type are supported via listener arrays.
 
 type MsgHandler = (payload: unknown) => void
 
-const handlers = new Map<string, MsgHandler>()
+const listeners = new Map<string, Set<MsgHandler>>()
 
 window.addEventListener('message', (e) => {
   const msg = e.data as { type: string; payload: unknown }
-  const fn = handlers.get(msg.type)
-  if (fn) fn(msg.payload)
+  const fns = listeners.get(msg.type)
+  if (fns) fns.forEach((fn) => fn(msg.payload))
 })
 
-function on(type: string, fn: MsgHandler) {
-  handlers.set(type, fn)
-  return () => handlers.delete(type)
+/** Subscribe. Returns unsubscribe. */
+function on(type: string, fn: MsgHandler): () => void {
+  if (!listeners.has(type)) listeners.set(type, new Set())
+  listeners.get(type)!.add(fn)
+  return () => listeners.get(type)?.delete(fn)
 }
 
+/** One-shot subscribe. */
 function once(type: string): Promise<unknown> {
   return new Promise((resolve) => {
     const off = on(type, (payload) => {
@@ -44,15 +48,6 @@ async function apiPickFile(): Promise<string | null> {
   return (result as string) ?? null
 }
 
-async function apiSchema(path: string): Promise<unknown> {
-  postMessage({ type: 'getSchema' })
-  return once('schema')
-}
-
-async function apiDiff(oldPath: string, newPath: string): Promise<unknown> {
-  postMessage({ type: 'diff', payload: { oldPath, newPath } })
-  return once('diff')
-}
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -129,11 +124,12 @@ function DiffView({ forcedDiff }: { forcedDiff: { old: string; new: string } | n
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Listen for diff results pushed by extension (from diffDatabases command)
+  // Listen for diff results pushed directly by extension (e.g. diffDatabases command)
   useEffect(() => {
     const off = on('diff', (payload) => {
       setResult(payload)
       setLoading(false)
+      setError('')
     })
     return off
   }, [])
@@ -156,14 +152,8 @@ function DiffView({ forcedDiff }: { forcedDiff: { old: string; new: string } | n
     setLoading(true)
     setError('')
     setResult(null)
-    try {
-      const res = await apiDiff(oldPath, newPath)
-      setResult(res)
-    } catch (e: unknown) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
+    // Extension will fire 'diff' event → handled by the useEffect listener above
+    postMessage({ type: 'diff', payload: { oldPath, newPath } })
   }
 
   const canCompare = !!oldPath && !!newPath && !loading
@@ -444,23 +434,18 @@ function ExplorerView({ initialDbPath }: { initialDbPath: string }) {
     return off
   }, [])
 
-  async function loadSchema(p: string) {
+  function loadSchema(p: string) {
     setError('')
     setSchema(null)
-    try {
-      const s = await apiSchema(p)
-      setSchema(s as Record<string, unknown>)
-      setSelectedTable(null)
-    } catch (e: unknown) {
-      setError(String(e))
-    }
+    // Extension responds with 'schema' or 'error' event → handled by listeners above
+    postMessage({ type: 'getSchema', payload: { path: p } })
   }
 
   async function pickFile() {
     const p = await apiPickFile()
     if (!p) return
     setPath(p)
-    await loadSchema(p)
+    loadSchema(p)
   }
 
   const tables = (schema?.Tables as Record<string, unknown>[] | null) ?? []
