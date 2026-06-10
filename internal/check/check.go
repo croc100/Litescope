@@ -3,6 +3,7 @@ package check
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
 	"github.com/croc100/litescope/internal/diff"
 	_ "modernc.org/sqlite"
@@ -92,6 +93,9 @@ func Check(backupPath, referencePath string, withData bool) (*Result, error) {
 // ── SQLite helpers ────────────────────────────────────────────────────────────
 
 func openDB(path string) (*sql.DB, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("database file not found: %s", path)
+	}
 	return sql.Open("sqlite", path+"?mode=ro")
 }
 
