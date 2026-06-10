@@ -119,21 +119,38 @@ litescope monitor watch turso://TOKEN@ORG/prod \
 
 ### Automatic PR schema diff comments
 
-Every PR that touches a `.db` or migration file gets a schema diff comment posted automatically.
+```yaml
+- uses: croc100/litescope-action@v1
+  with:
+    command: diff
+    source: before.db
+    target: after.db
+    format: markdown
+    comment-on-pr: "true"
+```
 
-See [`.github/workflows/pr-schema-diff.yml`](.github/workflows/pr-schema-diff.yml) for the ready-to-use workflow.
+### Validate migration in CI
+
+```yaml
+- uses: croc100/litescope-action@v1
+  with:
+    command: validate
+    source: before.db
+    target: after.db
+    expect: .litescope/migration.yaml
+```
 
 ### CI drift check
 
 ```yaml
-- name: Check schema drift
-  run: |
-    litescope monitor check production.db \
-      --baseline .litescope/baseline.json \
-      --format json
+- uses: croc100/litescope-action@v1
+  with:
+    command: monitor-check
+    source: turso://TOKEN@ORG/prod
+    baseline: .litescope/baseline.json
 ```
 
-Exits 1 on drift → blocks the pipeline.
+Exits 1 on drift → blocks the pipeline. See [croc100/litescope-action](https://github.com/croc100/litescope-action) for full options.
 
 ---
 
