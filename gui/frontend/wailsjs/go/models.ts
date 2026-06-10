@@ -131,6 +131,45 @@ export namespace diff {
 
 }
 
+export namespace main {
+	
+	export class DiffedRow {
+	    Status: string;
+	    PK: any;
+	    Old: Record<string, any>;
+	    New: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiffedRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Status = source["Status"];
+	        this.PK = source["PK"];
+	        this.Old = source["Old"];
+	        this.New = source["New"];
+	    }
+	}
+	export class TableRows {
+	    Columns: string[];
+	    Rows: any[][];
+	    Total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableRows(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Columns = source["Columns"];
+	        this.Rows = source["Rows"];
+	        this.Total = source["Total"];
+	    }
+	}
+
+}
+
 export namespace schema {
 	
 	export class Column {

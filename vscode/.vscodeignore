@@ -1,0 +1,14 @@
+.vscode/**
+node_modules/**
+webview-ui/node_modules/**
+webview-ui/src/**
+webview-ui/public/**
+webview-ui/index.html
+webview-ui/vite.config.ts
+webview-ui/tsconfig*.json
+webview-ui/postcss.config.js
+webview-ui/tailwind.config.js
+src/**
+tsconfig.json
+.eslintrc.json
+**/*.map

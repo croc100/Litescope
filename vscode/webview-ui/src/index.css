@@ -1,0 +1,162 @@
+/* Use VS Code's own CSS variables — theme is applied automatically */
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+* { box-sizing: border-box; }
+
+table { border-collapse: collapse; width: 100%; }
+
+th {
+  text-align: left;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vscode-foreground);
+  opacity: 0.5;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  position: sticky;
+  top: 0;
+}
+
+td {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 13px;
+}
+
+tr:hover td { background: var(--vscode-list-hoverBackground); }
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family);
+  padding: 1px 4px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  margin-left: 4px;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
+.badge-pk    { color: var(--vscode-symbolIcon-keywordForeground, #c586c0); }
+.badge-notnull { color: var(--vscode-symbolIcon-fieldForeground, #9cdcfe); }
+.badge-unique  { color: var(--vscode-symbolIcon-enumeratorForeground, #4ec9b0); }
+
+.type-text    { color: var(--vscode-symbolIcon-stringForeground, #ce9178); }
+.type-int     { color: var(--vscode-symbolIcon-numberForeground, #b5cea8); }
+.type-real    { color: var(--vscode-symbolIcon-numberForeground, #b5cea8); }
+.type-blob    { color: var(--vscode-symbolIcon-colorForeground, #c8c8c8); }
+.type-default { color: var(--vscode-symbolIcon-typeParameterForeground, #4ec9b0); }
+
+.section-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  border-top: 1px solid var(--vscode-panel-border);
+  margin-top: 12px;
+}
+
+/* Diff colors */
+.diff-added   { color: var(--vscode-gitDecoration-addedResourceForeground,   #73c991); }
+.diff-removed { color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); }
+.diff-modified{ color: var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d); }
+
+.diff-row-added   td { background: rgba(115, 201, 145, 0.06); }
+.diff-row-removed td { background: rgba(241,  76,  76, 0.06); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family);
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  opacity: 0.4;
+  font-size: 13px;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+}
+
+.tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--vscode-foreground);
+  opacity: 0.6;
+  border-bottom: 2px solid transparent;
+  outline: none;
+}
+
+.tab:hover { opacity: 0.9; }
+.tab.active {
+  opacity: 1;
+  border-bottom-color: var(--vscode-focusBorder);
+  color: var(--vscode-foreground);
+}
+
+.count-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.page-header {
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--vscode-editor-font-family);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-header .meta {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground); }

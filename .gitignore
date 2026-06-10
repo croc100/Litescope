@@ -1,0 +1,22 @@
+# Go
+*.exe
+*.test
+/bin/
+/dist/
+
+# Node
+node_modules/
+vscode/node_modules/
+vscode/webview-ui/node_modules/
+
+# Build outputs
+vscode/dist/
+vscode/webview-ui/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.db
+tests/*.db

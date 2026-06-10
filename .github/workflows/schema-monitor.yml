@@ -1,0 +1,65 @@
+name: Schema Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:          # manual trigger
+
+jobs:
+  drift-check:
+    name: Check schema drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install litescope
+        run: go install ./cmd/litescope
+
+      # ── Local file example ────────────────────────────────────────────────────
+      # Uncomment and adjust paths if you commit a production backup or snapshot.
+      #
+      # - name: Check local DB against baseline
+      #   run: |
+      #     litescope monitor check production.db \
+      #       --baseline .litescope/baseline.json \
+      #       --format json | tee drift-report.json
+
+      # ── Turso example ─────────────────────────────────────────────────────────
+      # Set TURSO_TOKEN and TURSO_ORG in repository secrets.
+      # LITESCOPE_LICENSE is required for webhook alerts (Pro).
+      #
+      # - name: Check Turso schema drift
+      #   env:
+      #     LITESCOPE_LICENSE: ${{ secrets.LITESCOPE_LICENSE }}
+      #   run: |
+      #     litescope monitor check \
+      #       "turso://${{ secrets.TURSO_TOKEN }}@${{ secrets.TURSO_ORG }}/production" \
+      #       --baseline .litescope/baseline.json \
+      #       --format json | tee drift-report.json
+
+      # ── Cloudflare D1 example ─────────────────────────────────────────────────
+      # Set CF_API_TOKEN and CF_ACCOUNT_ID in repository secrets.
+      #
+      # - name: Check D1 schema drift
+      #   run: |
+      #     litescope monitor check \
+      #       "d1://${{ secrets.CF_API_TOKEN }}@${{ secrets.CF_ACCOUNT_ID }}/${{ secrets.D1_DATABASE_ID }}" \
+      #       --baseline .litescope/baseline.json
+
+      # ── Default: show help to confirm binary works ─────────────────────────────
+      - name: Verify litescope binary
+        run: litescope monitor --help
+
+      # Uncomment after adding a real check step above.
+      # - name: Upload drift report
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: drift-report
+      #     path: drift-report.json
