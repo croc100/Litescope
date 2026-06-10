@@ -11,6 +11,7 @@ import (
 
 func cmdDiff() *cobra.Command {
 	var htmlOut string
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "diff <old.db> <new.db>",
@@ -22,20 +23,36 @@ func cmdDiff() *cobra.Command {
 				return err
 			}
 
-			if htmlOut != "" {
-				f, err := os.Create(htmlOut)
+			switch format {
+			case "json":
+				return render.JSON(os.Stdout, result)
+			case "html":
+				out := htmlOut
+				if out == "" {
+					out = "litescope-report.html"
+				}
+				f, err := os.Create(out)
 				if err != nil {
 					return err
 				}
 				defer f.Close()
 				return render.HTML(f, result)
+			default:
+				if htmlOut != "" {
+					f, err := os.Create(htmlOut)
+					if err != nil {
+						return err
+					}
+					defer f.Close()
+					return render.HTML(f, result)
+				}
+				fmt.Print(render.Terminal(result))
+				return nil
 			}
-
-			fmt.Print(render.Terminal(result))
-			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&htmlOut, "html", "", "write HTML report to file")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json | html")
 	return cmd
 }
