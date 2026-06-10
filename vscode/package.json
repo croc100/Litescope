@@ -8,12 +8,7 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "keywords": ["sqlite", "database", "diff", "explorer", "db"],
-  "activationEvents": [
-    "onLanguage:sql",
-    "workspaceContains:**/*.db",
-    "workspaceContains:**/*.sqlite",
-    "workspaceContains:**/*.sqlite3"
-  ],
+  "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -58,6 +53,18 @@
         "title": "Refresh",
         "icon": "$(refresh)",
         "category": "Litescope"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "litescope.dbViewer",
+        "displayName": "Litescope DB Viewer",
+        "selector": [
+          { "filenamePattern": "*.db" },
+          { "filenamePattern": "*.sqlite" },
+          { "filenamePattern": "*.sqlite3" }
+        ],
+        "priority": "default"
       }
     ],
     "menus": {

@@ -232,11 +232,84 @@ function buildDetailHtml(
   return html;
 }
 
+// ── Custom Editor Provider (intercepts .db double-click) ─────────────────────
+
+class LitescopeEditorProvider implements vscode.CustomReadonlyEditorProvider {
+  static readonly viewType = "litescope.dbViewer";
+
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly treeProvider: LitescopeTreeProvider
+  ) {}
+
+  openCustomDocument(uri: vscode.Uri): vscode.CustomDocument {
+    return { uri, dispose: () => {} };
+  }
+
+  async resolveCustomEditor(
+    document: vscode.CustomDocument,
+    panel: vscode.WebviewPanel
+  ): Promise<void> {
+    const dbPath = document.uri.fsPath;
+
+    panel.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist"),
+      ],
+    };
+
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "icon.svg");
+
+    // Show loading state immediately
+    panel.webview.html = buildDetailHtml(panel.webview, this.context, {
+      mode: "diff-loading",
+      oldPath: dbPath,
+      newPath: "",
+    });
+
+    // Load schema and add to tree
+    try {
+      await this.treeProvider.addDatabase(dbPath);
+      // Focus the Litescope panel so user sees the tree
+      await vscode.commands.executeCommand("litescope.databases.focus");
+
+      // Show the first table by default if available
+      const dbs = this.treeProvider.getDatabases();
+      const db = dbs.find((d) => d.dbPath === dbPath);
+      if (db && db.schema.Tables?.length > 0) {
+        const firstTable = db.schema.Tables[0];
+        panel.title = `${path.basename(dbPath)}`;
+        panel.webview.html = buildDetailHtml(panel.webview, this.context, {
+          mode: "table",
+          table: firstTable,
+          dbPath,
+        });
+      } else {
+        panel.webview.html = buildDetailHtml(panel.webview, this.context, {
+          mode: "welcome",
+        });
+      }
+    } catch (e) {
+      vscode.window.showErrorMessage(`Litescope: Failed to load ${path.basename(dbPath)}: ${e}`);
+    }
+  }
+}
+
 // ── Activate ──────────────────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
   const binPath = getBinaryPath(context);
   const treeProvider = new LitescopeTreeProvider(binPath);
+
+  // Register custom editor (intercepts .db / .sqlite / .sqlite3 opens)
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      LitescopeEditorProvider.viewType,
+      new LitescopeEditorProvider(context, treeProvider),
+      { supportsMultipleEditorsPerDocument: false }
+    )
+  );
 
   // Register tree view
   const treeView = vscode.window.createTreeView("litescope.databases", {
