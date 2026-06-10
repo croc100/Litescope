@@ -1,573 +1,347 @@
-import { useState, useEffect, useCallback } from 'react'
-import {
-  GitCompare, Database, Table2, FolderOpen,
-  RefreshCw, Hash, AlertCircle, CheckCircle2, ChevronRight
-} from 'lucide-react'
-import { postMessage, initialPath } from './vscode'
+import { useState } from "react";
 
-type View = 'diff' | 'explorer'
+// ── Init data injected by extension ──────────────────────────────────────────
 
-// ── VS Code message bus ───────────────────────────────────────────────────────
-// Multiple listeners per type are supported via listener arrays.
-
-type MsgHandler = (payload: unknown) => void
-
-const listeners = new Map<string, Set<MsgHandler>>()
-
-window.addEventListener('message', (e) => {
-  const msg = e.data as { type: string; payload: unknown }
-  const fns = listeners.get(msg.type)
-  if (fns) fns.forEach((fn) => fn(msg.payload))
-})
-
-/** Subscribe. Returns unsubscribe. */
-function on(type: string, fn: MsgHandler): () => void {
-  if (!listeners.has(type)) listeners.set(type, new Set())
-  listeners.get(type)!.add(fn)
-  return () => listeners.get(type)?.delete(fn)
+declare global {
+  interface Window {
+    __LITESCOPE_INIT__?: InitData;
+  }
 }
 
-/** One-shot subscribe. */
-function once(type: string): Promise<unknown> {
-  return new Promise((resolve) => {
-    const off = on(type, (payload) => {
-      off()
-      resolve(payload)
-    })
-  })
+type InitData =
+  | { mode: "table"; table: TableInfo; dbPath: string }
+  | { mode: "diff"; result: DiffResult; oldPath: string; newPath: string }
+  | { mode: "diff-loading"; oldPath: string; newPath: string }
+  | { mode: "welcome" };
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ColumnInfo {
+  Name: string;
+  Type: string;
+  NotNull: boolean;
+  Default: string;
+  PK: number;
 }
 
-// ── API wrappers ──────────────────────────────────────────────────────────────
-
-async function apiPickFile(): Promise<string | null> {
-  postMessage({ type: 'pickFile' })
-  const result = await Promise.race([
-    once('pickedFile'),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 60_000)),
-  ])
-  return (result as string) ?? null
+interface IndexInfo {
+  Name: string;
+  Unique: boolean;
 }
 
+interface TableInfo {
+  Name: string;
+  Columns: ColumnInfo[];
+  Indexes: IndexInfo[];
+}
+
+interface TableDiff {
+  Name: string;
+  Added: boolean;
+  Removed: boolean;
+  AddedColumns: ColumnInfo[] | null;
+  RemovedColumns: ColumnInfo[] | null;
+  ChangedColumns: { Name: string; Old: ColumnInfo; New: ColumnInfo }[] | null;
+  AddedIndexes: IndexInfo[] | null;
+  RemovedIndexes: IndexInfo[] | null;
+}
+
+interface DataDiff {
+  Table: string;
+  Added: number;
+  Removed: number;
+  Changed: number;
+}
+
+interface DiffResult {
+  Schema: TableDiff[] | null;
+  Data: DataDiff[] | null;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function typeClass(t: string): string {
+  const upper = t.toUpperCase();
+  if (upper.includes("INT")) return "type-int";
+  if (upper.includes("TEXT") || upper.includes("CHAR") || upper.includes("CLOB"))
+    return "type-text";
+  if (upper.includes("REAL") || upper.includes("FLOAT") || upper.includes("DOUBLE"))
+    return "type-real";
+  if (upper.includes("BLOB")) return "type-blob";
+  return "type-default";
+}
+
+function basename(p: string) {
+  return p.replace(/.*[\\/]/, "");
+}
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [view, setView] = useState<View>('explorer')
-  const [forcedDiff, setForcedDiff] = useState<{ old: string; new: string } | null>(null)
+  const init: InitData = window.__LITESCOPE_INIT__ ?? { mode: "welcome" };
 
-  useEffect(() => {
-    // Extension can push a mode switch (e.g. from diffDatabases command)
-    const off = on('setMode', (payload) => {
-      if (payload === 'diff') setView('diff')
-    })
-    return off
-  }, [])
+  if (init.mode === "table") return <TableView table={init.table} dbPath={init.dbPath} />;
+  if (init.mode === "diff") return <DiffView result={init.result} oldPath={init.oldPath} newPath={init.newPath} />;
+  if (init.mode === "diff-loading") return <DiffLoadingView oldPath={init.oldPath} newPath={init.newPath} />;
+  return <WelcomeView />;
+}
 
+// ── Welcome ───────────────────────────────────────────────────────────────────
+
+function WelcomeView() {
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] text-[13px] font-sans overflow-hidden select-none">
-      <div className="flex flex-1 overflow-hidden">
-        <ActivityBar view={view} setView={setView} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {view === 'diff'
-            ? <DiffView forcedDiff={forcedDiff} />
-            : <ExplorerView initialDbPath={initialPath} />}
-        </main>
+    <div className="empty-state">
+      Select a table from the Litescope panel to inspect it.
+    </div>
+  );
+}
+
+// ── Diff Loading ──────────────────────────────────────────────────────────────
+
+function DiffLoadingView({ oldPath, newPath }: { oldPath: string; newPath: string }) {
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Comparing databases…</h2>
+        <div className="meta">{basename(oldPath)} → {basename(newPath)}</div>
       </div>
-      <StatusBar view={view} />
+      <div className="empty-state" style={{ opacity: 0.5 }}>Loading…</div>
     </div>
-  )
+  );
 }
 
-/* ─── Activity Bar ──────────────────────────────────────────── */
-function ActivityBar({ view, setView }: { view: View; setView: (v: View) => void }) {
-  return (
-    <div className="w-[48px] flex flex-col items-center bg-[#333333] border-r border-[#252525] shrink-0 pt-2 gap-1">
-      <ActivityItem icon={<Table2 size={22} strokeWidth={1.5} />} label="Explorer" active={view === 'explorer'} onClick={() => setView('explorer')} />
-      <ActivityItem icon={<GitCompare size={22} strokeWidth={1.5} />} label="Diff" active={view === 'diff'} onClick={() => setView('diff')} />
-    </div>
-  )
-}
+// ── Table View ────────────────────────────────────────────────────────────────
 
-function ActivityItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      title={label}
-      className={`relative w-full h-[48px] flex items-center justify-center transition-colors
-        ${active ? 'text-[#ffffff]' : 'text-[#858585] hover:text-[#cccccc]'}`}
-    >
-      {active && <span className="absolute left-0 top-[8px] bottom-[8px] w-[2px] bg-[#007acc] rounded-r-full" />}
-      {icon}
-    </button>
-  )
-}
-
-/* ─── Status Bar ────────────────────────────────────────────── */
-function StatusBar({ view }: { view: View }) {
-  return (
-    <div className="h-[22px] bg-[#007acc] flex items-center px-3 gap-4 text-white text-[11px] shrink-0">
-      <span className="flex items-center gap-1.5 opacity-90">
-        <Database size={11} />
-        Litescope
-      </span>
-      <span className="opacity-60">|</span>
-      <span className="opacity-80">{view === 'diff' ? 'Diff' : 'Explorer'}</span>
-    </div>
-  )
-}
-
-/* ─── Diff View ─────────────────────────────────────────────── */
-function DiffView({ forcedDiff }: { forcedDiff: { old: string; new: string } | null }) {
-  const [oldPath, setOldPath] = useState(forcedDiff?.old ?? '')
-  const [newPath, setNewPath] = useState(forcedDiff?.new ?? '')
-  const [result, setResult] = useState<unknown>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  // Listen for diff results pushed directly by extension (e.g. diffDatabases command)
-  useEffect(() => {
-    const off = on('diff', (payload) => {
-      setResult(payload)
-      setLoading(false)
-      setError('')
-    })
-    return off
-  }, [])
-
-  useEffect(() => {
-    const off = on('error', (payload) => {
-      setError(String(payload))
-      setLoading(false)
-    })
-    return off
-  }, [])
-
-  async function pickFile(setter: (p: string) => void) {
-    const path = await apiPickFile()
-    if (path) setter(path)
-  }
-
-  async function runDiff() {
-    if (!oldPath || !newPath) return
-    setLoading(true)
-    setError('')
-    setResult(null)
-    // Extension will fire 'diff' event → handled by the useEffect listener above
-    postMessage({ type: 'diff', payload: { oldPath, newPath } })
-  }
-
-  const canCompare = !!oldPath && !!newPath && !loading
+function TableView({ table, dbPath }: { table: TableInfo; dbPath: string }) {
+  const cols = table.Columns ?? [];
+  const idxs = table.Indexes ?? [];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] px-0 shrink-0">
-        <div className="flex items-center h-full px-4 border-r border-[#252525] bg-[#1e1e1e] text-[#cccccc] text-[12px] gap-2">
-          <GitCompare size={13} className="text-[#007acc]" />
-          <span>Diff</span>
+    <div>
+      <div className="page-header">
+        <h2>
+          <span style={{ opacity: 0.5, fontSize: 12 }}>TABLE</span>
+          {table.Name}
+        </h2>
+        <div className="meta">
+          {basename(dbPath)} · {cols.length} columns · {idxs.length} indexes
         </div>
       </div>
 
-      <div className="flex items-center gap-0 h-[30px] bg-[#3c3c3c] border-b border-[#252525] px-2 shrink-0">
-        <PathInput label="Before" path={oldPath} onPick={() => pickFile(setOldPath)} />
-        <span className="px-2 text-[#858585]">→</span>
-        <PathInput label="After" path={newPath} onPick={() => pickFile(setNewPath)} />
-        <div className="flex-1" />
-        <button
-          onClick={runDiff}
-          disabled={!canCompare}
-          className={`h-[22px] px-3 text-[12px] font-medium rounded-sm flex items-center gap-1.5 transition-colors
-            ${canCompare
-              ? 'bg-[#0e639c] hover:bg-[#1177bb] text-white'
-              : 'bg-[#3c3c3c] text-[#585858] cursor-not-allowed'}`}
-        >
-          {loading ? <><RefreshCw size={11} className="animate-spin" /> Running…</> : <>Compare</>}
-        </button>
-      </div>
+      {/* Columns */}
+      <table>
+        <thead>
+          <tr>
+            <th style={{ width: 40 }}>#</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Constraints</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cols.map((c, i) => (
+            <tr key={c.Name}>
+              <td style={{ opacity: 0.4, fontFamily: "var(--vscode-editor-font-family)" }}>{i + 1}</td>
+              <td style={{ fontFamily: "var(--vscode-editor-font-family)" }}>
+                {c.Name}
+                {c.PK === 1 && <span className="badge badge-pk">PK</span>}
+              </td>
+              <td>
+                <span className={typeClass(c.Type)} style={{ fontFamily: "var(--vscode-editor-font-family)", fontSize: 12 }}>
+                  {c.Type || "ANY"}
+                </span>
+              </td>
+              <td style={{ opacity: 0.6, fontSize: 12 }}>
+                {c.NotNull && <span className="badge badge-notnull">NOT NULL</span>}
+                {c.Default && (
+                  <span style={{ marginLeft: 4, opacity: 0.7, fontFamily: "var(--vscode-editor-font-family)" }}>
+                    DEFAULT {c.Default}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <div className="flex-1 overflow-y-auto">
-        {error && <ErrorPanel message={error} />}
-        {!result && !error && !loading && <DiffEmptyState oldSet={!!oldPath} newSet={!!newPath} />}
-        {loading && <LoadingPanel />}
-        {result && <DiffResult result={result as Record<string, unknown>} oldPath={oldPath} newPath={newPath} />}
-      </div>
-    </div>
-  )
-}
-
-function PathInput({ label, path, onPick }: { label: string; path: string; onPick: () => void }) {
-  const filename = path ? path.split(/[\\/]/).pop() : null
-  return (
-    <button
-      onClick={onPick}
-      className="flex items-center gap-1.5 h-[22px] px-2 rounded-sm text-[12px] hover:bg-[#505050] transition-colors max-w-[280px]"
-    >
-      <FolderOpen size={12} className="text-[#858585] shrink-0" />
-      <span className="text-[#858585] shrink-0">{label}:</span>
-      <span className={`truncate ${filename ? 'text-[#cccccc]' : 'text-[#585858]'}`}>
-        {filename ?? 'select file…'}
-      </span>
-    </button>
-  )
-}
-
-function DiffEmptyState({ oldSet, newSet }: { oldSet: boolean; newSet: boolean }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2 text-[12px] text-[#585858] h-full">
-      {!oldSet && !newSet && <span>Select Before and After databases in the toolbar above</span>}
-      {oldSet && !newSet && <span className="text-[#4ec9b0]">✓ Before selected — now select the After database</span>}
-      {oldSet && newSet && <span className="text-[#4ec9b0]">✓ Both files selected — click Compare to run</span>}
-    </div>
-  )
-}
-
-function LoadingPanel() {
-  return (
-    <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]">
-      <RefreshCw size={13} className="animate-spin text-[#007acc]" />
-      Comparing databases…
-    </div>
-  )
-}
-
-function ErrorPanel({ message }: { message: string }) {
-  return (
-    <div className="flex items-start gap-2 m-3 px-3 py-2.5 bg-[#5a1d1d] border border-[#be1100] text-[#f48771] text-[12px] rounded-sm">
-      <AlertCircle size={13} className="shrink-0 mt-0.5" />
-      <span className="font-mono">{message}</span>
-    </div>
-  )
-}
-
-function DiffResult({ result, oldPath, newPath }: { result: Record<string, unknown>; oldPath: string; newPath: string }) {
-  const schema: unknown[] = (result?.Schema as unknown[]) ?? []
-  const data: unknown[] = (result?.Data as unknown[]) ?? []
-  const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema')
-
-  const schemaAdded = schema.filter((t: unknown) => (t as Record<string, unknown>).Added).length
-  const schemaRemoved = schema.filter((t: unknown) => (t as Record<string, unknown>).Removed).length
-  const schemaChanged = schema.filter((t: unknown) => !(t as Record<string, unknown>).Added && !(t as Record<string, unknown>).Removed).length
-
-  if (schema.length === 0 && data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 gap-2 text-[#4ec9b0] text-[12px]">
-        <CheckCircle2 size={14} /> Databases are identical — no differences found
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
-        <ResultTab label="Schema" count={schema.length} active={activeTab === 'schema'} onClick={() => setActiveTab('schema')} />
-        <ResultTab label="Data" count={data.length} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
-        <div className="flex-1" />
-        <div className="flex items-center gap-3 text-[11px] pr-1">
-          {schemaAdded > 0 && <span className="text-[#4ec9b0]">+{schemaAdded} tables</span>}
-          {schemaRemoved > 0 && <span className="text-[#f44747]">-{schemaRemoved} tables</span>}
-          {schemaChanged > 0 && <span className="text-[#dcdcaa]">~{schemaChanged} modified</span>}
-          {data.length > 0 && <span className="text-[#9cdcfe]">{data.length} data changes</span>}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'schema' && (
-          <table className="w-full text-[12px]">
+      {/* Indexes */}
+      {idxs.length > 0 && (
+        <>
+          <div className="section-header">Indexes</div>
+          <table>
             <thead>
-              <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px]">
-                <th className="text-left px-4 py-1.5 font-medium w-6"></th>
-                <th className="text-left px-3 py-1.5 font-medium">Table</th>
-                <th className="text-left px-3 py-1.5 font-medium">Change</th>
-                <th className="text-left px-3 py-1.5 font-medium">Details</th>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
               </tr>
             </thead>
             <tbody>
-              {schema.map((td, i) => <SchemaRow key={i} td={td as Record<string, unknown>} />)}
+              {idxs.map((idx) => (
+                <tr key={idx.Name}>
+                  <td style={{ fontFamily: "var(--vscode-editor-font-family)", fontSize: 12 }}>{idx.Name}</td>
+                  <td>
+                    {idx.Unique
+                      ? <span className="tag diff-added">UNIQUE</span>
+                      : <span style={{ opacity: 0.4, fontSize: 12 }}>INDEX</span>}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        )}
-        {activeTab === 'data' && (
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px]">
-                <th className="text-left px-4 py-1.5 font-medium">Table</th>
-                <th className="text-left px-4 py-1.5 font-medium">Added</th>
-                <th className="text-left px-4 py-1.5 font-medium">Removed</th>
-                <th className="text-left px-4 py-1.5 font-medium">Changed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((dd, i) => <DataRow key={i} dd={dd as Record<string, unknown>} />)}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ResultTab({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-full px-3 text-[12px] flex items-center gap-1.5 border-t-2 transition-colors
-        ${active
-          ? 'border-[#007acc] text-[#cccccc] bg-[#1e1e1e]'
-          : 'border-transparent text-[#858585] hover:text-[#cccccc]'}`}
-    >
-      {label}
-      {count > 0 && (
-        <span className="px-1.5 py-0.5 rounded-full bg-[#3c3c3c] text-[10px] text-[#858585]">{count}</span>
+        </>
       )}
-    </button>
-  )
+    </div>
+  );
 }
 
-function SchemaRow({ td }: { td: Record<string, unknown> }) {
-  const [expanded, setExpanded] = useState(true)
-  const isAdded = td.Added as boolean
-  const isRemoved = td.Removed as boolean
+// ── Diff View ─────────────────────────────────────────────────────────────────
 
-  type Detail = { sign: string; text: string; cls: string }
-  const details: Detail[] = [
-    ...((td.AddedColumns as Record<string, unknown>[] | null) ?? []).map((c) => ({ sign: '+', text: `column  ${c.Name}  ${c.Type}`, cls: 'text-[#4ec9b0]' })),
-    ...((td.RemovedColumns as Record<string, unknown>[] | null) ?? []).map((c) => ({ sign: '-', text: `column  ${c.Name}`, cls: 'text-[#f44747]' })),
-    ...((td.ChangedColumns as Record<string, unknown>[] | null) ?? []).map((c) => {
-      const o = c.Old as Record<string, unknown>
-      const n = c.New as Record<string, unknown>
-      return { sign: '~', text: `column  ${c.Name}  ${o?.Type} → ${n?.Type}`, cls: 'text-[#dcdcaa]' }
-    }),
-    ...((td.AddedIndexes as Record<string, unknown>[] | null) ?? []).map((idx) => ({ sign: '+', text: `index   ${idx.Name}${idx.Unique ? '  UNIQUE' : ''}`, cls: 'text-[#4ec9b0]' })),
-    ...((td.RemovedIndexes as Record<string, unknown>[] | null) ?? []).map((idx) => ({ sign: '-', text: `index   ${idx.Name}`, cls: 'text-[#f44747]' })),
-  ]
+function DiffView({ result, oldPath, newPath }: { result: DiffResult; oldPath: string; newPath: string }) {
+  const [tab, setTab] = useState<"schema" | "data">("schema");
+  const schema = result.Schema ?? [];
+  const data = result.Data ?? [];
 
-  const rowBg = isAdded ? 'bg-[#4ec9b0]/5' : isRemoved ? 'bg-[#f44747]/5' : ''
+  const isEmpty = schema.length === 0 && data.length === 0;
+
+  const added    = schema.filter(t => t.Added).length;
+  const removed  = schema.filter(t => t.Removed).length;
+  const modified = schema.filter(t => !t.Added && !t.Removed).length;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>
+          <span style={{ opacity: 0.5, fontSize: 12 }}>DIFF</span>
+          {basename(oldPath)}
+          <span style={{ opacity: 0.4, fontSize: 13, fontWeight: 400 }}>→</span>
+          {basename(newPath)}
+        </h2>
+        <div className="meta" style={{ display: "flex", gap: 12, marginTop: 4 }}>
+          {added > 0    && <span className="diff-added">+{added} tables</span>}
+          {removed > 0  && <span className="diff-removed">−{removed} tables</span>}
+          {modified > 0 && <span className="diff-modified">~{modified} modified</span>}
+          {data.length > 0 && <span style={{ opacity: 0.5 }}>{data.length} tables with data changes</span>}
+        </div>
+      </div>
+
+      {isEmpty ? (
+        <div className="empty-state diff-added">✓ Databases are identical</div>
+      ) : (
+        <>
+          <div className="tabs">
+            <button className={`tab ${tab === "schema" ? "active" : ""}`} onClick={() => setTab("schema")}>
+              Schema
+              {schema.length > 0 && <span className="count-badge">{schema.length}</span>}
+            </button>
+            <button className={`tab ${tab === "data" ? "active" : ""}`} onClick={() => setTab("data")}>
+              Data
+              {data.length > 0 && <span className="count-badge">{data.length}</span>}
+            </button>
+          </div>
+
+          {tab === "schema" && <SchemaTab schema={schema} />}
+          {tab === "data"   && <DataTab data={data} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SchemaTab({ schema }: { schema: TableDiff[] }) {
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Table</th>
+          <th>Change</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {schema.map((td) => <SchemaRow key={td.Name} td={td} />)}
+      </tbody>
+    </table>
+  );
+}
+
+function SchemaRow({ td }: { td: TableDiff }) {
+  const [expanded, setExpanded] = useState(true);
+  const details: { sign: string; text: string; cls: string }[] = [
+    ...(td.AddedColumns   ?? []).map(c  => ({ sign: "+", text: `${c.Name}  ${c.Type}`, cls: "diff-added"    })),
+    ...(td.RemovedColumns ?? []).map(c  => ({ sign: "−", text: `${c.Name}`,             cls: "diff-removed"  })),
+    ...(td.ChangedColumns ?? []).map(c  => ({ sign: "~", text: `${c.Name}  ${c.Old.Type} → ${c.New.Type}`, cls: "diff-modified" })),
+    ...(td.AddedIndexes   ?? []).map(ix => ({ sign: "+", text: `index ${ix.Name}${ix.Unique ? " UNIQUE" : ""}`, cls: "diff-added" })),
+    ...(td.RemovedIndexes ?? []).map(ix => ({ sign: "−", text: `index ${ix.Name}`,     cls: "diff-removed"  })),
+  ];
+
+  const rowCls = td.Added ? "diff-row-added" : td.Removed ? "diff-row-removed" : "";
 
   return (
     <>
       <tr
-        className={`border-b border-[#2d2d2d] hover:bg-[#2a2d2e] cursor-pointer ${rowBg}`}
+        className={rowCls}
+        style={{ cursor: details.length > 0 ? "pointer" : "default" }}
         onClick={() => details.length > 0 && setExpanded(e => !e)}
       >
-        <td className="px-4 py-1.5 text-[#858585]">
-          {details.length > 0 && (
-            <ChevronRight size={12} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
-          )}
-        </td>
-        <td className="px-3 py-1.5 font-mono">
-          <span className={isAdded ? 'text-[#4ec9b0]' : isRemoved ? 'text-[#f44747]' : 'text-[#9cdcfe]'}>
-            {td.Name as string}
+        <td style={{ fontFamily: "var(--vscode-editor-font-family)", fontSize: 13 }}>
+          <span className={td.Added ? "diff-added" : td.Removed ? "diff-removed" : ""}>
+            {details.length > 0 && (
+              <span style={{ opacity: 0.5, marginRight: 6, fontSize: 10 }}>
+                {expanded ? "▾" : "▸"}
+              </span>
+            )}
+            {td.Name}
           </span>
         </td>
-        <td className="px-3 py-1.5">
-          {isAdded && <Badge label="ADDED" color="green" />}
-          {isRemoved && <Badge label="REMOVED" color="red" />}
-          {!isAdded && !isRemoved && <Badge label="MODIFIED" color="yellow" />}
+        <td>
+          {td.Added    && <span className="tag diff-added">ADDED</span>}
+          {td.Removed  && <span className="tag diff-removed">REMOVED</span>}
+          {!td.Added && !td.Removed && <span className="tag diff-modified">MODIFIED</span>}
         </td>
-        <td className="px-3 py-1.5 text-[#858585] text-[11px]">
-          {isAdded && `${(td.AddedColumns as unknown[] | null)?.length ?? 0} columns`}
-          {isRemoved && 'table removed'}
-          {!isAdded && !isRemoved && `${details.length} changes`}
+        <td style={{ opacity: 0.5, fontSize: 12 }}>
+          {td.Added && `${td.AddedColumns?.length ?? 0} cols`}
+          {!td.Added && !td.Removed && `${details.length} changes`}
         </td>
       </tr>
       {expanded && details.map((d, i) => (
-        <tr key={i} className="border-b border-[#252525] bg-[#252526]/50">
-          <td></td>
-          <td colSpan={3} className="px-3 py-1 font-mono text-[11px]">
-            <span className={`${d.cls} opacity-60 mr-3`}>{d.sign}</span>
+        <tr key={i}>
+          <td colSpan={3} style={{ paddingLeft: 32, fontFamily: "var(--vscode-editor-font-family)", fontSize: 12 }}>
+            <span className={d.cls} style={{ marginRight: 8, fontWeight: 700 }}>{d.sign}</span>
             <span className={d.cls}>{d.text}</span>
           </td>
         </tr>
       ))}
     </>
-  )
+  );
 }
 
-function DataRow({ dd }: { dd: Record<string, unknown> }) {
+function DataTab({ data }: { data: DataDiff[] }) {
   return (
-    <tr className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
-      <td className="px-4 py-1.5 font-mono text-[#9cdcfe]">{dd.Table as string}</td>
-      <td className="px-4 py-1.5 font-mono">{(dd.Added as number) > 0 ? <span className="text-[#4ec9b0]">+{dd.Added as number}</span> : <span className="text-[#585858]">—</span>}</td>
-      <td className="px-4 py-1.5 font-mono">{(dd.Removed as number) > 0 ? <span className="text-[#f44747]">-{dd.Removed as number}</span> : <span className="text-[#585858]">—</span>}</td>
-      <td className="px-4 py-1.5 font-mono">{(dd.Changed as number) > 0 ? <span className="text-[#dcdcaa]">~{dd.Changed as number}</span> : <span className="text-[#585858]">—</span>}</td>
-    </tr>
-  )
-}
-
-function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'yellow' }) {
-  const cls = {
-    green: 'bg-[#4ec9b0]/15 text-[#4ec9b0] border-[#4ec9b0]/30',
-    red: 'bg-[#f44747]/15 text-[#f44747] border-[#f44747]/30',
-    yellow: 'bg-[#dcdcaa]/15 text-[#dcdcaa] border-[#dcdcaa]/30',
-  }[color]
-  return <span className={`px-1.5 py-0.5 text-[10px] font-mono border rounded-sm ${cls}`}>{label}</span>
-}
-
-/* ─── Explorer View ─────────────────────────────────────────── */
-function ExplorerView({ initialDbPath }: { initialDbPath: string }) {
-  const [path, setPath] = useState(initialDbPath)
-  const [schema, setSchema] = useState<Record<string, unknown> | null>(null)
-  const [error, setError] = useState('')
-  const [selectedTable, setSelectedTable] = useState<string | null>(null)
-
-  // Auto-load schema for the initial path (e.g. when user opens a .db file)
-  useEffect(() => {
-    if (initialDbPath) {
-      loadSchema(initialDbPath)
-    }
-  }, [initialDbPath])
-
-  // Listen for schema pushed by extension
-  useEffect(() => {
-    const off = on('schema', (payload) => {
-      setSchema(payload as Record<string, unknown>)
-      setSelectedTable(null)
-      setError('')
-    })
-    return off
-  }, [])
-
-  useEffect(() => {
-    const off = on('error', (payload) => {
-      setError(String(payload))
-      setSchema(null)
-    })
-    return off
-  }, [])
-
-  function loadSchema(p: string) {
-    setError('')
-    setSchema(null)
-    // Extension responds with 'schema' or 'error' event → handled by listeners above
-    postMessage({ type: 'getSchema', payload: { path: p } })
-  }
-
-  async function pickFile() {
-    const p = await apiPickFile()
-    if (!p) return
-    setPath(p)
-    loadSchema(p)
-  }
-
-  const tables = (schema?.Tables as Record<string, unknown>[] | null) ?? []
-  const selectedTableData = tables.find((t) => t.Name === selectedTable)
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] px-0 shrink-0">
-        <div className="flex items-center h-full px-4 border-r border-[#252525] bg-[#1e1e1e] text-[#cccccc] text-[12px] gap-2">
-          <Table2 size={13} className="text-[#007acc]" />
-          <span>Explorer</span>
-        </div>
-      </div>
-
-      <div className="flex items-center h-[30px] bg-[#3c3c3c] border-b border-[#252525] px-2 gap-2 shrink-0">
-        <PathInput label="Database" path={path} onPick={pickFile} />
-        {schema && <span className="text-[#858585] text-[11px]">{tables.length} tables</span>}
-      </div>
-
-      {error && <ErrorPanel message={error} />}
-
-      {!schema && !error && (
-        <div className="flex-1 flex items-center justify-center text-[#585858] text-[12px]">
-          {path ? 'Loading schema…' : 'Open a .db file or click Database above to select one'}
-        </div>
-      )}
-
-      {schema && (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-[200px] border-r border-[#252525] flex flex-col shrink-0 bg-[#252526]">
-            <div className="px-3 py-1.5 text-[11px] text-[#858585] uppercase tracking-wider font-medium border-b border-[#252525]">
-              Tables
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {tables.map((t) => (
-                <button
-                  key={t.Name as string}
-                  onClick={() => setSelectedTable(t.Name as string)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors
-                    ${selectedTable === t.Name
-                      ? 'bg-[#094771] text-[#ffffff]'
-                      : 'text-[#cccccc] hover:bg-[#2a2d2e]'}`}
-                >
-                  <Table2 size={12} className="shrink-0 text-[#858585]" />
-                  <span className="truncate font-mono">{t.Name as string}</span>
-                  <span className="ml-auto text-[10px] text-[#585858]">{(t.Columns as unknown[] | null)?.length}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {!selectedTable && (
-              <div className="flex-1 flex items-center justify-center text-[#585858] text-[12px]">
-                Select a table from the sidebar
-              </div>
-            )}
-            {selectedTableData && <TableInspector table={selectedTableData} />}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TableInspector({ table }: { table: Record<string, unknown> }) {
-  const columns = (table.Columns as Record<string, unknown>[] | null) ?? []
-  const indexes = (table.Indexes as Record<string, unknown>[] | null) ?? []
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-4 gap-2 shrink-0">
-        <Table2 size={12} className="text-[#007acc]" />
-        <span className="font-mono text-[12px] text-[#cccccc]">{table.Name as string}</span>
-        <span className="text-[#585858] text-[11px]">· {columns.length} columns</span>
-        {indexes.length > 0 && (
-          <span className="text-[#585858] text-[11px]">· {indexes.length} indexes</span>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
-              <th className="text-left px-4 py-1.5 font-medium">#</th>
-              <th className="text-left px-3 py-1.5 font-medium">Name</th>
-              <th className="text-left px-3 py-1.5 font-medium">Type</th>
-              <th className="text-left px-3 py-1.5 font-medium">Constraints</th>
-            </tr>
-          </thead>
-          <tbody>
-            {columns.map((c, i) => (
-              <tr key={c.Name as string} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
-                <td className="px-4 py-1.5 text-[#585858] font-mono">{i + 1}</td>
-                <td className="px-3 py-1.5 font-mono text-[#9cdcfe]">
-                  <span className="flex items-center gap-2">
-                    {c.Name as string}
-                    {(c.PK as number) === 1 && <span className="text-[10px] px-1 py-0 border border-[#dcdcaa]/40 text-[#dcdcaa] rounded-sm font-sans">PK</span>}
-                  </span>
-                </td>
-                <td className="px-3 py-1.5 font-mono text-[#4ec9b0]">{(c.Type as string) || 'ANY'}</td>
-                <td className="px-3 py-1.5 text-[#858585]">{c.NotNull ? 'NOT NULL' : ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {indexes.length > 0 && (
-          <div className="border-t border-[#252525] mt-2">
-            <div className="px-4 py-1.5 text-[11px] text-[#858585] uppercase tracking-wider font-medium bg-[#252526] border-b border-[#252525]">
-              Indexes
-            </div>
-            {indexes.map((idx) => (
-              <div key={idx.Name as string} className="flex items-center gap-3 px-4 py-1.5 border-b border-[#2d2d2d] hover:bg-[#2a2d2e] font-mono text-[12px]">
-                <Hash size={11} className={idx.Unique ? 'text-[#dcdcaa]' : 'text-[#585858]'} />
-                <span className="text-[#cccccc]">{idx.Name as string}</span>
-                {idx.Unique && <Badge label="UNIQUE" color="yellow" />}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+    <table>
+      <thead>
+        <tr>
+          <th>Table</th>
+          <th>Added</th>
+          <th>Removed</th>
+          <th>Changed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((dd) => (
+          <tr key={dd.Table}>
+            <td style={{ fontFamily: "var(--vscode-editor-font-family)" }}>{dd.Table}</td>
+            <td style={{ fontFamily: "var(--vscode-editor-font-family)" }}>
+              {dd.Added > 0 ? <span className="diff-added">+{dd.Added}</span> : <span style={{ opacity: 0.3 }}>—</span>}
+            </td>
+            <td style={{ fontFamily: "var(--vscode-editor-font-family)" }}>
+              {dd.Removed > 0 ? <span className="diff-removed">−{dd.Removed}</span> : <span style={{ opacity: 0.3 }}>—</span>}
+            </td>
+            <td style={{ fontFamily: "var(--vscode-editor-font-family)" }}>
+              {dd.Changed > 0 ? <span className="diff-modified">~{dd.Changed}</span> : <span style={{ opacity: 0.3 }}>—</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }

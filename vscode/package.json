@@ -1,45 +1,93 @@
 {
   "name": "litescope",
   "displayName": "Litescope",
-  "description": "SQLite visual diff & explorer — open .db files, compare databases, and inspect data directly in VS Code",
+  "description": "SQLite explorer and visual diff — browse tables, compare databases",
   "version": "0.1.0",
   "publisher": "croc100",
   "license": "Elastic-2.0",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": ["Other", "Visualization"],
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
   "keywords": ["sqlite", "database", "diff", "explorer", "db"],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:sql",
+    "workspaceContains:**/*.db",
+    "workspaceContains:**/*.sqlite",
+    "workspaceContains:**/*.sqlite3"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "litescope",
+          "title": "Litescope",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "litescope": [
+        {
+          "id": "litescope.databases",
+          "name": "Databases",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "litescope.openExplorer",
-        "title": "Litescope: Open Explorer",
-        "icon": "$(database)"
+        "command": "litescope.openDatabase",
+        "title": "Open Database",
+        "icon": "$(add)",
+        "category": "Litescope"
       },
       {
         "command": "litescope.diffDatabases",
-        "title": "Litescope: Diff Two Databases"
-      }
-    ],
-    "customEditors": [
+        "title": "Compare Databases",
+        "icon": "$(diff)",
+        "category": "Litescope"
+      },
       {
-        "viewType": "litescope.dbViewer",
-        "displayName": "Litescope DB Viewer",
-        "selector": [
-          { "filenamePattern": "*.db" },
-          { "filenamePattern": "*.sqlite" },
-          { "filenamePattern": "*.sqlite3" }
-        ],
-        "priority": "default"
+        "command": "litescope.closeDatabase",
+        "title": "Close Database",
+        "icon": "$(close)",
+        "category": "Litescope"
+      },
+      {
+        "command": "litescope.refreshDatabase",
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "Litescope"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "litescope.openDatabase",
+          "when": "view == litescope.databases",
+          "group": "navigation@1"
+        },
+        {
+          "command": "litescope.diffDatabases",
+          "when": "view == litescope.databases",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "litescope.refreshDatabase",
+          "when": "viewItem == database",
+          "group": "inline@1"
+        },
+        {
+          "command": "litescope.closeDatabase",
+          "when": "viewItem == database",
+          "group": "inline@2"
+        }
+      ],
       "explorer/context": [
         {
-          "command": "litescope.openExplorer",
+          "command": "litescope.openDatabase",
           "when": "resourceExtname =~ /\\.(db|sqlite|sqlite3)$/",
           "group": "navigation"
         }
@@ -52,17 +100,12 @@
     "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "build:webview": "cd webview-ui && npm run build",
     "watch:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
-    "watch:webview": "cd webview-ui && npm run dev",
-    "package": "vsce package",
-    "lint": "eslint src --ext ts"
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.20.0",
-    "eslint": "^8.0.0",
     "typescript": "^5.3.0",
     "@vscode/vsce": "^2.24.0"
   }
