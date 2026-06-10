@@ -39,7 +39,7 @@ Sources can be local files or remote connections:
 	}
 
 	cmd.Flags().StringVar(&htmlOut, "html", "", "write HTML report to file")
-	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json | html")
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json | markdown | html")
 	return cmd
 }
 
@@ -85,6 +85,8 @@ func outputDiff(result *diff.Result, format, htmlOut string) error {
 	switch format {
 	case "json":
 		return render.JSON(os.Stdout, result)
+	case "markdown", "md":
+		return render.Markdown(os.Stdout, result)
 	case "html":
 		out := htmlOut
 		if out == "" {
