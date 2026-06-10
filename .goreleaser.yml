@@ -1,0 +1,84 @@
+version: 2
+
+project_name: litescope
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: litescope
+    main: ./cmd/litescope
+    binary: litescope
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^chore(deps)"
+      - "^ci:"
+  groups:
+    - title: "New Features"
+      regexp: "^feat"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^fix"
+      order: 1
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: croc100
+    name: Litescope
+  name_template: "v{{ .Version }}"
+  footer: |
+    ## Install
+
+    **macOS / Linux (Homebrew)**
+    ```sh
+    brew install croc100/tap/litescope
+    ```
+
+    **Go install**
+    ```sh
+    go install github.com/croc100/litescope/cmd/litescope@latest
+    ```
+
+    **Direct download**
+    Download the binary for your platform from the assets below.
+
+    ---
+    **Full docs**: https://litescope.dev/docs
+    **Pricing**: https://litescope.dev/pricing
