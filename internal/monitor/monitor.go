@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/croc100/litescope/internal/diff"
@@ -33,15 +34,20 @@ func Check(source string, snap *Snapshot, current *schema.Schema) *DriftResult {
 }
 
 // Alert sends a drift result to a webhook URL (Pro feature).
+// Supports Slack Block Kit (when URL contains "hooks.slack.com") and generic JSON.
 func Alert(webhookURL string, result *DriftResult) error {
 	if !result.HasDrift {
 		return nil
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{
-		"text":    fmt.Sprintf("⚠️ Schema drift detected in %s (%d changes)", result.Source, len(result.Changes)),
-		"result":  result,
-	})
+	var payload []byte
+	var err error
+
+	if strings.Contains(webhookURL, "hooks.slack.com") || strings.Contains(webhookURL, "slack") {
+		payload, err = json.Marshal(slackPayload(result))
+	} else {
+		payload, err = json.Marshal(genericPayload(result))
+	}
 	if err != nil {
 		return err
 	}
@@ -56,4 +62,77 @@ func Alert(webhookURL string, result *DriftResult) error {
 		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func slackPayload(r *DriftResult) map[string]interface{} {
+	lines := []string{}
+	for _, td := range r.Changes {
+		switch {
+		case td.Added:
+			lines = append(lines, fmt.Sprintf("• `%s` *added*", td.Name))
+		case td.Removed:
+			lines = append(lines, fmt.Sprintf("• `%s` *removed*", td.Name))
+		default:
+			cols := len(td.AddedColumns) + len(td.RemovedColumns) + len(td.ChangedColumns)
+			idxs := len(td.AddedIndexes) + len(td.RemovedIndexes)
+			detail := ""
+			if cols > 0 {
+				detail += fmt.Sprintf("%d column change(s)", cols)
+			}
+			if idxs > 0 {
+				if detail != "" {
+					detail += ", "
+				}
+				detail += fmt.Sprintf("%d index change(s)", idxs)
+			}
+			lines = append(lines, fmt.Sprintf("• `%s` modified — %s", td.Name, detail))
+		}
+	}
+
+	body := strings.Join(lines, "\n")
+	if body == "" {
+		body = "(no details)"
+	}
+
+	return map[string]interface{}{
+		"text": fmt.Sprintf("⚠️ Schema drift detected in `%s`", r.Source),
+		"blocks": []map[string]interface{}{
+			{
+				"type": "header",
+				"text": map[string]string{
+					"type": "plain_text",
+					"text": "⚠️ Schema Drift Detected",
+				},
+			},
+			{
+				"type": "section",
+				"fields": []map[string]string{
+					{"type": "mrkdwn", "text": fmt.Sprintf("*Source*\n`%s`", r.Source)},
+					{"type": "mrkdwn", "text": fmt.Sprintf("*Changes*\n%d table(s)", len(r.Changes))},
+					{"type": "mrkdwn", "text": fmt.Sprintf("*Baseline*\n%s", r.BaselineAt.Format("2006-01-02 15:04 UTC"))},
+					{"type": "mrkdwn", "text": fmt.Sprintf("*Detected*\n%s", r.CheckedAt.Format("2006-01-02 15:04 UTC"))},
+				},
+			},
+			{
+				"type": "section",
+				"text": map[string]string{
+					"type": "mrkdwn",
+					"text": body,
+				},
+			},
+			{
+				"type": "context",
+				"elements": []map[string]string{
+					{"type": "mrkdwn", "text": "Sent by <https://litescope.dev|Litescope> · Pro"},
+				},
+			},
+		},
+	}
+}
+
+func genericPayload(r *DriftResult) map[string]interface{} {
+	return map[string]interface{}{
+		"text":    fmt.Sprintf("Schema drift detected in %s (%d changes)", r.Source, len(r.Changes)),
+		"result":  r,
+	}
 }
