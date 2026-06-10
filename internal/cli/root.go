@@ -10,6 +10,7 @@ func Root() *cobra.Command {
 
 	root.AddCommand(cmdDiff())
 	root.AddCommand(cmdSchema())
+	root.AddCommand(cmdValidate())
 
 	return root
 }
