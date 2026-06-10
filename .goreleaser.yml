@@ -58,6 +58,21 @@ changelog:
     - title: "Other"
       order: 999
 
+brews:
+  - name: litescope
+    homepage: "https://litescope.dev"
+    description: "SQLite production operations — diff, validate, backup check, schema drift monitoring"
+    license: "Elastic-2.0"
+    repository:
+      owner: croc100
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    test: |
+      system "#{bin}/litescope", "--version"
+    install: |
+      bin.install "litescope"
+
 release:
   github:
     owner: croc100
