@@ -1,0 +1,69 @@
+{
+  "name": "litescope",
+  "displayName": "Litescope",
+  "description": "SQLite visual diff & explorer — open .db files, compare databases, and inspect data directly in VS Code",
+  "version": "0.1.0",
+  "publisher": "croc100",
+  "license": "Elastic-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Visualization"],
+  "keywords": ["sqlite", "database", "diff", "explorer", "db"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "litescope.openExplorer",
+        "title": "Litescope: Open Explorer",
+        "icon": "$(database)"
+      },
+      {
+        "command": "litescope.diffDatabases",
+        "title": "Litescope: Diff Two Databases"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "litescope.dbViewer",
+        "displayName": "Litescope DB Viewer",
+        "selector": [
+          { "filenamePattern": "*.db" },
+          { "filenamePattern": "*.sqlite" },
+          { "filenamePattern": "*.sqlite3" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "litescope.openExplorer",
+          "when": "resourceExtname =~ /\\.(db|sqlite|sqlite3)$/",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:ext && npm run build:webview",
+    "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "build:webview": "cd webview-ui && npm run build",
+    "watch:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "watch:webview": "cd webview-ui && npm run dev",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}
