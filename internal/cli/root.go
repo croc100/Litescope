@@ -12,6 +12,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdSchema())
 	root.AddCommand(cmdValidate())
 	root.AddCommand(cmdCheck())
+	root.AddCommand(cmdMigrate())
 	root.AddCommand(cmdMonitor())
 
 	return root
