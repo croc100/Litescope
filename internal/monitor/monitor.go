@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,6 +64,26 @@ func Alert(webhookURL string, result *DriftResult) error {
 		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// AppendReport appends a DriftResult as a single JSON line to a JSONL file.
+// Creates the file and parent directories if they don't exist.
+func AppendReport(path string, result *DriftResult) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating report directory: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("opening report file: %w", err)
+	}
+	defer f.Close()
+
+	line, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(f, "%s\n", line)
+	return err
 }
 
 func slackPayload(r *DriftResult) map[string]interface{} {
