@@ -124,6 +124,7 @@ type sqlStmt struct {
 }
 
 type pipelineResponse struct {
+	Baton   string           `json:"baton"`
 	Results []pipelineResult `json:"results"`
 }
 
@@ -200,6 +201,118 @@ func (t *tursoConnector) execute(sql string) ([][]interface{}, error) {
 	}
 
 	return res.Response.Result.Rows, nil
+}
+
+func (t *tursoConnector) Capabilities() ExecCapabilities {
+	return ExecCapabilities{Transactional: true, LocalBackup: false, Provider: "turso"}
+}
+
+// Exec applies statements transactionally over the Hrana pipeline API.
+//
+// Phase 1 opens a connection (baton) and runs BEGIN + statements +
+// foreign_key_check without committing. Phase 2 reuses the baton to COMMIT when
+// everything succeeded, or ROLLBACK when any statement errored or a foreign key
+// was violated. There is no local file backup for remote databases — safety
+// comes from the transaction plus Turso's own point-in-time recovery.
+func (t *tursoConnector) Exec(statements []string, dryRun bool) error {
+	if len(statements) == 0 {
+		return nil
+	}
+
+	steps := make([]pipelineStep, 0, len(statements)+2)
+	steps = append(steps, pipelineStep{Type: "execute", Stmt: &sqlStmt{SQL: "BEGIN"}})
+	for _, s := range statements {
+		steps = append(steps, pipelineStep{Type: "execute", Stmt: &sqlStmt{SQL: s}})
+	}
+	steps = append(steps, pipelineStep{Type: "execute", Stmt: &sqlStmt{SQL: "PRAGMA foreign_key_check"}})
+
+	resp, err := t.pipeline("", steps)
+	if err != nil {
+		return err
+	}
+
+	// Inspect every step; the last result is the foreign_key_check.
+	applyErr := firstStepError(resp.Results)
+	if applyErr == nil {
+		applyErr = foreignKeyViolation(resp.Results[len(resp.Results)-1])
+	}
+
+	// Phase 2: finish the transaction on the same connection.
+	finish := "COMMIT"
+	if applyErr != nil || dryRun {
+		finish = "ROLLBACK"
+	}
+	_, ferr := t.pipeline(resp.Baton, []pipelineStep{
+		{Type: "execute", Stmt: &sqlStmt{SQL: finish}},
+		{Type: "close"},
+	})
+
+	if applyErr != nil {
+		return fmt.Errorf("turso migration rolled back: %w", applyErr)
+	}
+	if ferr != nil {
+		return fmt.Errorf("turso commit failed: %w", ferr)
+	}
+	return nil
+}
+
+// pipeline sends a raw Hrana pipeline request, optionally continuing an existing
+// connection via baton. It returns the decoded response (transport errors only;
+// per-step SQL errors are carried in the results).
+func (t *tursoConnector) pipeline(baton string, steps []pipelineStep) (*pipelineResponse, error) {
+	body := struct {
+		Baton    string         `json:"baton,omitempty"`
+		Requests []pipelineStep `json:"requests"`
+	}{Baton: baton, Requests: steps}
+
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", t.url+"/v2/pipeline", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("turso request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("turso HTTP %d: %s", resp.StatusCode, string(b))
+	}
+
+	var pr pipelineResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+		return nil, fmt.Errorf("decoding turso response: %w", err)
+	}
+	return &pr, nil
+}
+
+// firstStepError returns the first per-step SQL error in a pipeline response.
+func firstStepError(results []pipelineResult) error {
+	for i, r := range results {
+		if r.Error != nil {
+			return fmt.Errorf("statement %d: %s", i, r.Error.Message)
+		}
+	}
+	return nil
+}
+
+// foreignKeyViolation reports an error when a foreign_key_check result has rows.
+func foreignKeyViolation(r pipelineResult) error {
+	if r.Response == nil || r.Response.Result == nil {
+		return nil
+	}
+	if n := len(r.Response.Result.Rows); n > 0 {
+		return fmt.Errorf("%d foreign key violation(s) after migration", n)
+	}
+	return nil
 }
 
 func (t *tursoConnector) queryColumn(sql string, colIdx int) ([]string, error) {

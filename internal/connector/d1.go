@@ -207,6 +207,29 @@ func (d *d1Connector) execute(sql string) ([]map[string]interface{}, error) {
 	return d1Resp.Result[0].Results, nil
 }
 
+func (d *d1Connector) Capabilities() ExecCapabilities {
+	// D1's HTTP API auto-commits each request and has no interactive
+	// transactions, so a multi-statement migration cannot be rolled back as a
+	// unit over REST. Use Cloudflare's Time Travel for point-in-time recovery.
+	return ExecCapabilities{Transactional: false, LocalBackup: false, Provider: "d1"}
+}
+
+// Exec runs statements sequentially, stopping on the first error. D1 over HTTP
+// has no interactive transaction, so already-applied statements are NOT rolled
+// back; the returned error reports how many statements committed before failing.
+func (d *d1Connector) Exec(statements []string, dryRun bool) error {
+	if dryRun {
+		return fmt.Errorf("D1 does not support --dry-run: its HTTP API has no rollback")
+	}
+	for i, stmt := range statements {
+		if _, err := d.execute(stmt); err != nil {
+			return fmt.Errorf("statement %d failed (%d already committed, NOT rolled back): %w",
+				i+1, i, err)
+		}
+	}
+	return nil
+}
+
 func (d *d1Connector) queryScalar(sql, col string) ([]string, error) {
 	rows, err := d.execute(sql)
 	if err != nil {
