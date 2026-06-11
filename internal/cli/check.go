@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/croc100/litescope/internal/check"
+	"github.com/croc100/litescope/internal/license"
 	"github.com/spf13/cobra"
 )
 
@@ -14,40 +15,79 @@ func cmdCheck() *cobra.Command {
 	var reference string
 	var withData bool
 	var format string
+	var saveReport string
 
 	cmd := &cobra.Command{
-		Use:   "check <backup.db>",
+		Use:   "check <backup.db> [backup2.db ...]",
 		Short: "Verify backup database integrity and schema consistency",
 		Long: `Runs three levels of verification:
-  1. File integrity   — PRAGMA integrity_check (always)
-  2. Schema match     — compare against --against reference (if provided)
-  3. Row count match  — compare row counts per table (if --data)`,
-		Args: cobra.ExactArgs(1),
+  1. File integrity   — PRAGMA integrity_check (free)
+  2. Schema match     — compare against --against reference (Pro)
+  3. Row count match  — compare row counts per table (Pro)
+
+Multiple backup files can be checked in one run (Pro).
+Use --save-report to append results to a JSONL file for history (Pro).
+
+Examples:
+  litescope check backup.db
+  litescope check backup.db --against prod.db                        [Pro]
+  litescope check backup.db --against prod.db --data                 [Pro]
+  litescope check b1.db b2.db b3.db --against prod.db               [Pro]
+  litescope check backup.db --against prod.db --save-report checks.jsonl  [Pro]`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := check.Check(args[0], reference, withData)
-			if err != nil {
-				return err
+			// Pro gate: schema/data comparison or batch (>1 file) or save-report
+			needsPro := reference != "" || withData || len(args) > 1 || saveReport != ""
+			if needsPro {
+				if err := license.RequirePro(); err != nil {
+					return err
+				}
 			}
 
-			switch format {
-			case "json":
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				return enc.Encode(result)
-			default:
-				printCheckTerminal(result)
+			allPassed := true
+			for _, path := range args {
+				result, err := check.Check(path, reference, withData)
+				if err != nil {
+					return err
+				}
+
+				if saveReport != "" {
+					if err := check.AppendReport(saveReport, result); err != nil {
+						fmt.Fprintf(os.Stderr, "  %s  Failed to save report: %v\n", styleWarn.Render("!"), err)
+					}
+				}
+
+				switch format {
+				case "json":
+					enc := json.NewEncoder(os.Stdout)
+					enc.SetIndent("", "  ")
+					if err := enc.Encode(result); err != nil {
+						return err
+					}
+				default:
+					printCheckTerminal(result)
+				}
+
+				if !result.Passed {
+					allPassed = false
+				}
 			}
 
-			if !result.Passed {
+			if saveReport != "" {
+				fmt.Fprintf(os.Stderr, "  %s  Report saved → %s\n", styleDim.Render("·"), saveReport)
+			}
+
+			if !allPassed {
 				os.Exit(1)
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&reference, "against", "a", "", "reference (production) DB to compare schema and row counts against")
-	cmd.Flags().BoolVar(&withData, "data", false, "also compare row counts per table")
+	cmd.Flags().StringVarP(&reference, "against", "a", "", "reference (production) DB to compare schema and row counts against [Pro]")
+	cmd.Flags().BoolVar(&withData, "data", false, "also compare row counts per table [Pro]")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json")
+	cmd.Flags().StringVar(&saveReport, "save-report", "", "append results to a JSONL report file [Pro]")
 	return cmd
 }
 

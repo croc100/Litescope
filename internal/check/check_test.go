@@ -143,3 +143,34 @@ func TestCheck_FileNotFound(t *testing.T) {
 		t.Error("expected error for missing file")
 	}
 }
+
+func TestAppendReport(t *testing.T) {
+	path := makeDB(t, `CREATE TABLE t (id INTEGER)`)
+	r, err := Check(path, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reportFile := filepath.Join(t.TempDir(), "report.jsonl")
+
+	// Append twice — file should have two lines
+	for range 2 {
+		if err := AppendReport(reportFile, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	data, err := os.ReadFile(reportFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := 0
+	for _, b := range data {
+		if b == '\n' {
+			lines++
+		}
+	}
+	if lines != 2 {
+		t.Errorf("expected 2 lines in report, got %d", lines)
+	}
+}
