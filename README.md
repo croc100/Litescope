@@ -1,15 +1,26 @@
 # Litescope
 
+**The operations toolchain for production SQLite.**
+
+[Website](https://croc100.github.io/Litescope/) · [Pricing](https://croc100.github.io/Litescope/#pricing) · [Sponsor](https://github.com/sponsors/croc100)
+
+[![License: ELv2](https://img.shields.io/badge/license-Elastic%202.0-3fb6a8)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Turso](https://img.shields.io/badge/Turso-supported-4ec9b0)](https://turso.tech)
+[![Cloudflare D1](https://img.shields.io/badge/Cloudflare%20D1-supported-f48120?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/d1/)
 [![Contributors](https://gcv-five.vercel.app/api/badge/croc100/litescope)](https://gcv-five.vercel.app/croc100/litescope)
 
-**SQLite production operations — diff, validate, check, monitor.**
+SQLite is everywhere now — Turso, Cloudflare D1, the edge, every mobile app. The operations tooling never caught up. Litescope is the missing toolchain: **diff, validate, migrate, and monitor — one database or an entire fleet.**
 
-SQLite is everywhere: Turso, Cloudflare D1, mobile, edge. The tooling hasn't caught up. Litescope fills the gap.
-
-```
+```bash
+# One database
 litescope diff before.db after.db
-litescope validate run before.db after.db --expect migration.yaml
 litescope monitor watch turso://TOKEN@ORG/prod --baseline baseline.json --interval 1h
+
+# An entire fleet — discover, drift-check, and migrate hundreds at once
+litescope fleet discover turso --org my-org --token $TURSO_API_TOKEN
+litescope fleet check
+litescope fleet migrate migration.sql --canary 5
 ```
 
 ---
