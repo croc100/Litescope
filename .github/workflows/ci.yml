@@ -18,8 +18,11 @@ jobs:
           go-version: "1.22"
           cache: true
 
+      # The gui package embeds frontend/dist, which is built by Wails and not
+      # present in CI. Target the CLI and library packages directly so the gui
+      # embed is never evaluated (and vscode/node_modules is excluded too).
       - name: Build
-        run: go build $(go list ./... | grep -v '/gui')
+        run: go build ./cmd/... ./internal/...
 
       - name: Test
-        run: go test $(go list ./... | grep -v '/gui')
+        run: go test ./cmd/... ./internal/...
