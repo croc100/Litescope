@@ -318,7 +318,7 @@ export LITESCOPE_LICENSE=lsc_pro_xxxxxxxxxxxxxxxx
 echo "lsc_pro_xxxxxxxxxxxxxxxx" > ~/.litescope/license
 ```
 
-Get a key at **[litescope.dev/pricing](https://github.com/croc100/Litescope#pricing)**.
+Get a key at **[croc100.github.io/Litescope](https://croc100.github.io/Litescope/#pricing)**.
 
 ---
 
