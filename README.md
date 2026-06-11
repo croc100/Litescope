@@ -188,6 +188,41 @@ databases:
 
 `fleet check` exits **1** when any database drifted or errored — drop it straight into CI to gate deploys across your entire fleet.
 
+**Staged migrations across the fleet:**
+
+```bash
+# Always dry-run first — validates the migration against EVERY database
+# (apply + rollback) without committing, so you see every failure at once
+litescope fleet migrate migration.sql --dry-run
+
+# Canary: apply to the first N databases, then stop and verify
+litescope fleet migrate migration.sql --canary 5
+
+# Roll out to the whole fleet — staged, halting at the first failure
+litescope fleet migrate migration.sql
+```
+
+```
+Fleet rollout: production · 312 database(s)
+
+✓  tenant-0001   applied      3 statements · local · backup: tenant-0001.backup-20260611.db
+✓  tenant-0002   applied      3 statements · turso
+✗  tenant-0003   failed       statement 2 failed (rolled back, database unchanged)
+·  tenant-0004   skipped      rollout halted
+
+2 databases · 1 applied · 1 failed · 1 held/skipped
+
+!  Rollout halted at the first failure — remaining databases untouched.
+```
+
+The rollout is **staged and fail-closed**: databases migrate one at a time, and the first failure halts the rollout so a bad migration can't cascade across the fleet.
+
+| Source | Safety |
+|---|---|
+| Local files | Integrity check, `VACUUM INTO` backup, single transaction, FK verification, automatic rollback |
+| Turso | Transactional apply over the Hrana API (rolls back on failure) |
+| Cloudflare D1 | Sequential apply — D1 has no transaction rollback over HTTP |
+
 ---
 
 ## GitHub Integration
@@ -271,6 +306,7 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 | Webhook alerts (Slack, Discord) | — | ✓ | ✓ |
 | **fleet** — manage 100s of DBs at once | — | — | ✓ |
 | fleet discover / snapshot / check | — | — | ✓ |
+| fleet migrate (staged rollout) | — | — | ✓ |
 | monitor history (drift timeline) | — | — | ✓ |
 | Team access + audit trail | — | — | ✓ |
 

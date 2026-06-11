@@ -17,6 +17,40 @@ type Connector interface {
 	DSN() string
 }
 
+// Executor is implemented by connectors that can run migration statements.
+//
+// Exec runs the given statements as a unit. Implementations execute inside a
+// transaction where the underlying provider supports it (local files, Turso),
+// rolling back on any failure; providers without interactive transactions over
+// their API (Cloudflare D1) run statements sequentially and stop on the first
+// error. Capabilities() describes the guarantees a given connector provides.
+type Executor interface {
+	// Exec runs the statements. When dryRun is true, the executor applies them
+	// inside a transaction and rolls back instead of committing — validating the
+	// migration without changing data. Providers without transactions (D1) return
+	// an error for dryRun.
+	Exec(statements []string, dryRun bool) error
+	Capabilities() ExecCapabilities
+}
+
+// ExecCapabilities describes the safety guarantees of an Executor.
+type ExecCapabilities struct {
+	// Transactional is true when a failed statement rolls back the whole batch.
+	Transactional bool
+	// LocalBackup is true when the executor can take a point-in-time file backup
+	// before applying (only local files).
+	LocalBackup bool
+	// Provider is a short label: "local", "turso", "d1".
+	Provider string
+}
+
+// AsExecutor returns the Executor view of a connector, or false if it can't
+// execute statements.
+func AsExecutor(c Connector) (Executor, bool) {
+	e, ok := c.(Executor)
+	return e, ok
+}
+
 // Open parses a DSN and returns the appropriate Connector.
 //
 // Supported formats:

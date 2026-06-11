@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,7 +30,167 @@ Fleet is a Cloud feature ($49/mo).`,
 	cmd.AddCommand(cmdFleetSnapshot())
 	cmd.AddCommand(cmdFleetCheck())
 	cmd.AddCommand(cmdFleetStatus())
+	cmd.AddCommand(cmdFleetMigrate())
 	return cmd
+}
+
+// ── migrate ───────────────────────────────────────────────────────────────────
+
+func cmdFleetMigrate() *cobra.Command {
+	var (
+		configPath, tag, format, backupDir string
+		dryRun, noBackup, yes              bool
+		canary                             int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "migrate <migration.sql>",
+		Short: "Apply one migration across the whole fleet, staged, halting on failure",
+		Long: `Roll a single migration out to every database in order.
+
+The rollout is staged and fail-closed: databases are migrated one at a time, and
+the first failure halts the rollout so a bad migration cannot cascade across the
+fleet. Remaining databases are left untouched.
+
+  Local files     full safety — integrity check, VACUUM INTO backup,
+                  single transaction, FK verification, automatic rollback.
+  Turso           transactional apply over the Hrana API (no local backup).
+  D1              sequential apply; D1 has no rollback over HTTP.
+
+Always dry-run first — it validates the migration against every database
+(apply + rollback) and never halts early, so you see every failure at once:
+
+  litescope fleet migrate migration.sql --dry-run
+
+Then apply for real. Use --canary to apply to the first N databases and stop,
+so you can verify before rolling out to the rest:
+
+  litescope fleet migrate migration.sql --canary 5
+  litescope fleet migrate migration.sql            # the whole fleet`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequireCloud(); err != nil {
+				return err
+			}
+			sqlBytes, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("reading migration: %w", err)
+			}
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+
+			// Destructive, multi-database operation — confirm unless dry-run/--yes.
+			if !dryRun && !yes {
+				action := fmt.Sprintf("apply this migration to %d database(s)", len(dbs))
+				if canary > 0 {
+					action = fmt.Sprintf("apply this migration to the first %d of %d database(s)", canary, len(dbs))
+				}
+				if !confirm(fmt.Sprintf("About to %s. Continue?", action)) {
+					fmt.Println("  Aborted.")
+					return nil
+				}
+			}
+
+			report := fleet.Rollout(dbs, string(sqlBytes), fleet.RolloutOptions{
+				DryRun:    dryRun,
+				Canary:    canary,
+				BackupDir: backupDir,
+				NoBackup:  noBackup,
+			})
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
+			} else {
+				printRolloutReport(cfg, report)
+			}
+
+			if _, failed, _ := report.Counts(); failed > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only migrate databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate against every database without committing")
+	cmd.Flags().IntVar(&canary, "canary", 0, "apply to the first N databases then stop")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "directory for local backups (default: alongside each DB)")
+	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip local backups (not recommended)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
+	return cmd
+}
+
+func printRolloutReport(cfg *fleet.Config, report *fleet.RolloutReport) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	mode := "rollout"
+	if report.DryRun {
+		mode = "dry-run"
+	}
+	fmt.Printf("\n  Fleet %s: %s · %d database(s)\n\n", mode, styleBold.Render(name), len(report.Results))
+
+	width := 0
+	for _, r := range report.Results {
+		if len(r.Database) > width {
+			width = len(r.Database)
+		}
+	}
+
+	for _, r := range report.Results {
+		var mark, state, detail string
+		switch r.State {
+		case fleet.StateApplied:
+			mark = styleOK.Render("✓")
+			state = styleOK.Render("applied")
+			detail = styleDim.Render(rolloutDetail(r))
+		case fleet.StateDryRun:
+			mark = styleOK.Render("✓")
+			state = styleOK.Render("dry-run ok")
+			detail = styleDim.Render(fmt.Sprintf("%d statements · %s", r.Executed, r.Provider))
+		case fleet.StateFailed:
+			mark = styleErr.Render("✗")
+			state = styleErr.Render("failed")
+			detail = styleErr.Render(truncErr(r.Err))
+		case fleet.StateSkipped:
+			mark = styleDim.Render("·")
+			state = styleDim.Render("skipped")
+			detail = styleDim.Render("rollout halted")
+		case fleet.StateCanary:
+			mark = styleDim.Render("·")
+			state = styleDim.Render("held")
+			detail = styleDim.Render("beyond canary limit")
+		}
+		fmt.Printf("  %s  %-*s  %-11s  %s\n", mark, width, r.Database, state, detail)
+	}
+
+	applied, failed, skipped := report.Counts()
+	fmt.Printf("\n  %s\n", summaryLine(len(report.Results),
+		kv{"applied", applied, styleOK},
+		kv{"failed", failed, styleErr},
+		kv{"held/skipped", skipped, styleDim},
+	))
+	if report.Halted {
+		fmt.Printf("\n  %s  Rollout halted at the first failure — remaining databases untouched.\n",
+			styleWarn.Render("!"))
+	}
+	fmt.Println()
+}
+
+func rolloutDetail(r fleet.RolloutResult) string {
+	parts := []string{fmt.Sprintf("%d statements", r.Executed), r.Provider}
+	if r.BackupPath != "" {
+		parts = append(parts, "backup: "+r.BackupPath)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // ── discover ──────────────────────────────────────────────────────────────────
@@ -411,6 +572,20 @@ func dbsNames(dbs []fleet.Database) []string {
 		out[i] = db.Name
 	}
 	return out
+}
+
+// confirm prompts the user for a yes/no answer on stdin, defaulting to no.
+// It returns true only on an explicit "y"/"yes". When stdin is not a terminal
+// (e.g. CI without --yes), it returns false so destructive actions are refused.
+func confirm(question string) bool {
+	fmt.Printf("\n  %s [y/N] ", question)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 func truncErr(err error) string {
