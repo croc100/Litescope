@@ -115,6 +115,52 @@ litescope monitor watch turso://TOKEN@ORG/prod \
 
 ---
 
+### `fleet` — Manage many databases at once (Cloud)
+
+One database is `monitor`. A hundred databases is `fleet`. Built for teams running
+SQLite at scale on Turso groups and Cloudflare D1.
+
+```bash
+# 1. Discover every database in a Turso org (or D1 account) → writes a fleet config
+litescope fleet discover turso --org my-org --token $TURSO_API_TOKEN --db-token $TURSO_GROUP_TOKEN
+litescope fleet discover d1 --account $CF_ACCOUNT_ID --token $CF_API_TOKEN
+
+# 2. Capture baselines for the whole fleet in parallel
+litescope fleet snapshot
+
+# 3. Detect drift across the whole fleet in parallel — exits 1 if any DB drifted
+litescope fleet check
+litescope fleet check --tag group:prod      # filter by tag
+litescope fleet check --format json         # for dashboards / CI
+```
+
+```
+Fleet: production · 312 database(s)
+
+●  tenant-0001   ok       18ms
+●  tenant-0002   ok       21ms
+▲  tenant-0148   drift    +1 table, ~1 table
+○  tenant-0149   no baseline
+✗  tenant-0203   error    connection refused
+
+312 databases · 309 ok · 1 drift · 1 no baseline · 1 error
+```
+
+The fleet config (`litescope.fleet.yaml`) is a plain checked-in file:
+
+```yaml
+version: 1
+name: production
+databases:
+  - name: tenant-0001
+    dsn: turso://TOKEN@my-org/tenant-0001
+    tags: [group:prod]
+```
+
+`fleet check` exits **1** when any database drifted or errored — drop it straight into CI to gate deploys across your entire fleet.
+
+---
+
 ## GitHub Integration
 
 ### Automatic PR schema diff comments
@@ -192,7 +238,9 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 | monitor snapshot / check | ✓ | ✓ | ✓ |
 | monitor watch (continuous) | — | ✓ | ✓ |
 | Webhook alerts (Slack, Discord) | — | ✓ | ✓ |
-| Hosted monitoring dashboard | — | — | ✓ |
+| **fleet** — manage 100s of DBs at once | — | — | ✓ |
+| fleet discover / snapshot / check | — | — | ✓ |
+| monitor history (drift timeline) | — | — | ✓ |
 | Team access + audit trail | — | — | ✓ |
 
 Set your license key:
