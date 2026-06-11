@@ -62,7 +62,7 @@ func RequirePro() error {
 
   This feature requires Litescope Pro.
 
-  Upgrade at: https://litescope.dev/pricing
+  Upgrade at: https://github.com/croc100/Litescope#pricing
   Then set:   export LITESCOPE_LICENSE=lsc_pro_<your-key>
 
   Pro ($9/mo): continuous monitoring, webhook alerts, CI reports`,
@@ -78,7 +78,7 @@ func RequireCloud() error {
 
   This feature requires Litescope Cloud.
 
-  Upgrade at: https://litescope.dev/pricing
+  Upgrade at: https://github.com/croc100/Litescope#pricing
   Then set:   export LITESCOPE_LICENSE=lsc_cloud_<your-key>
 
   Cloud ($49/mo): hosted monitoring, team dashboard, audit trail`,

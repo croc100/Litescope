@@ -21,12 +21,13 @@ func cmdMonitor() *cobra.Command {
 		Long: `Monitor detects unexpected schema changes in your production databases.
 
   Free:  snapshot, check (one-shot)
-  Pro:   watch (continuous), webhook alerts
-  Cloud: hosted monitoring, dashboard, team alerts`,
+  Pro:   watch (continuous), webhook alerts, --save-report
+  Cloud: history (drift timeline), team alerts`,
 	}
 	cmd.AddCommand(cmdMonitorSnapshot())
 	cmd.AddCommand(cmdMonitorCheck())
 	cmd.AddCommand(cmdMonitorWatch())
+	cmd.AddCommand(cmdMonitorHistory())
 	return cmd
 }
 
@@ -97,6 +98,7 @@ Examples:
 func cmdMonitorCheck() *cobra.Command {
 	var baseline string
 	var format string
+	var saveReport string
 
 	cmd := &cobra.Command{
 		Use:   "check <source>",
@@ -104,12 +106,22 @@ func cmdMonitorCheck() *cobra.Command {
 		Long: `Compare the current schema against a saved baseline snapshot.
 Exits 0 if no drift, exits 1 if drift is detected.
 
+Use --save-report to append results to a JSONL report file for CI history (Pro).
+
 Examples:
   litescope monitor check production.db --baseline baseline.json
-  litescope monitor check turso://TOKEN@ORG/prod --baseline baseline.json --format json`,
+  litescope monitor check turso://TOKEN@ORG/prod --baseline baseline.json --format json
+  litescope monitor check production.db --baseline baseline.json --save-report reports/drift.jsonl`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dsn := args[0]
+
+			// --save-report is a Pro feature
+			if saveReport != "" {
+				if err := license.RequirePro(); err != nil {
+					return err
+				}
+			}
 
 			snap, err := monitor.Load(baseline)
 			if err != nil {
@@ -129,6 +141,15 @@ Examples:
 
 			result := monitor.Check(dsn, snap, current)
 
+			// Append to report file (JSONL — one result per line)
+			if saveReport != "" {
+				if err := monitor.AppendReport(saveReport, result); err != nil {
+					fmt.Fprintf(os.Stderr, "  %s  Failed to save report: %v\n", styleWarn.Render("!"), err)
+				} else {
+					fmt.Fprintf(os.Stderr, "  %s  Report saved → %s\n", styleDim.Render("·"), saveReport)
+				}
+			}
+
 			switch format {
 			case "json":
 				enc := json.NewEncoder(os.Stdout)
@@ -147,6 +168,7 @@ Examples:
 
 	cmd.Flags().StringVarP(&baseline, "baseline", "b", "baseline.json", "baseline snapshot file")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json")
+	cmd.Flags().StringVar(&saveReport, "save-report", "", "append result to a JSONL report file [Pro]")
 	_ = cmd.MarkFlagRequired("baseline")
 	return cmd
 }
@@ -170,7 +192,7 @@ Examples:
   litescope monitor watch d1://TOKEN@ACC/prod --baseline baseline.json --webhook https://hooks.slack.com/...
 
   Set license: export LITESCOPE_LICENSE=lsc_pro_<key>
-  Get license: https://litescope.dev/pricing`,
+  Get license: https://github.com/croc100/Litescope#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// ── License gate ──────────────────────────────────────
@@ -255,6 +277,100 @@ Examples:
 	cmd.Flags().StringVar(&webhook, "webhook", "", "webhook URL for drift alerts (Slack, Discord, custom)")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json")
 	_ = cmd.MarkFlagRequired("baseline")
+	return cmd
+}
+
+// ── history ───────────────────────────────────────────────────────────────────
+// CLOUD: drift timeline from accumulated JSONL report
+
+func cmdMonitorHistory() *cobra.Command {
+	var format string
+	var last int
+
+	cmd := &cobra.Command{
+		Use:   "history <report.jsonl>",
+		Short: "Show drift history from saved reports [Cloud]",
+		Long: `Display a timeline of past drift checks from a JSONL report file.
+Build the report with: litescope monitor check --save-report report.jsonl (Pro)
+
+Examples:
+  litescope monitor history reports/drift.jsonl
+  litescope monitor history reports/drift.jsonl --last 10
+  litescope monitor history reports/drift.jsonl --format json
+
+  Get Cloud: https://github.com/croc100/Litescope#pricing`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequireCloud(); err != nil {
+				return err
+			}
+
+			entries, err := monitor.LoadHistory(args[0])
+			if err != nil {
+				return err
+			}
+
+			if len(entries) == 0 {
+				fmt.Println("  No history entries found.")
+				return nil
+			}
+
+			// Summarize over full history before slicing
+			summary := monitor.Summarize(entries)
+
+			// Slice to --last N
+			if last > 0 && last < len(entries) {
+				entries = entries[len(entries)-last:]
+			}
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(entries)
+			}
+
+			// Terminal output
+			fmt.Printf("\n  %s  %s\n", styleDim.Render("source"), summary.Source)
+			fmt.Printf("  %s  %d checks · %s drift events · last checked %s\n\n",
+				styleDim.Render("·"),
+				summary.TotalChecks,
+				styleWarn.Render(fmt.Sprintf("%d", summary.DriftCount)),
+				summary.LastChecked,
+			)
+
+			for _, e := range entries {
+				ts := e.CheckedAt.Format("2006-01-02 15:04 UTC")
+				if e.HasDrift {
+					fmt.Printf("  %s  %s  %s\n",
+						styleErr.Render("⚠"),
+						styleDim.Render(ts),
+						styleErr.Render(fmt.Sprintf("%d change(s)", len(e.Changes))),
+					)
+					for _, td := range e.Changes {
+						switch {
+						case td.Added:
+							fmt.Printf("       %s  table %s added\n", styleOK.Render("+"), td.Name)
+						case td.Removed:
+							fmt.Printf("       %s  table %s removed\n", styleErr.Render("-"), td.Name)
+						default:
+							fmt.Printf("       %s  table %s modified\n", styleWarn.Render("~"), td.Name)
+						}
+					}
+				} else {
+					fmt.Printf("  %s  %s  %s\n",
+						styleOK.Render("✓"),
+						styleDim.Render(ts),
+						styleOK.Render("no drift"),
+					)
+				}
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json")
+	cmd.Flags().IntVar(&last, "last", 0, "show only the last N entries")
 	return cmd
 }
 

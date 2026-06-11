@@ -123,6 +123,46 @@ func TestCheck_TableRemoved(t *testing.T) {
 	}
 }
 
+func TestAppendReport_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "drift.jsonl")
+
+	r1 := Check("prod.db", &Snapshot{CapturedAt: time.Now().Add(-2 * time.Hour), Schema: sampleSchema("users")}, sampleSchema("users"))
+	r2 := Check("prod.db", &Snapshot{CapturedAt: time.Now().Add(-1 * time.Hour), Schema: sampleSchema("users")}, sampleSchema("users", "logs"))
+
+	if err := AppendReport(path, r1); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendReport(path, r2); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := LoadHistory(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[1].HasDrift != true {
+		t.Error("second entry should have drift")
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	snap := &Snapshot{CapturedAt: time.Now().Add(-time.Hour), Schema: sampleSchema("users")}
+	e1 := HistoryEntry{Check("db", snap, sampleSchema("users"))}
+	e2 := HistoryEntry{Check("db", snap, sampleSchema("users", "logs"))}
+
+	sum := Summarize([]HistoryEntry{e1, e2})
+	if sum.TotalChecks != 2 {
+		t.Errorf("expected 2 total checks, got %d", sum.TotalChecks)
+	}
+	if sum.DriftCount != 1 {
+		t.Errorf("expected 1 drift event, got %d", sum.DriftCount)
+	}
+}
+
 func TestCheck_TimestampsSet(t *testing.T) {
 	before := time.Now()
 	snap := &Snapshot{CapturedAt: before.Add(-1 * time.Hour), Schema: sampleSchema()}
