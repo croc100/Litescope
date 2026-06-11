@@ -1,5 +1,7 @@
 # Litescope
 
+[![Contributors](https://gcv-five.vercel.app/api/badge/croc100/litescope)](https://gcv-five.vercel.app/croc100/litescope)
+
 **SQLite production operations — diff, validate, check, monitor.**
 
 SQLite is everywhere: Turso, Cloudflare D1, mobile, edge. The tooling hasn't caught up. Litescope fills the gap.
@@ -89,6 +91,33 @@ litescope check backup.db --reference production.db
 # Also compare row counts
 litescope check backup.db --reference production.db --data
 ```
+
+---
+
+### `migrate` — Generate and apply schema migrations
+
+Turn a schema diff into runnable SQL, then apply it safely.
+
+```bash
+# Generate migration SQL (free) — destructive changes report rows affected
+litescope migrate before.db after.db --output migration.sql
+
+# Preview: run everything in a transaction, then roll back (Pro)
+litescope migrate apply prod.db migration.sql --dry-run
+
+# Apply with automatic backup and verification (Pro)
+litescope migrate apply prod.db migration.sql --verify after.db
+```
+
+`migrate apply` safety sequence:
+
+1. Pre-flight integrity check — corrupt databases are refused
+2. Automatic backup via `VACUUM INTO` (point-in-time consistent)
+3. All statements run inside a single transaction
+4. Foreign key + integrity verification before commit
+5. Any failure rolls back; a failed commit restores the backup
+
+SQLite does not support `DROP COLUMN` or type changes directly — Litescope generates the standard rebuild pattern (`CREATE` → `INSERT` → `DROP` → `RENAME`) automatically.
 
 ---
 
@@ -189,7 +218,9 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 | | Free | Pro ($9/mo) | Cloud ($49/mo) |
 |---|---|---|---|
 | diff, schema, validate, check | ✓ | ✓ | ✓ |
+| migrate (generate SQL) | ✓ | ✓ | ✓ |
 | monitor snapshot / check | ✓ | ✓ | ✓ |
+| migrate apply (backup + rollback) | — | ✓ | ✓ |
 | monitor watch (continuous) | — | ✓ | ✓ |
 | Webhook alerts (Slack, Discord) | — | ✓ | ✓ |
 | Hosted monitoring dashboard | — | — | ✓ |
