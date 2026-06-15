@@ -1,231 +1,241 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  GitCompare, Table2, FolderOpen, RefreshCw,
-  Hash, AlertCircle, CheckCircle2, ChevronRight,
-  ChevronLeft, Database, Clock, X
+  GitCompare, Table2, ShieldCheck, GitMerge, Activity,
+  FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
+  ChevronRight, ChevronLeft, Database, Clock, X, Plus,
+  AlertTriangle, Play, Eye, Save, FileJson, Layers
 } from 'lucide-react'
-import { Diff, OpenFile, Schema, QueryTable, TableDiffRows } from '../wailsjs/go/main/App'
+import {
+  Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
+  Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory
+} from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 
-const RECENT_KEY = 'litescope_recent'
-const MAX_RECENT = 8
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+const RECENT_KEY = 'litescope_recent_v2'
+const MAX_RECENT = 12
 
 function useRecentFiles() {
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') } catch { return [] }
   })
-
-  const addRecent = useCallback((path: string) => {
+  const add = useCallback((path: string) => {
     setRecent(prev => {
       const next = [path, ...prev.filter(p => p !== path)].slice(0, MAX_RECENT)
       localStorage.setItem(RECENT_KEY, JSON.stringify(next))
       return next
     })
   }, [])
-
-  const removeRecent = useCallback((path: string) => {
+  const remove = useCallback((path: string) => {
     setRecent(prev => {
       const next = prev.filter(p => p !== path)
       localStorage.setItem(RECENT_KEY, JSON.stringify(next))
       return next
     })
   }, [])
-
-  return { recent, addRecent, removeRecent }
+  return { recent, add, remove }
 }
 
-type View = 'diff' | 'explorer'
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor'
+
+// ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [view, setView] = useState<View>('diff')
-  const { recent, addRecent, removeRecent } = useRecentFiles()
+  const [tool, setTool] = useState<Tool>('diff')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const { recent, add, remove } = useRecentFiles()
+  const [statusMsg, setStatusMsg] = useState<{ text: string; kind: 'ok' | 'warn' | 'err' | 'idle' }>({ text: 'Ready', kind: 'idle' })
+
+  const status = (text: string, kind: typeof statusMsg.kind) => setStatusMsg({ text, kind })
 
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] text-[13px] font-sans overflow-hidden select-none">
       <div className="flex flex-1 overflow-hidden">
-        <ActivityBar view={view} setView={setView} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {view === 'diff'
-            ? <DiffView recent={recent} addRecent={addRecent} removeRecent={removeRecent} />
-            : <ExplorerView recent={recent} addRecent={addRecent} removeRecent={removeRecent} />}
+        <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
+        {sidebarOpen && <Sidebar recent={recent} addRecent={add} removeRecent={remove} activeTool={tool} />}
+        <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {tool === 'diff'     && <DiffView     recent={recent} addRecent={add} removeRecent={remove} status={status} />}
+          {tool === 'explorer' && <ExplorerView recent={recent} addRecent={add} removeRecent={remove} status={status} />}
+          {tool === 'check'    && <CheckView    recent={recent} addRecent={add} removeRecent={remove} status={status} />}
+          {tool === 'migrate'  && <MigrateView  recent={recent} addRecent={add} removeRecent={remove} status={status} />}
+          {tool === 'monitor'  && <MonitorView  recent={recent} addRecent={add} removeRecent={remove} status={status} />}
         </main>
       </div>
-      <StatusBar view={view} />
+      <StatusBar msg={statusMsg} tool={tool} />
     </div>
   )
 }
 
-/* ─── Activity Bar ─────────────────────────────── */
-function ActivityBar({ view, setView }: { view: View; setView: (v: View) => void }) {
-  return (
-    <div className="w-[48px] flex flex-col items-center bg-[#333333] border-r border-[#252525] shrink-0 pt-2 gap-1">
-      <ActivityItem icon={<GitCompare size={22} strokeWidth={1.5} />} label="Diff" active={view === 'diff'} onClick={() => setView('diff')} />
-      <ActivityItem icon={<Table2 size={22} strokeWidth={1.5} />} label="Explorer" active={view === 'explorer'} onClick={() => setView('explorer')} />
-    </div>
-  )
-}
+// ── Activity Bar ──────────────────────────────────────────────────────────────
 
-function ActivityItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} title={label}
-      className={`relative w-full h-[48px] flex items-center justify-center transition-colors
-        ${active ? 'text-white' : 'text-[#858585] hover:text-[#cccccc]'}`}>
-      {active && <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[#007acc] rounded-r-full" />}
-      {icon}
-    </button>
-  )
-}
+const TOOLS: { id: Tool; icon: React.ReactNode; label: string }[] = [
+  { id: 'diff',     icon: <GitCompare size={20} strokeWidth={1.5} />,  label: 'Diff' },
+  { id: 'explorer', icon: <Table2 size={20} strokeWidth={1.5} />,      label: 'Explorer' },
+  { id: 'check',    icon: <ShieldCheck size={20} strokeWidth={1.5} />, label: 'Check' },
+  { id: 'migrate',  icon: <GitMerge size={20} strokeWidth={1.5} />,    label: 'Migrate' },
+  { id: 'monitor',  icon: <Activity size={20} strokeWidth={1.5} />,    label: 'Monitor' },
+]
 
-/* ─── Status Bar ───────────────────────────────── */
-function StatusBar({ view }: { view: View }) {
-  return (
-    <div className="h-[22px] bg-[#007acc] flex items-center px-3 gap-3 text-white text-[11px] shrink-0">
-      <span className="flex items-center gap-1.5 opacity-90"><Database size={11} />Litescope</span>
-      <span className="opacity-50">|</span>
-      <span className="opacity-80">{view === 'diff' ? 'Diff' : 'Explorer'}</span>
-    </div>
-  )
-}
-
-/* ─── Shared: Recent Dropdown ──────────────────── */
-function RecentDropdown({ recent, onSelect, onRemove, onClose }: {
-  recent: string[]; onSelect: (p: string) => void; onRemove: (p: string) => void; onClose: () => void
+function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
+  tool: Tool; setTool: (t: Tool) => void
+  sidebarOpen: boolean; toggleSidebar: () => void
 }) {
-  if (recent.length === 0) return (
-    <div className="absolute top-full left-0 mt-px w-[320px] bg-[#252526] border border-[#3c3c3c] shadow-xl z-50 text-[12px]">
-      <div className="px-3 py-2 text-[#585858]">No recent files</div>
-    </div>
-  )
   return (
-    <div className="absolute top-full left-0 mt-px w-[320px] bg-[#252526] border border-[#3c3c3c] shadow-xl z-50">
-      <div className="px-3 py-1 text-[11px] text-[#858585] uppercase tracking-wider border-b border-[#3c3c3c]">Recent</div>
-      {recent.map(p => (
-        <div key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] group">
-          <Clock size={11} className="text-[#585858] shrink-0" />
-          <button className="flex-1 text-left text-[12px] text-[#cccccc] truncate" onClick={() => { onSelect(p); onClose() }}>
-            <span className="text-[#858585] text-[11px]">{p.split('/').slice(-2, -1)[0]}/</span>{p.split('/').pop()}
-          </button>
-          <button onClick={() => onRemove(p)} className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc]">
-            <X size={11} />
-          </button>
-        </div>
+    <div className="w-[48px] flex flex-col items-center bg-[#333333] border-r border-[#252525] shrink-0 pt-1">
+      {TOOLS.map(t => (
+        <button key={t.id} title={t.label} onClick={() => { setTool(t.id); if (!sidebarOpen) toggleSidebar() }}
+          className={`relative w-full h-[48px] flex items-center justify-center transition-colors
+            ${tool === t.id ? 'text-white' : 'text-[#858585] hover:text-[#cccccc]'}`}>
+          {tool === t.id && <span className="absolute left-0 top-3 bottom-3 w-[2px] bg-[#007acc] rounded-r-full" />}
+          {t.icon}
+        </button>
       ))}
+      <div className="flex-1" />
+      <button title="Toggle sidebar" onClick={toggleSidebar}
+        className="w-full h-[40px] flex items-center justify-center text-[#585858] hover:text-[#cccccc] mb-1">
+        <Layers size={16} strokeWidth={1.5} />
+      </button>
     </div>
   )
 }
 
-/* ─── Diff View ────────────────────────────────── */
-function DiffView({ recent, addRecent, removeRecent }: { recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void }) {
-  const [oldPath, setOldPath] = useState('')
-  const [newPath, setNewPath] = useState('')
-  const [result, setResult] = useState<any>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [dropTarget, setDropTarget] = useState<'old' | 'new' | null>(null)
+// ── Sidebar ───────────────────────────────────────────────────────────────────
 
-  // Drag & drop
-  useEffect(() => {
-    OnFileDrop((_, __, paths) => {
-      if (!paths.length) return
-      const p = paths[0]
-      if (!oldPath) { setOldPath(p); addRecent(p) }
-      else if (!newPath) { setNewPath(p); addRecent(p) }
-      else { setNewPath(p); addRecent(p) }
-      setDropTarget(null)
-    }, true)
-    return () => OnFileDropOff()
-  }, [oldPath, newPath])
-
-  async function pickFile(setter: (p: string) => void) {
-    const path = await OpenFile()
-    if (path) { setter(path); addRecent(path) }
+function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
+  recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void; activeTool: Tool
+}) {
+  async function open() {
+    const p = await OpenFile()
+    if (p) addRecent(p)
   }
-
-  async function runDiff() {
-    if (!oldPath || !newPath) return
-    setLoading(true); setError(''); setResult(null)
-    try {
-      setResult(await Diff(oldPath, newPath))
-    } catch (e: any) { setError(String(e)) }
-    finally { setLoading(false) }
-  }
-
-  const canCompare = !!oldPath && !!newPath && !loading
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] shrink-0">
-        <div className="flex items-center h-full px-4 border-r border-[#252525] bg-[#1e1e1e] text-[12px] gap-2">
-          <GitCompare size={13} className="text-[#007acc]" /><span>Diff</span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-0 h-[30px] bg-[#3c3c3c] border-b border-[#252525] px-2 shrink-0">
-        <PathInput label="Before" path={oldPath} onPick={() => pickFile(setOldPath)}
-          recent={recent} onRecent={p => { setOldPath(p); addRecent(p) }} onRemoveRecent={removeRecent} />
-        <span className="px-2 text-[#585858]">→</span>
-        <PathInput label="After" path={newPath} onPick={() => pickFile(setNewPath)}
-          recent={recent} onRecent={p => { setNewPath(p); addRecent(p) }} onRemoveRecent={removeRecent} />
-        <div className="flex-1" />
-        <button onClick={runDiff} disabled={!canCompare}
-          className={`h-[22px] px-4 text-[12px] font-medium rounded-sm flex items-center gap-1.5 transition-colors
-            ${canCompare ? 'bg-[#0e639c] hover:bg-[#1177bb] text-white' : 'bg-[#3c3c3c] text-[#585858] cursor-not-allowed'}`}>
-          {loading ? <><RefreshCw size={11} className="animate-spin" />Running…</> : 'Compare'}
+    <div className="w-[220px] flex flex-col bg-[#252526] border-r border-[#1e1e1e] shrink-0 overflow-hidden">
+      <div className="flex items-center h-[35px] px-3 border-b border-[#1e1e1e] gap-2 shrink-0">
+        <span className="text-[10px] uppercase tracking-wider text-[#858585] font-medium flex-1">Databases</span>
+        <button onClick={open} title="Open database" className="text-[#585858] hover:text-[#cccccc]">
+          <Plus size={14} strokeWidth={1.5} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {error && <ErrorPanel message={error} />}
-        {!result && !error && !loading && <DiffEmptyState oldSet={!!oldPath} newSet={!!newPath} />}
-        {loading && <LoadingPanel />}
-        {result && <DiffResult result={result} oldPath={oldPath} newPath={newPath} />}
+      <div className="flex-1 overflow-y-auto py-1">
+        {recent.length === 0 && (
+          <div className="px-3 py-4 text-[11px] text-[#585858] text-center">
+            Open a .db file to get started
+          </div>
+        )}
+        {recent.map(p => {
+          const name = p.split('/').pop() ?? p
+          const dir = p.split('/').slice(-2, -1)[0]
+          return (
+            <div key={p} className="flex items-center gap-1.5 px-2 py-1 hover:bg-[#2a2d2e] group rounded-sm mx-1">
+              <Database size={12} className="text-[#569cd6] shrink-0" strokeWidth={1.5} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] text-[#cccccc] truncate">{name}</div>
+                <div className="text-[10px] text-[#585858] truncate">{dir}/</div>
+              </div>
+              <button onClick={() => removeRecent(p)}
+                className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc] shrink-0">
+                <X size={11} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="border-t border-[#1e1e1e] px-3 py-2 shrink-0">
+        <div className="text-[10px] text-[#585858] uppercase tracking-wider mb-1.5">Quick actions</div>
+        <div className="flex flex-col gap-0.5">
+          {TOOLS.map(t => (
+            <div key={t.id} className={`flex items-center gap-2 px-2 py-1 rounded-sm text-[11px] cursor-pointer transition-colors
+              ${activeTool === t.id ? 'bg-[#094771] text-[#cccccc]' : 'text-[#858585] hover:bg-[#2a2d2e] hover:text-[#cccccc]'}`}>
+              <span className="w-[14px] flex items-center justify-center">{t.icon}</span>
+              {t.label}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function PathInput({ label, path, onPick, recent, onRecent, onRemoveRecent }: {
+// ── Status Bar ────────────────────────────────────────────────────────────────
+
+const toolLabels: Record<Tool, string> = {
+  diff: 'Schema Diff', explorer: 'DB Explorer', check: 'Integrity Check',
+  migrate: 'Migration Studio', monitor: 'Drift Monitor',
+}
+
+function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: Tool }) {
+  const kindCls = { ok: 'text-[#4ec9b0]', warn: 'text-[#dcdcaa]', err: 'text-[#f44747]', idle: 'text-white' }[msg.kind] ?? 'text-white'
+  return (
+    <div className="h-[22px] bg-[#007acc] flex items-center px-3 gap-3 text-white text-[11px] shrink-0">
+      <span className="flex items-center gap-1.5 opacity-90"><Database size={11} />Litescope</span>
+      <span className="opacity-40">|</span>
+      <span className="opacity-75">{toolLabels[tool]}</span>
+      <div className="flex-1" />
+      <span className={`${kindCls} opacity-90`}>{msg.text}</span>
+    </div>
+  )
+}
+
+// ── Shared Components ─────────────────────────────────────────────────────────
+
+function PanelHeader({ icon, title, meta }: { icon: React.ReactNode; title: string; meta?: React.ReactNode }) {
+  return (
+    <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] px-3 gap-2 shrink-0">
+      <span className="text-[#007acc]">{icon}</span>
+      <span className="text-[12px] font-medium">{title}</span>
+      {meta && <div className="ml-auto">{meta}</div>}
+    </div>
+  )
+}
+
+function Toolbar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center h-[32px] bg-[#3c3c3c] border-b border-[#252525] px-2 gap-2 shrink-0">
+      {children}
+    </div>
+  )
+}
+
+function DbPicker({ label, path, onPick, onRecent, recent, removeRecent }: {
   label: string; path: string; onPick: () => void
-  recent: string[]; onRecent: (p: string) => void; onRemoveRecent: (p: string) => void
+  onRecent: (p: string) => void; recent: string[]; removeRecent: (p: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const filename = path ? path.split('/').pop() : null
-
+  const name = path ? path.split('/').pop() : null
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 h-[22px] px-2 rounded-sm text-[12px] hover:bg-[#505050] transition-colors max-w-[280px]">
-        <FolderOpen size={12} className="text-[#858585] shrink-0" />
+        className="flex items-center gap-1.5 h-[22px] px-2 rounded-sm text-[12px] hover:bg-[#505050] transition-colors max-w-[260px]">
+        <FolderOpen size={11} className="text-[#858585] shrink-0" />
         <span className="text-[#858585] shrink-0">{label}:</span>
-        <span className={`truncate ${filename ? 'text-[#cccccc]' : 'text-[#585858]'}`}>
-          {filename ?? 'select file…'}
-        </span>
+        <span className={`truncate ${name ? 'text-[#cccccc]' : 'text-[#585858]'}`}>{name ?? 'select…'}</span>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-px bg-[#252526] border border-[#3c3c3c] shadow-xl z-50 w-[280px]">
+          <div className="absolute top-full left-0 mt-px bg-[#252526] border border-[#3c3c3c] shadow-2xl z-50 w-[280px]">
             <button onClick={() => { onPick(); setOpen(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#2a2d2e] text-[12px] border-b border-[#3c3c3c]">
               <FolderOpen size={12} className="text-[#858585]" />Browse…
             </button>
-            {recent.length > 0 && (
-              <>
-                <div className="px-3 py-1 text-[11px] text-[#585858] uppercase tracking-wider">Recent</div>
-                {recent.map(p => (
-                  <div key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] group">
-                    <Clock size={11} className="text-[#585858] shrink-0" />
-                    <button className="flex-1 text-left text-[12px] truncate text-[#cccccc]"
-                      onClick={() => { onRecent(p); setOpen(false) }}>
-                      {p.split('/').pop()}
-                    </button>
-                    <button onClick={() => onRemoveRecent(p)} className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc]">
-                      <X size={11} />
-                    </button>
-                  </div>
-                ))}
-              </>
-            )}
+            {recent.length > 0 && <>
+              <div className="px-3 py-1 text-[10px] text-[#585858] uppercase tracking-wider">Recent</div>
+              {recent.map(p => (
+                <div key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] group">
+                  <Clock size={11} className="text-[#585858] shrink-0" />
+                  <button className="flex-1 text-left text-[12px] truncate text-[#cccccc]"
+                    onClick={() => { onRecent(p); setOpen(false) }}>{p.split('/').pop()}</button>
+                  <button onClick={() => removeRecent(p)} className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc]">
+                    <X size={11} /></button>
+                </div>
+              ))}
+            </>}
           </div>
         </>
       )}
@@ -233,104 +243,195 @@ function PathInput({ label, path, onPick, recent, onRecent, onRemoveRecent }: {
   )
 }
 
-function DiffEmptyState({ oldSet, newSet }: { oldSet: boolean; newSet: boolean }) {
+function Btn({ children, onClick, disabled, variant = 'primary', small }: {
+  children: React.ReactNode; onClick?: () => void; disabled?: boolean
+  variant?: 'primary' | 'ghost' | 'danger'; small?: boolean
+}) {
+  const base = `flex items-center gap-1.5 rounded-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed`
+  const size = small ? 'h-[20px] px-2 text-[11px]' : 'h-[22px] px-3 text-[12px]'
+  const v = {
+    primary: 'bg-[#0e639c] hover:bg-[#1177bb] text-white',
+    ghost:   'bg-transparent hover:bg-[#3c3c3c] text-[#cccccc] border border-[#555]',
+    danger:  'bg-[#6a1717] hover:bg-[#8a2020] text-[#f44747] border border-[#8a2020]',
+  }[variant]
+  return <button onClick={onClick} disabled={disabled} className={`${base} ${size} ${v}`}>{children}</button>
+}
+
+function Spinner() {
+  return <RefreshCw size={12} className="animate-spin text-[#007acc]" />
+}
+
+function EmptyState({ icon, text, sub }: { icon: React.ReactNode; text: string; sub?: string }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2 text-[12px] text-[#585858] h-full">
-      {!oldSet && <span>Drop .db files here or select in the toolbar — Before → After → Compare</span>}
-      {oldSet && !newSet && <span className="text-[#4ec9b0]">✓ Before selected — select the After database</span>}
-      {oldSet && newSet && <span className="text-[#4ec9b0]">✓ Both selected — click Compare</span>}
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#585858]">
+      <div className="opacity-30">{icon}</div>
+      <div className="text-[13px]">{text}</div>
+      {sub && <div className="text-[11px] opacity-70">{sub}</div>}
     </div>
   )
 }
 
-function LoadingPanel() {
-  return (
-    <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]">
-      <RefreshCw size={13} className="animate-spin text-[#007acc]" />Comparing databases…
-    </div>
-  )
-}
-
-function ErrorPanel({ message }: { message: string }) {
+function ErrPanel({ message }: { message: string }) {
   return (
     <div className="flex items-start gap-2 m-3 px-3 py-2.5 bg-[#5a1d1d] border border-[#be1100] text-[#f48771] text-[12px] rounded-sm">
-      <AlertCircle size={13} className="shrink-0 mt-0.5" /><span className="font-mono">{message}</span>
+      <AlertCircle size={13} className="shrink-0 mt-0.5" /><span className="font-mono break-all">{message}</span>
     </div>
   )
 }
 
-/* ─── Diff Result ──────────────────────────────── */
-function DiffResult({ result, oldPath, newPath }: { result: any; oldPath: string; newPath: string }) {
-  const schema: any[] = result?.Schema ?? []
-  const data: any[] = result?.Data ?? []
-  const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema')
-
-  if (schema.length === 0 && data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 gap-2 text-[#4ec9b0] text-[12px]">
-        <CheckCircle2 size={14} />Databases are identical — no differences found
-      </div>
-    )
-  }
-
-  const schemaAdded = schema.filter(t => t.Added).length
-  const schemaRemoved = schema.filter(t => t.Removed).length
-  const schemaChanged = schema.filter(t => !t.Added && !t.Removed).length
-
+function OkPanel({ message }: { message: string }) {
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
-        <ResultTab label="Schema" count={schema.length} active={activeTab === 'schema'} onClick={() => setActiveTab('schema')} />
-        <ResultTab label="Data" count={data.length} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
-        <div className="flex-1" />
-        <div className="flex items-center gap-3 text-[11px] pr-1">
-          {schemaAdded > 0 && <span className="text-[#4ec9b0]">+{schemaAdded} tables</span>}
-          {schemaRemoved > 0 && <span className="text-[#f44747]">-{schemaRemoved} tables</span>}
-          {schemaChanged > 0 && <span className="text-[#dcdcaa]">~{schemaChanged} modified</span>}
-          {data.length > 0 && <span className="text-[#9cdcfe]">{data.length} data changes</span>}
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'schema' && (
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
-                <th className="text-left px-4 py-1.5 font-medium w-6"></th>
-                <th className="text-left px-3 py-1.5 font-medium">Table</th>
-                <th className="text-left px-3 py-1.5 font-medium">Change</th>
-                <th className="text-left px-3 py-1.5 font-medium">Details</th>
-              </tr>
-            </thead>
-            <tbody>{schema.map((td, i) => <SchemaRow key={i} td={td} />)}</tbody>
-          </table>
-        )}
-        {activeTab === 'data' && (
-          <div>
-            {data.map((dd, i) => (
-              <DataDiffSection key={i} dd={dd} oldPath={oldPath} newPath={newPath} result={result} />
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="flex items-start gap-2 m-3 px-3 py-2.5 bg-[#1a3a1a] border border-[#4ec9b0]/40 text-[#4ec9b0] text-[12px] rounded-sm">
+      <CheckCircle2 size={13} className="shrink-0 mt-0.5" />{message}
     </div>
   )
 }
 
-function ResultTab({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+function WarnBanner({ messages }: { messages: string[] }) {
+  if (!messages.length) return null
+  return (
+    <div className="m-3 px-3 py-2 bg-[#3a2d00] border border-[#febc2e]/40 text-[#dcdcaa] text-[12px] rounded-sm">
+      <div className="flex items-center gap-1.5 mb-1 font-medium"><AlertTriangle size={12} />Warnings</div>
+      {messages.map((m, i) => <div key={i} className="text-[11px] opacity-80">· {m}</div>)}
+    </div>
+  )
+}
+
+function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'yellow' | 'blue' }) {
+  const cls = {
+    green:  'bg-[#4ec9b0]/15 text-[#4ec9b0] border-[#4ec9b0]/30',
+    red:    'bg-[#f44747]/15 text-[#f44747] border-[#f44747]/30',
+    yellow: 'bg-[#dcdcaa]/15 text-[#dcdcaa] border-[#dcdcaa]/30',
+    blue:   'bg-[#569cd6]/15 text-[#569cd6] border-[#569cd6]/30',
+  }[color]
+  return <span className={`px-1.5 py-0.5 text-[10px] font-mono border rounded-sm ${cls}`}>{label}</span>
+}
+
+function SubTab({ label, active, onClick, count }: { label: string; active: boolean; onClick: () => void; count?: number }) {
   return (
     <button onClick={onClick}
-      className={`h-full px-3 text-[12px] flex items-center gap-1.5 border-t-2 transition-colors
+      className={`h-full px-3 text-[12px] flex items-center gap-1.5 border-b-2 transition-colors
         ${active ? 'border-[#007acc] text-[#cccccc] bg-[#1e1e1e]' : 'border-transparent text-[#858585] hover:text-[#cccccc]'}`}>
       {label}
-      {count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-[#3c3c3c] text-[10px] text-[#858585]">{count}</span>}
+      {count != null && count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-[#3c3c3c] text-[10px] text-[#858585]">{count}</span>}
     </button>
+  )
+}
+
+// ── Diff View ─────────────────────────────────────────────────────────────────
+
+function DiffView({ recent, addRecent, removeRecent, status }: ViewProps) {
+  const [oldPath, setOldPath] = useState('')
+  const [newPath, setNewPath] = useState('')
+  const [result, setResult] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'schema' | 'data'>('schema')
+
+  useEffect(() => {
+    OnFileDrop((_, __, paths) => {
+      if (!paths.length) return
+      const p = paths[0]; addRecent(p)
+      if (!oldPath) setOldPath(p)
+      else setNewPath(p)
+    }, true)
+    return () => OnFileDropOff()
+  }, [oldPath, newPath])
+
+  async function pick(setter: (p: string) => void) {
+    const p = await OpenFile(); if (p) { setter(p); addRecent(p) }
+  }
+
+  async function run() {
+    setLoading(true); setError(''); setResult(null); status('Comparing…', 'idle')
+    try {
+      const r = await Diff(oldPath, newPath)
+      setResult(r)
+      const changes = (r?.Schema?.length ?? 0) + (r?.Data?.length ?? 0)
+      status(changes > 0 ? `${changes} difference(s) found` : 'Identical — no differences', changes > 0 ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Comparison failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  const schema: any[] = result?.Schema ?? []
+  const data: any[] = result?.Data ?? []
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<GitCompare size={14} />} title="Schema Diff" />
+      <Toolbar>
+        <DbPicker label="Before" path={oldPath} onPick={() => pick(setOldPath)}
+          recent={recent} onRecent={p => { setOldPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <span className="text-[#585858] text-[11px]">→</span>
+        <DbPicker label="After" path={newPath} onPick={() => pick(setNewPath)}
+          recent={recent} onRecent={p => { setNewPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <div className="flex-1" />
+        <Btn onClick={run} disabled={!oldPath || !newPath || loading}>
+          {loading ? <><Spinner />Comparing…</> : 'Compare'}
+        </Btn>
+      </Toolbar>
+
+      {error && <ErrPanel message={error} />}
+
+      {!result && !error && !loading && (
+        <EmptyState icon={<GitCompare size={48} />}
+          text="Drop two .db files here, or select Before → After above"
+          sub="Compare schemas, column changes, index changes, and row-level data diffs" />
+      )}
+      {loading && (
+        <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]">
+          <Spinner />Comparing databases…
+        </div>
+      )}
+
+      {result && (
+        <>
+          {schema.length === 0 && data.length === 0
+            ? <OkPanel message="Databases are identical — no differences found" />
+            : (
+              <>
+                <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+                  <SubTab label="Schema" count={schema.length} active={activeTab === 'schema'} onClick={() => setActiveTab('schema')} />
+                  <SubTab label="Data" count={data.length} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
+                  <div className="flex-1" />
+                  <div className="flex items-center gap-3 text-[11px] pr-1">
+                    {schema.filter((t:any) => t.Added).length > 0 && <span className="text-[#4ec9b0]">+{schema.filter((t:any) => t.Added).length}</span>}
+                    {schema.filter((t:any) => t.Removed).length > 0 && <span className="text-[#f44747]">-{schema.filter((t:any) => t.Removed).length}</span>}
+                    {schema.filter((t:any) => !t.Added && !t.Removed).length > 0 && <span className="text-[#dcdcaa]">~{schema.filter((t:any) => !t.Added && !t.Removed).length}</span>}
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {activeTab === 'schema' && <SchemaDiffTable rows={schema} />}
+                  {activeTab === 'data' && data.map((dd: any, i: number) =>
+                    <DataDiffSection key={i} dd={dd} oldPath={oldPath} newPath={newPath} result={result} />
+                  )}
+                </div>
+              </>
+            )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SchemaDiffTable({ rows }: { rows: any[] }) {
+  return (
+    <table className="w-full text-[12px]">
+      <thead>
+        <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+          <th className="text-left px-4 py-1.5 w-6" />
+          <th className="text-left px-3 py-1.5">Table</th>
+          <th className="text-left px-3 py-1.5">Change</th>
+          <th className="text-left px-3 py-1.5">Details</th>
+        </tr>
+      </thead>
+      <tbody>{rows.map((td, i) => <SchemaRow key={i} td={td} />)}</tbody>
+    </table>
   )
 }
 
 function SchemaRow({ td }: { td: any }) {
   const [expanded, setExpanded] = useState(true)
-  const isAdded = td.Added, isRemoved = td.Removed
-
   const details = [
     ...(td.AddedColumns ?? []).map((c: any) => ({ sign: '+', text: `column  ${c.Name}  ${c.Type}`, cls: 'text-[#4ec9b0]' })),
     ...(td.RemovedColumns ?? []).map((c: any) => ({ sign: '-', text: `column  ${c.Name}`, cls: 'text-[#f44747]' })),
@@ -338,26 +439,23 @@ function SchemaRow({ td }: { td: any }) {
     ...(td.AddedIndexes ?? []).map((idx: any) => ({ sign: '+', text: `index   ${idx.Name}${idx.Unique ? '  UNIQUE' : ''}`, cls: 'text-[#4ec9b0]' })),
     ...(td.RemovedIndexes ?? []).map((idx: any) => ({ sign: '-', text: `index   ${idx.Name}`, cls: 'text-[#f44747]' })),
   ]
-
   return (
     <>
-      <tr className={`border-b border-[#2d2d2d] hover:bg-[#2a2d2e] cursor-pointer ${isAdded ? 'bg-[#4ec9b0]/5' : isRemoved ? 'bg-[#f44747]/5' : ''}`}
-        onClick={() => details.length > 0 && setExpanded(e => !e)}>
+      <tr className={`border-b border-[#2d2d2d] hover:bg-[#2a2d2e] cursor-pointer ${td.Added ? 'bg-[#4ec9b0]/5' : td.Removed ? 'bg-[#f44747]/5' : ''}`}
+        onClick={() => details.length && setExpanded(e => !e)}>
         <td className="px-4 py-1.5 text-[#858585]">
           {details.length > 0 && <ChevronRight size={12} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />}
         </td>
         <td className="px-3 py-1.5 font-mono">
-          <span className={isAdded ? 'text-[#4ec9b0]' : isRemoved ? 'text-[#f44747]' : 'text-[#9cdcfe]'}>{td.Name}</span>
+          <span className={td.Added ? 'text-[#4ec9b0]' : td.Removed ? 'text-[#f44747]' : 'text-[#9cdcfe]'}>{td.Name}</span>
         </td>
         <td className="px-3 py-1.5">
-          {isAdded && <Badge label="ADDED" color="green" />}
-          {isRemoved && <Badge label="REMOVED" color="red" />}
-          {!isAdded && !isRemoved && <Badge label="MODIFIED" color="yellow" />}
+          {td.Added && <Badge label="ADDED" color="green" />}
+          {td.Removed && <Badge label="REMOVED" color="red" />}
+          {!td.Added && !td.Removed && <Badge label="MODIFIED" color="yellow" />}
         </td>
         <td className="px-3 py-1.5 text-[#858585] text-[11px]">
-          {isAdded && `${td.AddedColumns?.length ?? 0} columns`}
-          {isRemoved && 'table removed'}
-          {!isAdded && !isRemoved && `${details.length} changes`}
+          {td.Added ? `${td.AddedColumns?.length ?? 0} columns` : td.Removed ? 'table removed' : `${details.length} changes`}
         </td>
       </tr>
       {expanded && details.map((d, i) => (
@@ -377,7 +475,6 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
-
   const schemaTable = result?.Schema?.find((t: any) => t.Name === dd.Table)
   const pkCol = schemaTable
     ? (schemaTable.AddedColumns ?? schemaTable.RemovedColumns ?? []).find?.((c: any) => c.PK === 1)?.Name ?? 'id'
@@ -386,49 +483,50 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
   async function load() {
     if (loaded) { setExpanded(e => !e); return }
     setExpanded(true); setLoading(true)
-    try {
-      const r = await TableDiffRows(oldPath, newPath, dd.Table, pkCol, 100)
-      setRows(r ?? [])
-      setLoaded(true)
-    } catch { setRows([]) }
+    try { const r = await TableDiffRows(oldPath, newPath, dd.Table, pkCol, 100); setRows(r ?? []); setLoaded(true) }
+    catch { setRows([]) }
     finally { setLoading(false) }
   }
-
-  const allCols = rows.length > 0
-    ? Object.keys(rows[0].New ?? rows[0].Old ?? {})
-    : []
-
+  const allCols = rows.length > 0 ? Object.keys(rows[0].New ?? rows[0].Old ?? {}) : []
   return (
     <div className="border-b border-[#252525]">
-      <button onClick={load}
-        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#2a2d2e] text-left">
-        <ChevronRight size={12} className={`text-[#858585] transition-transform shrink-0 ${expanded ? 'rotate-90' : ''}`} />
+      <button onClick={load} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#2a2d2e] text-left">
+        <ChevronRight size={12} className={`text-[#858585] shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         <span className="font-mono text-[#9cdcfe]">{dd.Table}</span>
         <div className="flex gap-3 text-[11px] ml-2">
-          {dd.Added > 0 && <span className="text-[#4ec9b0]">+{dd.Added} rows</span>}
-          {dd.Removed > 0 && <span className="text-[#f44747]">-{dd.Removed} rows</span>}
-          {dd.Changed > 0 && <span className="text-[#dcdcaa]">~{dd.Changed} rows</span>}
+          {dd.Added > 0 && <span className="text-[#4ec9b0]">+{dd.Added}</span>}
+          {dd.Removed > 0 && <span className="text-[#f44747]">-{dd.Removed}</span>}
+          {dd.Changed > 0 && <span className="text-[#dcdcaa]">~{dd.Changed}</span>}
         </div>
       </button>
-
       {expanded && (
         <div className="border-t border-[#252525]">
-          {loading && <div className="flex items-center gap-2 px-6 py-2 text-[11px] text-[#858585]"><RefreshCw size={11} className="animate-spin" />Loading rows…</div>}
-          {!loading && rows.length === 0 && <div className="px-6 py-2 text-[11px] text-[#585858]">No row-level data available</div>}
+          {loading && <div className="flex items-center gap-2 px-6 py-2 text-[11px] text-[#858585]"><Spinner />Loading…</div>}
           {!loading && rows.length > 0 && (
             <div className="overflow-x-auto">
               <table className="text-[11px] font-mono w-full">
-                <thead>
-                  <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585]">
-                    <th className="px-3 py-1 text-left font-medium w-16">status</th>
-                    {allCols.map(c => <th key={c} className="px-3 py-1 text-left font-medium">{c}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, i) => (
-                    <DiffedRowView key={i} row={row} cols={allCols} />
-                  ))}
-                </tbody>
+                <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585]">
+                  <th className="px-3 py-1 text-left w-12">st</th>
+                  {allCols.map(c => <th key={c} className="px-3 py-1 text-left">{c}</th>)}
+                </tr></thead>
+                <tbody>{rows.map((row, i) => {
+                  const isAdded = row.Status === 'added', isRemoved = row.Status === 'removed'
+                  return (
+                    <tr key={i} className={`border-b border-[#2d2d2d] ${isAdded ? 'bg-[#4ec9b0]/8' : isRemoved ? 'bg-[#f44747]/8' : ''}`}>
+                      <td className={`px-3 py-1 ${isAdded ? 'text-[#4ec9b0]' : isRemoved ? 'text-[#f44747]' : 'text-[#dcdcaa]'}`}>
+                        {isAdded ? '+' : isRemoved ? '-' : '~'}
+                      </td>
+                      {allCols.map(col => {
+                        const changed = row.Status === 'changed' && String(row.Old?.[col]) !== String(row.New?.[col])
+                        return <td key={col} className="px-3 py-1 max-w-[180px] truncate text-[#cccccc]">
+                          {changed
+                            ? <><span className="text-[#f44747] line-through mr-1">{String(row.Old?.[col] ?? '')}</span><span className="text-[#4ec9b0]">{String(row.New?.[col] ?? '')}</span></>
+                            : String((isRemoved ? row.Old : row.New)?.[col] ?? '')}
+                        </td>
+                      })}
+                    </tr>
+                  )
+                })}</tbody>
               </table>
             </div>
           )}
@@ -438,126 +536,70 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
   )
 }
 
-function DiffedRowView({ row, cols }: { row: any; cols: string[] }) {
-  const isAdded = row.Status === 'added'
-  const isRemoved = row.Status === 'removed'
-  const isChanged = row.Status === 'changed'
+// ── Explorer View ─────────────────────────────────────────────────────────────
 
-  const rowCls = isAdded ? 'bg-[#4ec9b0]/8' : isRemoved ? 'bg-[#f44747]/8' : ''
-  const statusCls = isAdded ? 'text-[#4ec9b0]' : isRemoved ? 'text-[#f44747]' : 'text-[#dcdcaa]'
+type ViewProps = { recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void; status: (t: string, k: 'ok'|'warn'|'err'|'idle') => void }
 
-  return (
-    <tr className={`border-b border-[#2d2d2d] hover:brightness-110 ${rowCls}`}>
-      <td className={`px-3 py-1 ${statusCls}`}>{isAdded ? '+' : isRemoved ? '-' : '~'}</td>
-      {cols.map(col => {
-        const oldVal = row.Old?.[col]
-        const newVal = row.New?.[col]
-        const changed = isChanged && String(oldVal) !== String(newVal)
-        return (
-          <td key={col} className="px-3 py-1 text-[#cccccc] max-w-[200px] truncate">
-            {changed
-              ? <><span className="text-[#f44747] line-through mr-1">{String(oldVal ?? '')}</span><span className="text-[#4ec9b0]">{String(newVal ?? '')}</span></>
-              : <span>{String((isRemoved ? oldVal : newVal) ?? '')}</span>}
-          </td>
-        )
-      })}
-    </tr>
-  )
-}
-
-function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'yellow' }) {
-  const cls = { green: 'bg-[#4ec9b0]/15 text-[#4ec9b0] border-[#4ec9b0]/30', red: 'bg-[#f44747]/15 text-[#f44747] border-[#f44747]/30', yellow: 'bg-[#dcdcaa]/15 text-[#dcdcaa] border-[#dcdcaa]/30' }[color]
-  return <span className={`px-1.5 py-0.5 text-[10px] font-mono border rounded-sm ${cls}`}>{label}</span>
-}
-
-/* ─── Explorer View ────────────────────────────── */
-function ExplorerView({ recent, addRecent, removeRecent }: { recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void }) {
+function ExplorerView({ recent, addRecent, removeRecent, status }: ViewProps) {
   const [path, setPath] = useState('')
   const [schemaData, setSchemaData] = useState<any>(null)
   const [error, setError] = useState('')
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
-  const [explorerTab, setExplorerTab] = useState<'schema' | 'data'>('schema')
+  const [tab, setTab] = useState<'schema' | 'data'>('schema')
 
-  // Drag & drop
   useEffect(() => {
-    OnFileDrop((_, __, paths) => {
-      if (paths.length) openDb(paths[0])
-    }, true)
+    OnFileDrop((_, __, paths) => { if (paths.length) open(paths[0]) }, true)
     return () => OnFileDropOff()
   }, [])
 
-  async function openDb(p: string) {
-    setPath(p); setSelectedTable(null); setError('')
-    addRecent(p)
-    try { setSchemaData(await Schema(p)) }
-    catch (e: any) { setError(String(e)); setSchemaData(null) }
-  }
-
-  async function pickFile() {
-    const p = await OpenFile()
-    if (p) openDb(p)
+  async function open(p: string) {
+    setPath(p); setSelectedTable(null); setError(''); addRecent(p)
+    try { const s = await Schema(p); setSchemaData(s); status(`${s.Tables?.length ?? 0} tables loaded`, 'ok') }
+    catch (e: any) { setError(String(e)); setSchemaData(null); status('Failed to open database', 'err') }
   }
 
   const tables = schemaData?.Tables ?? []
-  const selectedTableData = tables.find((t: any) => t.Name === selectedTable)
+  const selTable = tables.find((t: any) => t.Name === selectedTable)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] shrink-0">
-        <div className="flex items-center h-full px-4 border-r border-[#252525] bg-[#1e1e1e] text-[12px] gap-2">
-          <Table2 size={13} className="text-[#007acc]" /><span>Explorer</span>
-        </div>
-      </div>
-
-      <div className="flex items-center h-[30px] bg-[#3c3c3c] border-b border-[#252525] px-2 gap-2 shrink-0">
-        <PathInput label="Database" path={path} onPick={pickFile}
-          recent={recent} onRecent={openDb} onRemoveRecent={removeRecent} />
+      <PanelHeader icon={<Table2 size={14} />} title="DB Explorer" />
+      <Toolbar>
+        <DbPicker label="Database" path={path} onPick={async () => { const p = await OpenFile(); if (p) open(p) }}
+          recent={recent} onRecent={open} removeRecent={removeRecent} />
         {schemaData && <span className="text-[#858585] text-[11px]">{tables.length} tables</span>}
-      </div>
-
-      {error && <ErrorPanel message={error} />}
-
-      {!schemaData && !error && (
-        <div className="flex-1 flex items-center justify-center text-[#585858] text-[12px]">
-          Drop a .db file here or click Database to open
-        </div>
-      )}
-
+      </Toolbar>
+      {error && <ErrPanel message={error} />}
+      {!schemaData && !error && <EmptyState icon={<Table2 size={48} />} text="Drop a .db file here to explore" sub="Browse schema, inspect columns, query table data" />}
       {schemaData && (
         <div className="flex flex-1 overflow-hidden">
-          {/* Table list */}
-          <div className="w-[200px] border-r border-[#252525] flex flex-col shrink-0 bg-[#252526]">
-            <div className="px-3 py-1.5 text-[11px] text-[#858585] uppercase tracking-wider font-medium border-b border-[#252525]">Tables</div>
+          <div className="w-[180px] border-r border-[#252525] flex flex-col shrink-0 bg-[#252526]">
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[#858585] border-b border-[#252525]">Tables</div>
             <div className="flex-1 overflow-y-auto">
               {tables.map((t: any) => (
-                <button key={t.Name} onClick={() => { setSelectedTable(t.Name); setExplorerTab('schema') }}
+                <button key={t.Name} onClick={() => { setSelectedTable(t.Name); setTab('schema') }}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors
                     ${selectedTable === t.Name ? 'bg-[#094771] text-white' : 'text-[#cccccc] hover:bg-[#2a2d2e]'}`}>
-                  <Table2 size={12} className="shrink-0 text-[#858585]" />
+                  <Table2 size={11} className="shrink-0 text-[#858585]" />
                   <span className="truncate font-mono">{t.Name}</span>
                   <span className="ml-auto text-[10px] text-[#585858]">{t.Columns?.length}</span>
                 </button>
               ))}
             </div>
           </div>
-
-          {/* Main panel */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {!selectedTable && (
-              <div className="flex-1 flex items-center justify-center text-[#585858] text-[12px]">Select a table</div>
-            )}
-            {selectedTableData && (
+            {!selectedTable && <EmptyState icon={<Table2 size={32} />} text="Select a table" />}
+            {selTable && (
               <>
-                {/* Sub-tabs */}
                 <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
-                  <ResultTab label="Schema" count={0} active={explorerTab === 'schema'} onClick={() => setExplorerTab('schema')} />
-                  <ResultTab label="Data" count={0} active={explorerTab === 'data'} onClick={() => setExplorerTab('data')} />
+                  <SubTab label="Schema" active={tab === 'schema'} onClick={() => setTab('schema')} />
+                  <SubTab label="Data" active={tab === 'data'} onClick={() => setTab('data')} />
                   <div className="flex-1" />
-                  <span className="text-[11px] text-[#858585] pr-1 font-mono">{selectedTable}</span>
+                  <span className="text-[11px] text-[#585858] pr-1 font-mono">{selectedTable}</span>
                 </div>
                 <div className="flex-1 overflow-auto">
-                  {explorerTab === 'schema' && <TableInspector table={selectedTableData} />}
-                  {explorerTab === 'data' && <TableDataView path={path} table={selectedTable!} />}
+                  {tab === 'schema' && <TableInspector table={selTable} />}
+                  {tab === 'data' && <TableDataView path={path} table={selectedTable!} />}
                 </div>
               </>
             )}
@@ -572,14 +614,12 @@ function TableInspector({ table }: { table: any }) {
   return (
     <div>
       <table className="w-full text-[12px]">
-        <thead>
-          <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
-            <th className="text-left px-4 py-1.5 font-medium">#</th>
-            <th className="text-left px-3 py-1.5 font-medium">Name</th>
-            <th className="text-left px-3 py-1.5 font-medium">Type</th>
-            <th className="text-left px-3 py-1.5 font-medium">Constraints</th>
-          </tr>
-        </thead>
+        <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+          <th className="text-left px-4 py-1.5">#</th>
+          <th className="text-left px-3 py-1.5">Name</th>
+          <th className="text-left px-3 py-1.5">Type</th>
+          <th className="text-left px-3 py-1.5">Constraints</th>
+        </tr></thead>
         <tbody>
           {(table.Columns ?? []).map((c: any, i: number) => (
             <tr key={c.Name} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
@@ -594,8 +634,8 @@ function TableInspector({ table }: { table: any }) {
         </tbody>
       </table>
       {(table.Indexes ?? []).length > 0 && (
-        <div className="border-t border-[#252525] mt-1">
-          <div className="px-4 py-1.5 text-[11px] text-[#858585] uppercase tracking-wider font-medium bg-[#252526] border-b border-[#252525]">Indexes</div>
+        <div className="border-t border-[#252525]">
+          <div className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-[#858585] bg-[#252526] border-b border-[#252525]">Indexes</div>
           {table.Indexes.map((idx: any) => (
             <div key={idx.Name} className="flex items-center gap-3 px-4 py-1.5 border-b border-[#2d2d2d] hover:bg-[#2a2d2e] font-mono text-[12px]">
               <Hash size={11} className={idx.Unique ? 'text-[#dcdcaa]' : 'text-[#585858]'} />
@@ -609,60 +649,467 @@ function TableInspector({ table }: { table: any }) {
   )
 }
 
-/* ─── Table Data View ──────────────────────────── */
 function TableDataView({ path, table }: { path: string; table: string }) {
   const PAGE = 100
   const [rows, setRows] = useState<any>(null)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
-
   useEffect(() => { setPage(0); setRows(null) }, [path, table])
-
   useEffect(() => {
     setLoading(true)
-    QueryTable(path, table, PAGE, page * PAGE)
-      .then(setRows)
-      .catch(() => setRows(null))
-      .finally(() => setLoading(false))
+    QueryTable(path, table, PAGE, page * PAGE).then(setRows).catch(() => setRows(null)).finally(() => setLoading(false))
   }, [path, table, page])
 
-  if (loading) return <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#858585]"><RefreshCw size={12} className="animate-spin" />Loading…</div>
-  if (!rows) return <div className="px-4 py-3 text-[12px] text-[#585858]">Failed to load data</div>
-  if (rows.Rows?.length === 0) return <div className="px-4 py-3 text-[12px] text-[#585858]">Table is empty</div>
-
+  if (loading) return <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#858585]"><Spinner />Loading…</div>
+  if (!rows) return <div className="px-4 py-3 text-[12px] text-[#585858]">Failed to load</div>
+  if (!rows.Rows?.length) return <div className="px-4 py-3 text-[12px] text-[#585858]">Table is empty</div>
   const totalPages = Math.ceil((rows.Total ?? 0) / PAGE)
-
   return (
     <div className="flex flex-col h-full">
       <div className="overflow-auto flex-1">
         <table className="text-[12px] font-mono w-full">
-          <thead>
-            <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
-              {(rows.Columns ?? []).map((c: string) => (
-                <th key={c} className="text-left px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>
-              ))}
+          <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+            {(rows.Columns ?? []).map((c: string) => <th key={c} className="text-left px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>)}
+          </tr></thead>
+          <tbody>{(rows.Rows ?? []).map((row: any[], i: number) => (
+            <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
+              {row.map((cell, j) => <td key={j} className="px-3 py-1 text-[#cccccc] max-w-[200px] truncate whitespace-nowrap">
+                {cell === null ? <span className="text-[#585858] italic">NULL</span> : String(cell)}
+              </td>)}
             </tr>
-          </thead>
-          <tbody>
-            {(rows.Rows ?? []).map((row: any[], i: number) => (
-              <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
-                {row.map((cell, j) => (
-                  <td key={j} className="px-3 py-1 text-[#cccccc] max-w-[240px] truncate whitespace-nowrap">
-                    {cell === null ? <span className="text-[#585858] italic">NULL</span> : String(cell)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
+          ))}</tbody>
         </table>
       </div>
       {totalPages > 1 && (
         <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#252525] bg-[#252526] text-[11px] text-[#858585] shrink-0">
-          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-            className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronLeft size={13} /></button>
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronLeft size={13} /></button>
           <span>Page {page + 1} / {totalPages} · {rows.Total} rows</span>
-          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-            className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronRight size={13} /></button>
+          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronRight size={13} /></button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Check View ────────────────────────────────────────────────────────────────
+
+function CheckView({ recent, addRecent, removeRecent, status }: ViewProps) {
+  const [backupPath, setBackupPath] = useState('')
+  const [refPath, setRefPath] = useState('')
+  const [withData, setWithData] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    OnFileDrop((_, __, paths) => {
+      if (!paths.length) return
+      const p = paths[0]; addRecent(p)
+      if (!backupPath) setBackupPath(p); else setRefPath(p)
+    }, true)
+    return () => OnFileDropOff()
+  }, [backupPath])
+
+  async function pick(setter: (p: string) => void) {
+    const p = await OpenFile(); if (p) { setter(p); addRecent(p) }
+  }
+
+  async function run() {
+    setLoading(true); setError(''); setResult(null); status('Checking integrity…', 'idle')
+    try {
+      const r = await Check(backupPath, refPath, withData)
+      setResult(r)
+      status(r.Passed ? 'Check passed' : 'Check failed', r.Passed ? 'ok' : 'err')
+    } catch (e: any) { setError(String(e)); status('Check error', 'err') }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<ShieldCheck size={14} />} title="Integrity Check"
+        meta={<span className="text-[10px] text-[#858585]">PRAGMA integrity_check · schema match · row counts</span>} />
+      <Toolbar>
+        <DbPicker label="Backup" path={backupPath} onPick={() => pick(setBackupPath)}
+          recent={recent} onRecent={p => { setBackupPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <DbPicker label="Reference (Pro)" path={refPath} onPick={() => pick(setRefPath)}
+          recent={recent} onRecent={p => { setRefPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <label className="flex items-center gap-1.5 text-[11px] text-[#858585] cursor-pointer ml-1">
+          <input type="checkbox" checked={withData} onChange={e => setWithData(e.target.checked)} className="accent-[#007acc]" />
+          Row counts (Pro)
+        </label>
+        <div className="flex-1" />
+        <Btn onClick={run} disabled={!backupPath || loading}>
+          {loading ? <><Spinner />Checking…</> : <><ShieldCheck size={12} />Check</>}
+        </Btn>
+      </Toolbar>
+
+      {error && <ErrPanel message={error} />}
+
+      {!result && !error && !loading && (
+        <EmptyState icon={<ShieldCheck size={48} />}
+          text="Select a backup database to verify its integrity"
+          sub="Optionally add a reference DB to check schema + row count consistency" />
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Running checks…</div>
+      )}
+
+      {result && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="text-[11px] text-[#858585] font-mono mb-3">{result.Path}</div>
+
+          <CheckRow
+            icon={result.IntegrityOK ? <CheckCircle2 size={14} className="text-[#4ec9b0]" /> : <AlertCircle size={14} className="text-[#f44747]" />}
+            label="File integrity"
+            detail={result.IntegrityOK ? 'PRAGMA integrity_check passed' : 'CORRUPTED'}
+            ok={result.IntegrityOK}
+            errors={result.IntegrityErrors}
+          />
+
+          {result.SchemaOK != null && (
+            <CheckRow
+              icon={result.SchemaOK ? <CheckCircle2 size={14} className="text-[#4ec9b0]" /> : <AlertCircle size={14} className="text-[#f44747]" />}
+              label="Schema match"
+              detail={result.SchemaOK ? 'Identical to reference' : 'Schema drift detected'}
+              ok={result.SchemaOK}
+            >
+              {!result.SchemaOK && result.SchemaDiff && <SchemaDiffTable rows={result.SchemaDiff.Schema ?? []} />}
+            </CheckRow>
+          )}
+
+          {result.DataOK != null && (
+            <CheckRow
+              icon={result.DataOK ? <CheckCircle2 size={14} className="text-[#4ec9b0]" /> : <AlertTriangle size={14} className="text-[#dcdcaa]" />}
+              label="Row counts"
+              detail={result.DataOK ? 'All tables match' : 'Row count mismatch'}
+              ok={result.DataOK}
+            >
+              {result.Tables?.length > 0 && (
+                <table className="w-full text-[11px] font-mono mt-2">
+                  <thead><tr className="text-[#858585]">
+                    <th className="text-left py-1">Table</th>
+                    <th className="text-right py-1">Backup</th>
+                    <th className="text-right py-1">Reference</th>
+                    <th className="text-right py-1">Match</th>
+                  </tr></thead>
+                  <tbody>{result.Tables.map((t: any, i: number) => (
+                    <tr key={i} className="border-t border-[#2d2d2d]">
+                      <td className="py-1 text-[#9cdcfe]">{t.Name}</td>
+                      <td className="py-1 text-right text-[#cccccc]">{t.BackupRows}</td>
+                      <td className="py-1 text-right text-[#cccccc]">{t.RefRows || '—'}</td>
+                      <td className="py-1 text-right">
+                        {t.RowsMatch == null ? '—' : t.RowsMatch ? <span className="text-[#4ec9b0]">✓</span> : <span className="text-[#dcdcaa]">!</span>}
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </CheckRow>
+          )}
+
+          <div className={`px-4 py-3 rounded-sm border text-[13px] font-medium mt-4 flex items-center gap-2
+            ${result.Passed ? 'bg-[#1a3a1a] border-[#4ec9b0]/40 text-[#4ec9b0]' : 'bg-[#5a1d1d] border-[#be1100]/40 text-[#f48771]'}`}>
+            {result.Passed ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+            {result.Passed ? 'All checks passed' : 'Check failed'}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CheckRow({ icon, label, detail, ok, errors, children }: {
+  icon: React.ReactNode; label: string; detail: string; ok: boolean
+  errors?: string[]; children?: React.ReactNode
+}) {
+  const [open, setOpen] = useState(!ok)
+  return (
+    <div className={`rounded-sm border ${ok ? 'border-[#3c3c3c]' : 'border-[#f44747]/30'}`}>
+      <button onClick={() => children && setOpen(o => !o)}
+        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${children ? 'cursor-pointer hover:bg-[#2a2d2e]' : ''}`}>
+        {icon}
+        <span className="text-[12px] font-medium text-[#cccccc]">{label}</span>
+        <span className="text-[11px] text-[#858585] ml-1">{detail}</span>
+        {children && <ChevronRight size={12} className={`ml-auto text-[#585858] transition-transform ${open ? 'rotate-90' : ''}`} />}
+      </button>
+      {open && errors?.map((e, i) => <div key={i} className="px-4 pb-2 text-[11px] text-[#f48771] font-mono">{e}</div>)}
+      {open && children && <div className="px-4 pb-3 border-t border-[#3c3c3c]">{children}</div>}
+    </div>
+  )
+}
+
+// ── Migrate View ──────────────────────────────────────────────────────────────
+
+function MigrateView({ recent, addRecent, removeRecent, status }: ViewProps) {
+  const [fromPath, setFromPath] = useState('')
+  const [toPath, setToPath] = useState('')
+  const [preview, setPreview] = useState<any>(null)
+  const [applyResult, setApplyResult] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [applying, setApplying] = useState(false)
+  const [confirmApply, setConfirmApply] = useState(false)
+
+  useEffect(() => {
+    OnFileDrop((_, __, paths) => {
+      if (!paths.length) return
+      const p = paths[0]; addRecent(p)
+      if (!fromPath) setFromPath(p); else setToPath(p)
+    }, true)
+    return () => OnFileDropOff()
+  }, [fromPath])
+
+  async function pick(setter: (p: string) => void) {
+    const p = await OpenFile(); if (p) { setter(p); addRecent(p) }
+  }
+
+  async function generate() {
+    setLoading(true); setError(''); setPreview(null); setApplyResult(null); setConfirmApply(false)
+    status('Generating migration SQL…', 'idle')
+    try {
+      const r = await MigrateGenerate(fromPath, toPath)
+      setPreview(r)
+      status(r.Warnings?.length ? `${r.Warnings.length} warning(s)` : 'Migration generated', r.Warnings?.length ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Generation failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function apply(dryRun: boolean) {
+    setApplying(true); setApplyResult(null)
+    status(dryRun ? 'Dry run…' : 'Applying migration…', 'idle')
+    try {
+      const r = await MigrateApply(fromPath, preview.SQL, dryRun)
+      setApplyResult({ ...r, dryRun })
+      setConfirmApply(false)
+      status(dryRun ? 'Dry run complete' : `Applied ${r.Executed} statement(s)`, 'ok')
+    } catch (e: any) { setError(String(e)); status('Apply failed', 'err') }
+    finally { setApplying(false) }
+  }
+
+  async function saveSQL() {
+    const p = await SaveFile('migration.sql')
+    if (!p || !preview) return
+    // Write via backend isn't available, copy to clipboard fallback
+    try {
+      await navigator.clipboard.writeText(preview.SQL)
+      status('SQL copied to clipboard', 'ok')
+    } catch { status('Copy failed', 'err') }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<GitMerge size={14} />} title="Migration Studio"
+        meta={<span className="text-[10px] text-[#858585]">Generate · preview · apply with auto-backup</span>} />
+      <Toolbar>
+        <DbPicker label="From" path={fromPath} onPick={() => pick(setFromPath)}
+          recent={recent} onRecent={p => { setFromPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <span className="text-[#585858] text-[11px]">→</span>
+        <DbPicker label="Target schema" path={toPath} onPick={() => pick(setToPath)}
+          recent={recent} onRecent={p => { setToPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <div className="flex-1" />
+        <Btn onClick={generate} disabled={!fromPath || !toPath || loading}>
+          {loading ? <><Spinner />Generating…</> : 'Generate SQL'}
+        </Btn>
+      </Toolbar>
+
+      {error && <ErrPanel message={error} />}
+
+      {!preview && !error && !loading && (
+        <EmptyState icon={<GitMerge size={48} />}
+          text="Select source and target schema databases"
+          sub="Litescope generates safe SQLite migration SQL with VACUUM INTO backup" />
+      )}
+
+      {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Generating…</div>}
+
+      {preview && (
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <WarnBanner messages={preview.Warnings ?? []} />
+
+          {applyResult && (
+            <div className={`mx-4 mt-3 px-4 py-2.5 rounded-sm border text-[12px] flex items-center gap-2
+              ${applyResult.DryRun ? 'bg-[#252526] border-[#3c3c3c] text-[#858585]' : 'bg-[#1a3a1a] border-[#4ec9b0]/40 text-[#4ec9b0]'}`}>
+              <CheckCircle2 size={13} />
+              {applyResult.DryRun
+                ? `Dry run: ${applyResult.Executed} statement(s) validated — no changes made`
+                : `Applied ${applyResult.Executed} statement(s) in ${applyResult.DurationMs}ms${applyResult.BackupPath ? ` · backup → ${applyResult.BackupPath.split('/').pop()}` : ''}`}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[#252525] shrink-0">
+            <span className="text-[11px] text-[#858585]">{preview.SQL.split('\n').filter((l: string) => l.trim() && !l.startsWith('--')).length} statements</span>
+            <div className="flex-1" />
+            <Btn variant="ghost" small onClick={saveSQL}><FileJson size={11} />Copy SQL</Btn>
+            <Btn variant="ghost" small onClick={() => apply(true)} disabled={applying}>
+              {applying ? <Spinner /> : <Eye size={11} />}Dry Run
+            </Btn>
+            {!confirmApply
+              ? <Btn variant="danger" small onClick={() => setConfirmApply(true)} disabled={applying}>
+                  <Play size={11} />Apply
+                </Btn>
+              : <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#dcdcaa]">Confirm?</span>
+                  <Btn variant="danger" small onClick={() => apply(false)} disabled={applying}>
+                    {applying ? <Spinner /> : null}Yes, apply
+                  </Btn>
+                  <Btn variant="ghost" small onClick={() => setConfirmApply(false)}>Cancel</Btn>
+                </div>
+            }
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <pre className="text-[12px] font-mono text-[#cccccc] whitespace-pre-wrap leading-relaxed">
+              {preview.SQL.split('\n').map((line: string, i: number) => {
+                const isComment = line.trim().startsWith('--')
+                const isWarning = line.includes('WARNING')
+                return (
+                  <div key={i} className={isWarning ? 'text-[#dcdcaa]' : isComment ? 'text-[#6a9955]' : ''}>
+                    {line || ' '}
+                  </div>
+                )
+              })}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Monitor View ──────────────────────────────────────────────────────────────
+
+function MonitorView({ recent, addRecent, removeRecent, status }: ViewProps) {
+  const [dbPath, setDbPath] = useState('')
+  const [baselinePath, setBaselinePath] = useState('')
+  const [checkResult, setCheckResult] = useState<any>(null)
+  const [snapInfo, setSnapInfo] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState<'check' | 'snapshot'>('check')
+
+  async function pickDb() { const p = await OpenFile(); if (p) { setDbPath(p); addRecent(p) } }
+  async function pickBaseline() { const p = await OpenFile(); if (p) setBaselinePath(p) }
+
+  async function snapshot() {
+    const out = await SaveFile('baseline.json')
+    if (!out) return
+    setLoading(true); setError(''); setSnapInfo(null); status('Capturing snapshot…', 'idle')
+    try {
+      const r = await MonitorSnapshot(dbPath, out)
+      setSnapInfo(r); setBaselinePath(out)
+      status(`Snapshot saved — ${r.TableCount} tables`, 'ok')
+    } catch (e: any) { setError(String(e)); status('Snapshot failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function runCheck() {
+    setLoading(true); setError(''); setCheckResult(null); status('Checking for drift…', 'idle')
+    try {
+      const r = await MonitorCheck(dbPath, baselinePath)
+      setCheckResult(r)
+      status(r.has_drift ? `Drift detected — ${r.changes?.length} change(s)` : 'No drift detected', r.has_drift ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Check failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<Activity size={14} />} title="Drift Monitor"
+        meta={<span className="text-[10px] text-[#858585]">snapshot · check · continuous watch</span>} />
+      <Toolbar>
+        <DbPicker label="Database" path={dbPath} onPick={pickDb}
+          recent={recent} onRecent={p => { setDbPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <div className="flex-1" />
+        <Btn variant="ghost" onClick={snapshot} disabled={!dbPath || loading} small>
+          {loading ? <Spinner /> : <Save size={11} />}Snapshot
+        </Btn>
+      </Toolbar>
+
+      <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+        <SubTab label="Drift Check" active={tab === 'check'} onClick={() => setTab('check')} />
+        <SubTab label="Snapshot" active={tab === 'snapshot'} onClick={() => setTab('snapshot')} />
+      </div>
+
+      {error && <ErrPanel message={error} />}
+
+      {tab === 'snapshot' && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-lg">
+            <p className="text-[12px] text-[#858585] mb-4 leading-relaxed">
+              Capture the current schema as a baseline. Run this once after a confirmed-good deployment, then use Drift Check to detect unexpected changes.
+            </p>
+            {snapInfo && (
+              <div className="bg-[#252526] border border-[#3c3c3c] rounded-sm p-4 mb-4 space-y-2 text-[12px]">
+                <div className="flex gap-2"><span className="text-[#858585] w-20">Source</span><span className="text-[#cccccc] font-mono truncate">{snapInfo.Source}</span></div>
+                <div className="flex gap-2"><span className="text-[#858585] w-20">Tables</span><span className="text-[#4ec9b0]">{snapInfo.TableCount}</span></div>
+                <div className="flex gap-2"><span className="text-[#858585] w-20">Saved at</span><span className="text-[#cccccc]">{new Date(snapInfo.CapturedAt).toLocaleString()}</span></div>
+                <div className="flex gap-2"><span className="text-[#858585] w-20">File</span><span className="text-[#569cd6] font-mono truncate">{baselinePath.split('/').pop()}</span></div>
+              </div>
+            )}
+            {!snapInfo && <EmptyState icon={<Save size={32} />} text="Select a database above and click Snapshot" />}
+          </div>
+        </div>
+      )}
+
+      {tab === 'check' && (
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 bg-[#252526] border-b border-[#252525] shrink-0">
+            <span className="text-[11px] text-[#858585]">Baseline:</span>
+            <button onClick={pickBaseline}
+              className="flex items-center gap-1.5 text-[12px] hover:text-[#cccccc] transition-colors truncate max-w-[300px]">
+              <FileJson size={11} className="text-[#858585]" />
+              <span className={baselinePath ? 'text-[#569cd6]' : 'text-[#585858]'}>
+                {baselinePath ? baselinePath.split('/').pop() : 'select baseline.json…'}
+              </span>
+            </button>
+            <div className="flex-1" />
+            <Btn onClick={runCheck} disabled={!dbPath || !baselinePath || loading}>
+              {loading ? <><Spinner />Checking…</> : <><Activity size={12} />Check Drift</>}
+            </Btn>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {!checkResult && !error && !loading && (
+              <EmptyState icon={<Activity size={48} />}
+                text="Select database + baseline to check for drift"
+                sub="Exit code 1 on drift — use in CI/CD pipelines" />
+            )}
+            {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Checking for drift…</div>}
+
+            {checkResult && (
+              <div className="p-4 space-y-3">
+                <div className="text-[11px] text-[#858585] font-mono">
+                  Baseline: {new Date(checkResult.baseline_at).toLocaleString()} · Checked: {new Date(checkResult.checked_at).toLocaleString()}
+                </div>
+
+                <div className={`px-4 py-3 rounded-sm border flex items-center gap-3 text-[13px] font-medium
+                  ${checkResult.has_drift ? 'bg-[#3a2d00] border-[#febc2e]/40 text-[#dcdcaa]' : 'bg-[#1a3a1a] border-[#4ec9b0]/40 text-[#4ec9b0]'}`}>
+                  {checkResult.has_drift ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+                  {checkResult.has_drift ? `Drift detected — ${checkResult.changes?.length ?? 0} change(s)` : 'No drift detected'}
+                </div>
+
+                {checkResult.has_drift && checkResult.changes?.length > 0 && (
+                  <div className="bg-[#252526] border border-[#3c3c3c] rounded-sm overflow-hidden">
+                    {checkResult.changes.map((td: any, i: number) => (
+                      <div key={i} className="border-b border-[#2d2d2d] last:border-0 px-4 py-2.5">
+                        <div className="flex items-center gap-2 mb-1">
+                          {td.Added && <Badge label="ADDED" color="green" />}
+                          {td.Removed && <Badge label="REMOVED" color="red" />}
+                          {!td.Added && !td.Removed && <Badge label="MODIFIED" color="yellow" />}
+                          <span className="font-mono text-[12px] text-[#9cdcfe]">{td.Name}</span>
+                        </div>
+                        {[...(td.AddedColumns ?? []).map((c: any) => `+ column ${c.Name} ${c.Type}`),
+                          ...(td.RemovedColumns ?? []).map((c: any) => `- column ${c.Name}`),
+                          ...(td.ChangedColumns ?? []).map((c: any) => `~ column ${c.Name}: ${c.Old.Type} → ${c.New.Type}`),
+                        ].map((line, j) => <div key={j} className="text-[11px] font-mono text-[#858585] ml-2">{line}</div>)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
