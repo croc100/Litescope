@@ -53,6 +53,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] text-[13px] font-sans overflow-hidden select-none">
+      {/* macOS titlebar drag region — sits above activity bar + sidebar */}
+      <div className="h-[28px] shrink-0 bg-[#252526]" style={{ WebkitAppRegion: 'drag' } as any} />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
         {sidebarOpen && <Sidebar recent={recent} addRecent={add} removeRecent={remove} activeTool={tool} />}
@@ -84,7 +86,7 @@ function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
   sidebarOpen: boolean; toggleSidebar: () => void
 }) {
   return (
-    <div className="w-[48px] flex flex-col items-center bg-[#333333] border-r border-[#252525] shrink-0 pt-1">
+    <div className="w-[48px] flex flex-col items-center bg-[#2a2a2a] border-r border-[#1e1e1e] shrink-0" style={{ paddingTop: '28px' }}>
       {TOOLS.map(t => (
         <button key={t.id} title={t.label} onClick={() => { setTool(t.id); if (!sidebarOpen) toggleSidebar() }}
           className={`relative w-full h-[48px] flex items-center justify-center transition-colors
@@ -113,7 +115,9 @@ function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
   }
 
   return (
-    <div className="w-[220px] flex flex-col bg-[#252526] border-r border-[#1e1e1e] shrink-0 overflow-hidden">
+    <div className="w-[220px] flex flex-col bg-[#252526] border-r border-[#1a1a1a] shrink-0 overflow-hidden">
+      {/* traffic lights spacer */}
+      <div className="shrink-0" style={{ height: '28px' }} />
       <div className="flex items-center h-[35px] px-3 border-b border-[#1e1e1e] gap-2 shrink-0">
         <span className="text-[10px] uppercase tracking-wider text-[#858585] font-medium flex-1">Databases</span>
         <button onClick={open} title="Open database" className="text-[#585858] hover:text-[#cccccc]">
@@ -146,16 +150,9 @@ function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
         })}
       </div>
 
-      <div className="border-t border-[#1e1e1e] px-3 py-2 shrink-0">
-        <div className="text-[10px] text-[#585858] uppercase tracking-wider mb-1.5">Quick actions</div>
-        <div className="flex flex-col gap-0.5">
-          {TOOLS.map(t => (
-            <div key={t.id} className={`flex items-center gap-2 px-2 py-1 rounded-sm text-[11px] cursor-pointer transition-colors
-              ${activeTool === t.id ? 'bg-[#094771] text-[#cccccc]' : 'text-[#858585] hover:bg-[#2a2d2e] hover:text-[#cccccc]'}`}>
-              <span className="w-[14px] flex items-center justify-center">{t.icon}</span>
-              {t.label}
-            </div>
-          ))}
+      <div className="border-t border-[#1e1e1e] px-3 py-2.5 shrink-0">
+        <div className="text-[10px] text-[#585858] leading-relaxed">
+          Drop .db files here or click + to open
         </div>
       </div>
     </div>
