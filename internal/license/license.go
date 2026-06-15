@@ -5,10 +5,13 @@
 package license
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Tier int
@@ -19,22 +22,20 @@ const (
 	TierCloud Tier = 2
 )
 
-// Current returns the active license tier based on environment.
+const workerURL = "https://litescope-license-worker.croc100.workers.dev/verify"
+
+// Current returns the active license tier, verified against the license server.
+// Falls back to local prefix check only if the server is unreachable (offline grace).
 func Current() Tier {
 	key := resolveKey()
 	if key == "" {
 		return TierFree
 	}
-	// Cloud keys start with "lsc_cloud_", Pro with "lsc_pro_"
-	// In production this would validate against Litescope API.
-	switch {
-	case strings.HasPrefix(key, "lsc_cloud_"):
-		return TierCloud
-	case strings.HasPrefix(key, "lsc_pro_"):
-		return TierPro
-	default:
-		return TierFree
+	if tier, ok := verifyOnline(key); ok {
+		return tier
 	}
+	// Offline grace: trust prefix locally if server unreachable
+	return tierFromPrefix(key)
 }
 
 func resolveKey() string {
@@ -52,8 +53,59 @@ func resolveKey() string {
 	return strings.TrimSpace(string(data))
 }
 
+type verifyResponse struct {
+	Valid bool   `json:"valid"`
+	Tier  string `json:"tier"`
+}
+
+// verifyOnline calls the license worker. Returns (tier, true) on success,
+// (0, false) if the server is unreachable so caller can fall back gracefully.
+func verifyOnline(key string) (Tier, bool) {
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Get(workerURL + "?key=" + key)
+	if err != nil {
+		// Network unreachable — offline grace
+		return 0, false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Key not in database — invalid
+		return TierFree, true
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, false
+	}
+
+	var v verifyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return 0, false
+	}
+	if !v.Valid {
+		return TierFree, true
+	}
+	switch v.Tier {
+	case "cloud":
+		return TierCloud, true
+	case "pro":
+		return TierPro, true
+	default:
+		return TierFree, true
+	}
+}
+
+func tierFromPrefix(key string) Tier {
+	switch {
+	case strings.HasPrefix(key, "lsc_cloud_"):
+		return TierCloud
+	case strings.HasPrefix(key, "lsc_pro_"):
+		return TierPro
+	default:
+		return TierFree
+	}
+}
+
 // RequirePro checks for Pro or Cloud tier.
-// Returns a descriptive error with upgrade URL if not met.
 func RequirePro() error {
 	if Current() >= TierPro {
 		return nil
