@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   GitCompare, Table2, ShieldCheck, GitMerge, Activity,
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
-  AlertTriangle, Play, Eye, Save, FileJson, Layers
+  AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon
 } from 'lucide-react'
 import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
@@ -11,45 +11,134 @@ import {
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 
-// ── Persistence ───────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
+type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor'
+
+type ConnType = 'local' | 'turso' | 'd1'
+
+interface Connection {
+  id: string
+  name: string      // user-given alias
+  path: string      // file path or turso:// / d1:// URL
+  type: ConnType
+  addedAt: number
+  lastUsed?: number
+}
+
+// ── Connections store ─────────────────────────────────────────────────────────
+
+const CONN_KEY = 'litescope_connections_v1'
 const RECENT_KEY = 'litescope_recent_v2'
 const MAX_RECENT = 12
 
-function useRecentFiles() {
+function connType(path: string): ConnType {
+  if (path.startsWith('turso://')) return 'turso'
+  if (path.startsWith('d1://')) return 'd1'
+  return 'local'
+}
+
+function useConnections() {
+  const [conns, setConns] = useState<Connection[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CONN_KEY) ?? '[]') } catch { return [] }
+  })
+
+  const save = (next: Connection[]) => {
+    setConns(next)
+    localStorage.setItem(CONN_KEY, JSON.stringify(next))
+  }
+
+  const add = useCallback((path: string, name?: string) => {
+    setConns(prev => {
+      if (prev.find(c => c.path === path)) {
+        // bump lastUsed
+        const next = prev.map(c => c.path === path ? { ...c, lastUsed: Date.now() } : c)
+        localStorage.setItem(CONN_KEY, JSON.stringify(next))
+        return next
+      }
+      const next = [...prev, {
+        id: crypto.randomUUID(),
+        name: name ?? path.split('/').pop() ?? path,
+        path,
+        type: connType(path),
+        addedAt: Date.now(),
+        lastUsed: Date.now(),
+      }]
+      localStorage.setItem(CONN_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const remove = useCallback((id: string) => {
+    setConns(prev => {
+      const next = prev.filter(c => c.id !== id)
+      localStorage.setItem(CONN_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const rename = useCallback((id: string, name: string) => {
+    setConns(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, name } : c)
+      localStorage.setItem(CONN_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const touch = useCallback((path: string) => {
+    setConns(prev => {
+      const next = prev.map(c => c.path === path ? { ...c, lastUsed: Date.now() } : c)
+      localStorage.setItem(CONN_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  return { conns, add, remove, rename, touch }
+}
+
+// recent paths — lightweight, auto-populated for DbPicker dropdowns
+function useRecent() {
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') } catch { return [] }
   })
-  const add = useCallback((path: string) => {
+  const addRecent = useCallback((path: string) => {
     setRecent(prev => {
       const next = [path, ...prev.filter(p => p !== path)].slice(0, MAX_RECENT)
       localStorage.setItem(RECENT_KEY, JSON.stringify(next))
       return next
     })
   }, [])
-  const remove = useCallback((path: string) => {
+  const removeRecent = useCallback((path: string) => {
     setRecent(prev => {
       const next = prev.filter(p => p !== path)
       localStorage.setItem(RECENT_KEY, JSON.stringify(next))
       return next
     })
   }, [])
-  return { recent, add, remove }
+  return { recent, addRecent, removeRecent }
 }
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [tool, setTool] = useState<Tool>('diff')
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const { recent, add, remove } = useRecentFiles()
+  const { conns, add: addConn, remove: removeConn, rename: renameConn, touch } = useConnections()
+  const { recent, addRecent, removeRecent } = useRecent()
   const [statusMsg, setStatusMsg] = useState<{ text: string; kind: 'ok' | 'warn' | 'err' | 'idle' }>({ text: 'Ready', kind: 'idle' })
 
+  // inject: sidebarで connection をクリックすると active view に path が注入される
+  const injectRef = useRef<((path: string) => void) | null>(null)
+
   const status = (text: string, kind: typeof statusMsg.kind) => setStatusMsg({ text, kind })
+
+  function handleConnClick(conn: Connection) {
+    touch(conn.path)
+    addRecent(conn.path)
+    injectRef.current?.(conn.path)
+  }
+
+  const viewProps = { recent, addRecent, removeRecent, status }
 
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] text-[13px] font-sans overflow-hidden select-none">
@@ -57,13 +146,20 @@ export default function App() {
       <div className="h-[28px] shrink-0 bg-[#252526]" style={{ WebkitAppRegion: 'drag' } as any} />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
-        {sidebarOpen && <Sidebar recent={recent} addRecent={add} removeRecent={remove} activeTool={tool} />}
+        {sidebarOpen && (
+          <Sidebar
+            conns={conns} onConnClick={handleConnClick}
+            onAddConn={async () => { const p = await OpenFile(); if (p) { addConn(p); addRecent(p) } }}
+            onRemoveConn={removeConn} onRenameConn={renameConn}
+            activeTool={tool}
+          />
+        )}
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {tool === 'diff'     && <DiffView     recent={recent} addRecent={add} removeRecent={remove} status={status} />}
-          {tool === 'explorer' && <ExplorerView recent={recent} addRecent={add} removeRecent={remove} status={status} />}
-          {tool === 'check'    && <CheckView    recent={recent} addRecent={add} removeRecent={remove} status={status} />}
-          {tool === 'migrate'  && <MigrateView  recent={recent} addRecent={add} removeRecent={remove} status={status} />}
-          {tool === 'monitor'  && <MonitorView  recent={recent} addRecent={add} removeRecent={remove} status={status} />}
+          {tool === 'diff'     && <DiffView    {...viewProps} injectRef={injectRef} />}
+          {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
+          {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
+          {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
+          {tool === 'monitor'  && <MonitorView  {...viewProps} injectRef={injectRef} />}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
@@ -106,12 +202,31 @@ function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
-  recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void; activeTool: Tool
+const TYPE_BADGE: Record<ConnType, { label: string; cls: string }> = {
+  local:  { label: 'local', cls: 'text-[#569cd6] border-[#569cd6]/30' },
+  turso:  { label: 'turso', cls: 'text-[#4ec9b0] border-[#4ec9b0]/30' },
+  d1:     { label: 'd1',    cls: 'text-[#dcdcaa] border-[#dcdcaa]/30' },
+}
+
+function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, activeTool }: {
+  conns: Connection[]
+  onConnClick: (c: Connection) => void
+  onAddConn: () => void
+  onRemoveConn: (id: string) => void
+  onRenameConn: (id: string, name: string) => void
+  activeTool: Tool
 }) {
-  async function open() {
-    const p = await OpenFile()
-    if (p) addRecent(p)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editVal, setEditVal] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
+
+  function startRename(c: Connection) {
+    setEditingId(c.id); setEditVal(c.name)
+    setTimeout(() => editRef.current?.select(), 0)
+  }
+  function commitRename() {
+    if (editingId && editVal.trim()) onRenameConn(editingId, editVal.trim())
+    setEditingId(null)
   }
 
   return (
@@ -120,31 +235,46 @@ function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
       <div className="shrink-0" style={{ height: '28px' }} />
       <div className="flex items-center h-[35px] px-3 border-b border-[#1e1e1e] gap-2 shrink-0">
         <span className="text-[10px] uppercase tracking-wider text-[#858585] font-medium flex-1">Databases</span>
-        <button onClick={open} title="Open database" className="text-[#585858] hover:text-[#cccccc]">
+        <button onClick={onAddConn} title="Add connection" className="text-[#585858] hover:text-[#cccccc]">
           <Plus size={14} strokeWidth={1.5} />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">
-        {recent.length === 0 && (
-          <div className="px-3 py-4 text-[11px] text-[#585858] text-center">
-            Open a .db file to get started
+        {conns.length === 0 && (
+          <div className="px-3 py-6 text-[11px] text-[#585858] text-center leading-relaxed">
+            Click <span className="text-[#cccccc]">+</span> to add a database<br/>or drop a .db file
           </div>
         )}
-        {recent.map(p => {
-          const name = p.split('/').pop() ?? p
-          const dir = p.split('/').slice(-2, -1)[0]
+        {conns.slice().sort((a, b) => (b.lastUsed ?? b.addedAt) - (a.lastUsed ?? a.addedAt)).map(c => {
+          const badge = TYPE_BADGE[c.type]
           return (
-            <div key={p} className="flex items-center gap-1.5 px-2 py-1 hover:bg-[#2a2d2e] group rounded-sm mx-1">
+            <div key={c.id}
+              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-[#2a2d2e] group rounded-sm mx-1 cursor-pointer"
+              onClick={() => onConnClick(c)}>
               <Database size={12} className="text-[#569cd6] shrink-0" strokeWidth={1.5} />
               <div className="flex-1 min-w-0">
-                <div className="text-[12px] text-[#cccccc] truncate">{name}</div>
-                <div className="text-[10px] text-[#585858] truncate">{dir}/</div>
+                {editingId === c.id
+                  ? <input ref={editRef} value={editVal} onChange={e => setEditVal(e.target.value)}
+                      onBlur={commitRename}
+                      onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingId(null) }}
+                      onClick={e => e.stopPropagation()}
+                      className="w-full bg-[#3c3c3c] text-[#cccccc] text-[12px] px-1 rounded-sm outline-none border border-[#007acc]" />
+                  : <div className="text-[12px] text-[#cccccc] truncate">{c.name}</div>
+                }
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-[9px] border rounded-sm px-1 ${badge.cls}`}>{badge.label}</span>
+                  <span className="text-[10px] text-[#585858] truncate">{c.path.split('/').slice(-2).join('/').slice(0, 28)}</span>
+                </div>
               </div>
-              <button onClick={() => removeRecent(p)}
-                className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc] shrink-0">
-                <X size={11} />
-              </button>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0" onClick={e => e.stopPropagation()}>
+                <button title="Rename" onClick={() => startRename(c)} className="text-[#585858] hover:text-[#cccccc] p-0.5">
+                  <Pencil size={10} />
+                </button>
+                <button title="Remove" onClick={() => onRemoveConn(c.id)} className="text-[#585858] hover:text-[#f44747] p-0.5">
+                  <X size={10} />
+                </button>
+              </div>
             </div>
           )
         })}
@@ -152,7 +282,7 @@ function Sidebar({ recent, addRecent, removeRecent, activeTool }: {
 
       <div className="border-t border-[#1e1e1e] px-3 py-2.5 shrink-0">
         <div className="text-[10px] text-[#585858] leading-relaxed">
-          Drop .db files here or click + to open
+          Click a DB to inject it into the active panel
         </div>
       </div>
     </div>
@@ -317,9 +447,14 @@ function SubTab({ label, active, onClick, count }: { label: string; active: bool
 
 // ── Diff View ─────────────────────────────────────────────────────────────────
 
-function DiffView({ recent, addRecent, removeRecent, status }: ViewProps) {
+function DiffView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
   const [oldPath, setOldPath] = useState('')
   const [newPath, setNewPath] = useState('')
+
+  useEffect(() => {
+    injectRef.current = (p: string) => { setOldPath(p); addRecent(p) }
+    return () => { injectRef.current = null }
+  }, [])
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -535,14 +670,25 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
 
 // ── Explorer View ─────────────────────────────────────────────────────────────
 
-type ViewProps = { recent: string[]; addRecent: (p: string) => void; removeRecent: (p: string) => void; status: (t: string, k: 'ok'|'warn'|'err'|'idle') => void }
+type ViewProps = {
+  recent: string[]
+  addRecent: (p: string) => void
+  removeRecent: (p: string) => void
+  status: (t: string, k: 'ok'|'warn'|'err'|'idle') => void
+  injectRef: React.MutableRefObject<((path: string) => void) | null>
+}
 
-function ExplorerView({ recent, addRecent, removeRecent, status }: ViewProps) {
+function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
   const [path, setPath] = useState('')
   const [schemaData, setSchemaData] = useState<any>(null)
   const [error, setError] = useState('')
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
   const [tab, setTab] = useState<'schema' | 'data'>('schema')
+
+  useEffect(() => {
+    injectRef.current = (p: string) => open(p)
+    return () => { injectRef.current = null }
+  }, [])
 
   useEffect(() => {
     OnFileDrop((_, __, paths) => { if (paths.length) open(paths[0]) }, true)
@@ -690,13 +836,18 @@ function TableDataView({ path, table }: { path: string; table: string }) {
 
 // ── Check View ────────────────────────────────────────────────────────────────
 
-function CheckView({ recent, addRecent, removeRecent, status }: ViewProps) {
+function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
   const [backupPath, setBackupPath] = useState('')
   const [refPath, setRefPath] = useState('')
   const [withData, setWithData] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    injectRef.current = (p: string) => { setBackupPath(p); addRecent(p) }
+    return () => { injectRef.current = null }
+  }, [])
 
   useEffect(() => {
     OnFileDrop((_, __, paths) => {
@@ -838,7 +989,7 @@ function CheckRow({ icon, label, detail, ok, errors, children }: {
 
 // ── Migrate View ──────────────────────────────────────────────────────────────
 
-function MigrateView({ recent, addRecent, removeRecent, status }: ViewProps) {
+function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
   const [fromPath, setFromPath] = useState('')
   const [toPath, setToPath] = useState('')
   const [preview, setPreview] = useState<any>(null)
@@ -847,6 +998,11 @@ function MigrateView({ recent, addRecent, removeRecent, status }: ViewProps) {
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [confirmApply, setConfirmApply] = useState(false)
+
+  useEffect(() => {
+    injectRef.current = (p: string) => { setFromPath(p); addRecent(p) }
+    return () => { injectRef.current = null }
+  }, [])
 
   useEffect(() => {
     OnFileDrop((_, __, paths) => {
@@ -976,7 +1132,7 @@ function MigrateView({ recent, addRecent, removeRecent, status }: ViewProps) {
 
 // ── Monitor View ──────────────────────────────────────────────────────────────
 
-function MonitorView({ recent, addRecent, removeRecent, status }: ViewProps) {
+function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
   const [dbPath, setDbPath] = useState('')
   const [baselinePath, setBaselinePath] = useState('')
   const [checkResult, setCheckResult] = useState<any>(null)
@@ -984,6 +1140,11 @@ function MonitorView({ recent, addRecent, removeRecent, status }: ViewProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'check' | 'snapshot'>('check')
+
+  useEffect(() => {
+    injectRef.current = (p: string) => { setDbPath(p); addRecent(p) }
+    return () => { injectRef.current = null }
+  }, [])
 
   async function pickDb() { const p = await OpenFile(); if (p) { setDbPath(p); addRecent(p) } }
   async function pickBaseline() { const p = await OpenFile(); if (p) setBaselinePath(p) }
