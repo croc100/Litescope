@@ -1,3 +1,58 @@
+export namespace check {
+	
+	export class Result {
+	    Path: string;
+	    IntegrityOK: boolean;
+	    ""?: diff.Result;
+	    Passed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Path = source["Path"];
+	        this.IntegrityOK = source["IntegrityOK"];
+	        this[""] = this.convertValues(source[""], diff.Result);
+	        this.Passed = source["Passed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableStat {
+	    Name: string;
+	    BackupRows: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableStat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.BackupRows = source["BackupRows"];
+	    }
+	}
+
+}
+
 export namespace diff {
 	
 	export class ColumnChange {
@@ -151,6 +206,54 @@ export namespace main {
 	        this.New = source["New"];
 	    }
 	}
+	export class MigrateApplyResult {
+	    Executed: number;
+	    BackupPath: string;
+	    DryRun: boolean;
+	    DurationMs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MigrateApplyResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Executed = source["Executed"];
+	        this.BackupPath = source["BackupPath"];
+	        this.DryRun = source["DryRun"];
+	        this.DurationMs = source["DurationMs"];
+	    }
+	}
+	export class MigratePreview {
+	    SQL: string;
+	    Warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MigratePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.SQL = source["SQL"];
+	        this.Warnings = source["Warnings"];
+	    }
+	}
+	export class SnapshotInfo {
+	    Source: string;
+	    CapturedAt: string;
+	    TableCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SnapshotInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Source = source["Source"];
+	        this.CapturedAt = source["CapturedAt"];
+	        this.TableCount = source["TableCount"];
+	    }
+	}
 	export class TableRows {
 	    Columns: string[];
 	    Rows: any[][];
@@ -166,6 +269,91 @@ export namespace main {
 	        this.Rows = source["Rows"];
 	        this.Total = source["Total"];
 	    }
+	}
+
+}
+
+export namespace monitor {
+	
+	export class DriftResult {
+	    source: string;
+	    // Go type: time
+	    baseline_at: any;
+	    // Go type: time
+	    checked_at: any;
+	    has_drift: boolean;
+	    changes?: diff.TableDiff[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DriftResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.baseline_at = this.convertValues(source["baseline_at"], null);
+	        this.checked_at = this.convertValues(source["checked_at"], null);
+	        this.has_drift = source["has_drift"];
+	        this.changes = this.convertValues(source["changes"], diff.TableDiff);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class HistoryEntry {
+	    source: string;
+	    // Go type: time
+	    baseline_at: any;
+	    // Go type: time
+	    checked_at: any;
+	    has_drift: boolean;
+	    changes?: diff.TableDiff[];
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.baseline_at = this.convertValues(source["baseline_at"], null);
+	        this.checked_at = this.convertValues(source["checked_at"], null);
+	        this.has_drift = source["has_drift"];
+	        this.changes = this.convertValues(source["changes"], diff.TableDiff);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }
