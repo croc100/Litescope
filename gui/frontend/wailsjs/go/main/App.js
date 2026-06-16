@@ -30,8 +30,8 @@ export function MonitorSnapshot(arg1, arg2) {
   return window['go']['main']['App']['MonitorSnapshot'](arg1, arg2);
 }
 
-export function MonitorWatchStart(arg1, arg2, arg3) {
-  return window['go']['main']['App']['MonitorWatchStart'](arg1, arg2, arg3);
+export function MonitorWatchStart(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['MonitorWatchStart'](arg1, arg2, arg3, arg4);
 }
 
 export function MonitorWatchStop() {

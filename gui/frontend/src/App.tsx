@@ -3,7 +3,8 @@ import {
   GitCompare, Table2, ShieldCheck, GitMerge, Activity,
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
-  AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon
+  AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
+  Settings, Key, ExternalLink
 } from 'lucide-react'
 import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
@@ -15,7 +16,7 @@ import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runti
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor' | 'fleet'
+type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor' | 'fleet' | 'settings'
 
 type ConnType = 'local' | 'turso' | 'd1'
 
@@ -99,35 +100,158 @@ function useConnections() {
 }
 
 // ── Pro gate ──────────────────────────────────────────────────────────────────
-// Reads the license key from localStorage (set via Settings or env).
-// For GUI we just check the key prefix — server verify happens in the CLI/Go side.
-const FREE_CONN_LIMIT = 3
 
-function useIsPro(): boolean {
-  const key = localStorage.getItem('litescope_license') ?? ''
-  return key.startsWith('lsc_pro_')
+const FREE_CONN_LIMIT = 3
+const LICENSE_KEY = 'litescope_license'
+
+function getLicenseKey(): string {
+  return localStorage.getItem(LICENSE_KEY) ?? ''
 }
 
-function ProGate({ children }: { children: React.ReactNode }) {
-  const isPro = useIsPro()
-  if (isPro) return <>{children}</>
+function isPro(key?: string): boolean {
+  return (key ?? getLicenseKey()).startsWith('lsc_pro_')
+}
+
+function useIsPro(): boolean {
+  const [pro, setPro] = useState(() => isPro())
+  useEffect(() => {
+    const handler = () => setPro(isPro())
+    window.addEventListener('litescope:license-changed', handler)
+    return () => window.removeEventListener('litescope:license-changed', handler)
+  }, [])
+  return pro
+}
+
+function ProGate({ children, feature, onOpenSettings }: {
+  children: React.ReactNode
+  feature?: string
+  onOpenSettings?: () => void
+}) {
+  const pro = useIsPro()
+  if (pro) return <>{children}</>
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
-      <div className="text-[40px]">🔒</div>
-      <div className="text-[16px] text-[#cccccc] font-medium">Drift Monitor — Pro Feature</div>
-      <div className="text-[13px] text-[#858585] max-w-[320px] leading-relaxed">
-        Continuous schema drift monitoring requires Litescope Pro.
+      <div className="w-14 h-14 rounded-full bg-[#2d2d2d] flex items-center justify-center mb-1">
+        <Key size={24} className="text-[#dcdcaa]" strokeWidth={1.5} />
       </div>
-      <a
-        href="https://croc100.github.io/Litescope/#pricing"
-        target="_blank"
-        className="mt-2 px-5 py-2 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[13px] rounded-sm transition-colors"
-      >
-        Get Pro — $29 one-time
-      </a>
-      <div className="text-[11px] text-[#585858]">
-        Already have a key? Set <code className="bg-[#2d2d2d] px-1 rounded">LITESCOPE_LICENSE</code> env var
-        or save to <code className="bg-[#2d2d2d] px-1 rounded">~/.litescope/license</code>
+      <div className="text-[15px] text-[#cccccc] font-semibold">{feature ?? 'Pro Feature'}</div>
+      <div className="text-[13px] text-[#858585] max-w-[300px] leading-relaxed">
+        This feature requires Litescope Pro — $89/year.
+      </div>
+      <div className="flex gap-2 mt-1">
+        <a
+          href="https://litescope-site.pages.dev/#pricing"
+          target="_blank"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+        >
+          Get Pro <ExternalLink size={11} />
+        </a>
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#3c3c3c] hover:bg-[#4a4a4a] text-[#cccccc] text-[12px] rounded-sm transition-colors"
+          >
+            <Key size={12} />Enter key
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Settings Panel ────────────────────────────────────────────────────────────
+
+function SettingsView() {
+  const [key, setKey] = useState(() => getLicenseKey())
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  function save() {
+    const trimmed = key.trim()
+    if (trimmed && !trimmed.startsWith('lsc_pro_')) {
+      setErr('Invalid key format. Keys start with lsc_pro_')
+      return
+    }
+    localStorage.setItem(LICENSE_KEY, trimmed)
+    window.dispatchEvent(new Event('litescope:license-changed'))
+    setSaved(true)
+    setErr('')
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  function remove() {
+    setKey('')
+    localStorage.removeItem(LICENSE_KEY)
+    window.dispatchEvent(new Event('litescope:license-changed'))
+  }
+
+  const currentKey = getLicenseKey()
+  const active = isPro(currentKey)
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-lg">
+        <div className="text-[15px] font-semibold text-[#cccccc] mb-1">Settings</div>
+        <div className="text-[12px] text-[#585858] mb-6">License and preferences</div>
+
+        {/* License section */}
+        <div className="bg-[#252526] border border-[#333] rounded-sm p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Key size={14} className="text-[#dcdcaa]" strokeWidth={1.5} />
+            <span className="text-[13px] font-medium text-[#cccccc]">License</span>
+            <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${active ? 'bg-[#1a3a2a] text-[#4ec9b0]' : 'bg-[#2d2d2d] text-[#858585]'}`}>
+              {active ? 'Pro' : 'Free'}
+            </span>
+          </div>
+
+          {active && (
+            <div className="text-[11px] text-[#585858] font-mono bg-[#1e1e1e] px-3 py-2 rounded-sm border border-[#333] mb-3 truncate">
+              {currentKey}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              value={key}
+              onChange={e => { setKey(e.target.value); setErr('') }}
+              onKeyDown={e => e.key === 'Enter' && save()}
+              placeholder="lsc_pro_…"
+              className="flex-1 bg-[#1e1e1e] border border-[#555] text-[#cccccc] text-[12px] px-3 py-1.5 rounded-sm outline-none focus:border-[#007acc] font-mono placeholder-[#484848]"
+            />
+            <button
+              onClick={save}
+              className="px-3 py-1.5 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+            >
+              {saved ? <CheckIcon size={13} /> : 'Activate'}
+            </button>
+            {active && (
+              <button
+                onClick={remove}
+                className="px-3 py-1.5 bg-[#3c3c3c] hover:bg-[#4a4a4a] text-[#858585] text-[12px] rounded-sm transition-colors"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {err && <div className="text-[11px] text-[#f44747] mt-2">{err}</div>}
+          {saved && <div className="text-[11px] text-[#4ec9b0] mt-2">License activated.</div>}
+        </div>
+
+        {!active && (
+          <div className="bg-[#1a1a2a] border border-[#007acc]/30 rounded-sm p-4">
+            <div className="text-[12px] text-[#cccccc] font-medium mb-1">Litescope Pro — $89/year</div>
+            <div className="text-[11px] text-[#858585] mb-3 leading-relaxed">
+              Continuous drift monitoring, fleet operations across Turso & D1, unlimited connections.
+            </div>
+            <a
+              href="https://litescope-site.pages.dev/#pricing"
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+            >
+              Buy Pro <ExternalLink size={11} />
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -183,18 +307,19 @@ export default function App() {
       <div className="h-[28px] shrink-0 bg-[#252526]" style={{ WebkitAppRegion: 'drag' } as any} />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
-        {sidebarOpen && (
+        {sidebarOpen && tool !== 'settings' && (
           <Sidebar
             conns={conns} onConnClick={handleConnClick}
             onAddConn={async () => {
-              if (conns.length >= 3) {
-                alert('Free plan: up to 3 connections.\n\nUpgrade to Litescope Pro for unlimited connections.\nhttps://croc100.github.io/Litescope/#pricing')
+              if (!isPro() && conns.length >= FREE_CONN_LIMIT) {
+                setTool('settings')
                 return
               }
               const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
             }}
             onRemoveConn={removeConn} onRenameConn={renameConn}
             activeTool={tool}
+            onOpenSettings={() => setTool('settings')}
           />
         )}
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -202,8 +327,9 @@ export default function App() {
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
           {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
           {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
-          {tool === 'monitor'  && <ProGate><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'fleet'    && <ProGate><FleetView    {...viewProps} /></ProGate>}
+          {tool === 'monitor'  && <ProGate feature="Drift Monitor" onOpenSettings={() => setTool('settings')}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'fleet'    && <ProGate feature="Fleet Operations" onOpenSettings={() => setTool('settings')}><FleetView    {...viewProps} /></ProGate>}
+          {tool === 'settings' && <SettingsView />}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
@@ -237,6 +363,10 @@ function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
         </button>
       ))}
       <div className="flex-1" />
+      <button title="Settings" onClick={() => setTool('settings')}
+        className={`w-full h-[40px] flex items-center justify-center transition-colors ${tool === 'settings' ? 'text-white' : 'text-[#585858] hover:text-[#cccccc]'}`}>
+        <Settings size={16} strokeWidth={1.5} />
+      </button>
       <button title="Toggle sidebar" onClick={toggleSidebar}
         className="w-full h-[40px] flex items-center justify-center text-[#585858] hover:text-[#cccccc] mb-1">
         <Layers size={16} strokeWidth={1.5} />
@@ -253,13 +383,14 @@ const TYPE_BADGE: Record<ConnType, { label: string; cls: string }> = {
   d1:     { label: 'd1',    cls: 'text-[#dcdcaa] border-[#dcdcaa]/30' },
 }
 
-function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, activeTool }: {
+function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, activeTool, onOpenSettings }: {
   conns: Connection[]
   onConnClick: (c: Connection) => void
   onAddConn: () => void
   onRemoveConn: (id: string) => void
   onRenameConn: (id: string, name: string) => void
   activeTool: Tool
+  onOpenSettings: () => void
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editVal, setEditVal] = useState('')
@@ -332,7 +463,7 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
         {!useIsPro() && (
           <div className="text-[10px] text-[#585858] mt-1">
             Free: {conns.length}/{FREE_CONN_LIMIT} connections ·{' '}
-            <a href="https://croc100.github.io/Litescope/#pricing" target="_blank" className="text-[#007acc] hover:underline">Upgrade</a>
+            <button onClick={onOpenSettings} className="text-[#007acc] hover:underline bg-transparent border-0 p-0 cursor-pointer text-[10px]">Upgrade</button>
           </div>
         )}
       </div>
@@ -344,7 +475,7 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
 
 const toolLabels: Record<Tool, string> = {
   diff: 'Schema Diff', explorer: 'DB Explorer', check: 'Integrity Check',
-  migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet',
+  migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet', settings: 'Settings',
 }
 
 function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: Tool }) {
@@ -1193,6 +1324,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
   const [tab, setTab] = useState<'check' | 'watch' | 'snapshot'>('check')
   const [watching, setWatching] = useState(false)
   const [watchInterval, setWatchInterval] = useState(30)
+  const [watchWebhook, setWatchWebhook] = useState('')
   const [watchEvents, setWatchEvents] = useState<{at: string; kind: string; message: string; changes?: number}[]>([])
 
   useEffect(() => {
@@ -1255,31 +1387,42 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 
       {tab === 'watch' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 bg-[#252526] border-b border-[#252525] shrink-0">
-            <span className="text-[11px] text-[#858585]">Interval:</span>
-            <select value={watchInterval} onChange={e => setWatchInterval(Number(e.target.value))}
-              className="bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none">
-              <option value={10}>10s</option>
-              <option value={30}>30s</option>
-              <option value={60}>1m</option>
-              <option value={300}>5m</option>
-            </select>
-            <div className="flex-1" />
-            {watching
-              ? <Btn variant="danger" small onClick={async () => { await MonitorWatchStop(); setWatching(false) }}>
-                  <X size={11} />Stop Watch
-                </Btn>
-              : <Btn onClick={async () => {
-                  if (!dbPath || !baselinePath) return
-                  await MonitorWatchStart(dbPath, baselinePath, watchInterval)
-                  setWatching(true)
-                }} disabled={!dbPath || !baselinePath}>
-                  <Activity size={12} />Start Watch
-                </Btn>
-            }
-            {watching && <span className="flex items-center gap-1.5 text-[11px] text-[#4ec9b0]">
-              <span className="w-2 h-2 rounded-full bg-[#4ec9b0] animate-pulse" />live
-            </span>}
+          <div className="flex flex-col gap-2 px-4 py-3 bg-[#252526] border-b border-[#252525] shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-[#858585]">Interval:</span>
+              <select value={watchInterval} onChange={e => setWatchInterval(Number(e.target.value))}
+                className="bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none">
+                <option value={10}>10s</option>
+                <option value={30}>30s</option>
+                <option value={60}>1m</option>
+                <option value={300}>5m</option>
+              </select>
+              <div className="flex-1" />
+              {watching
+                ? <Btn variant="danger" small onClick={async () => { await MonitorWatchStop(); setWatching(false) }}>
+                    <X size={11} />Stop Watch
+                  </Btn>
+                : <Btn onClick={async () => {
+                    if (!dbPath || !baselinePath) return
+                    await MonitorWatchStart(dbPath, baselinePath, watchInterval, watchWebhook)
+                    setWatching(true)
+                  }} disabled={!dbPath || !baselinePath}>
+                    <Activity size={12} />Start Watch
+                  </Btn>
+              }
+              {watching && <span className="flex items-center gap-1.5 text-[11px] text-[#4ec9b0]">
+                <span className="w-2 h-2 rounded-full bg-[#4ec9b0] animate-pulse" />live
+              </span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[#585858] shrink-0">Webhook:</span>
+              <input
+                value={watchWebhook}
+                onChange={e => setWatchWebhook(e.target.value)}
+                placeholder="Slack or Discord webhook URL (optional)"
+                className="flex-1 bg-[#1e1e1e] border border-[#3c3c3c] text-[#cccccc] text-[11px] px-2 py-1 rounded-sm outline-none focus:border-[#007acc] placeholder-[#484848] font-mono"
+              />
+            </div>
           </div>
           {(!dbPath || !baselinePath) && (
             <div className="px-4 py-3 bg-[#2d2d00] border-b border-[#febc2e]/30 text-[11px] text-[#dcdcaa]">

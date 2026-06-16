@@ -20,7 +20,7 @@ export function MonitorLoadHistory(arg1:string):Promise<Array<monitor.HistoryEnt
 
 export function MonitorSnapshot(arg1:string,arg2:string):Promise<main.SnapshotInfo>;
 
-export function MonitorWatchStart(arg1:string,arg2:string,arg3:number):Promise<void>;
+export function MonitorWatchStart(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function MonitorWatchStop():Promise<void>;
 

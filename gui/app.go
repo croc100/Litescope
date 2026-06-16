@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -284,7 +286,8 @@ func (a *App) MonitorLoadHistory(reportPath string) ([]monitor.HistoryEntry, err
 
 // MonitorWatchStart begins polling dbPath against baselinePath every intervalSec seconds.
 // Emits "monitor:event" events with WatchEvent payloads. Stops any existing watch first.
-func (a *App) MonitorWatchStart(dbPath, baselinePath string, intervalSec int) {
+// webhookURL is optional — if non-empty, drift events are POSTed to Slack/Discord.
+func (a *App) MonitorWatchStart(dbPath, baselinePath string, intervalSec int, webhookURL string) {
 	a.watchMu.Lock()
 	if a.watchCancel != nil {
 		a.watchCancel()
@@ -327,11 +330,14 @@ func (a *App) MonitorWatchStart(dbPath, baselinePath string, intervalSec int) {
 			}
 			result := monitor.Check(dbPath, snap, current)
 			if result.HasDrift {
+				msg := fmt.Sprintf("%d change(s) detected", len(result.Changes))
 				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
 					At: time.Now().Format(time.RFC3339), Kind: "drift",
-					Message: fmt.Sprintf("%d change(s) detected", len(result.Changes)),
-					Changes: len(result.Changes),
+					Message: msg, Changes: len(result.Changes),
 				})
+				if webhookURL != "" {
+					sendWebhookAlert(webhookURL, dbPath, msg)
+				}
 			} else {
 				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
 					At: time.Now().Format(time.RFC3339), Kind: "ok", Message: "no drift",
@@ -471,6 +477,15 @@ func toFleetDatabases(entries []FleetDBEntry) []fleet.Database {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+func sendWebhookAlert(webhookURL, dbPath, message string) {
+	payload := fmt.Sprintf(`{"text":"🚨 *Litescope drift detected*\nDatabase: %s\n%s"}`, dbPath, message)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(webhookURL, "application/json", strings.NewReader(payload))
+	if err == nil {
+		resp.Body.Close()
+	}
+}
 
 func fetchRowMap(db *sql.DB, table, pkCol string, limit int) (map[interface{}]map[string]interface{}, error) {
 	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %q LIMIT %d", table, limit))
