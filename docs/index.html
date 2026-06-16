@@ -373,7 +373,8 @@
     <div class="install-box">
       <div class="install-tabs">
         <button class="active" data-cmd="brew install croc100/tap/litescope">Homebrew</button>
-        <button data-cmd="# Download binary from github.com/croc100/litescope-dist/releases">Binary</button>
+        <button data-cmd="# Download litescope_windows_amd64.zip from the link below">Windows</button>
+        <button data-cmd="# Download binary from github.com/croc100/litescope-dist/releases">Linux</button>
       </div>
       <div class="install-code">
         <span class="c-line" id="installCmd">brew install croc100/tap/litescope</span>
@@ -382,6 +383,7 @@
     </div>
     <div class="cta-row" style="margin-top:34px">
       <a class="btn btn-primary" href="https://github.com/croc100/Litescope#readme" target="_blank" rel="noopener">Read the docs</a>
+      <a id="releasesLink" class="btn btn-ghost" href="https://github.com/croc100/litescope-dist/releases" target="_blank" rel="noopener" style="display:none">Download binary ↗</a>
     </div>
   </div>
 </section>
@@ -410,11 +412,15 @@
   // Install tab switching
   const tabs = document.querySelectorAll('.install-tabs button');
   const cmdEl = document.getElementById('installCmd');
+  const releasesLink = document.getElementById('releasesLink');
   tabs.forEach(function (t) {
     t.addEventListener('click', function () {
       tabs.forEach(function (x) { x.classList.remove('active'); });
       t.classList.add('active');
       cmdEl.textContent = t.dataset.cmd;
+      if (releasesLink) {
+        releasesLink.style.display = (t.textContent === 'Windows' || t.textContent === 'Linux') ? 'inline' : 'none';
+      }
     });
   });
   // Copy button
