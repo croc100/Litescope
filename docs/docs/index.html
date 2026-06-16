@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Docs — Litescope</title>
+<meta name="description" content="Litescope documentation — CLI reference, installation, and license activation." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0e14'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%233fb6a8' stroke-width='2.5'/%3E%3Cline x1='22' y1='22' x2='27' y2='27' stroke='%233fb6a8' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0b0e14; --surface: #11151c; --surface-2: #161b24;
+    --border: #222b38; --text: #c9d1d9; --head: #e6edf3; --dim: #768390;
+    --teal: #3fb6a8; --teal-bright: #4ec9b0; --gold: #dcdcaa;
+    --danger: #f47067; --radius: 10px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 240px; flex-shrink: 0; background: var(--surface);
+    border-right: 1px solid var(--border); padding: 24px 0;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .sidebar-logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .sidebar-logo a { color: var(--head); font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .sidebar-logo span { color: var(--teal); font-size: 20px; }
+  .sidebar-section { padding: 8px 20px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+  .sidebar nav a {
+    display: block; padding: 6px 20px; font-size: 14px; color: var(--text);
+    border-left: 2px solid transparent; transition: all 0.15s;
+  }
+  .sidebar nav a:hover { color: var(--head); background: var(--surface-2); text-decoration: none; }
+  .sidebar nav a.active { color: var(--teal); border-left-color: var(--teal); background: rgba(63,182,168,0.07); }
+
+  /* Main content */
+  .main { flex: 1; max-width: 780px; padding: 48px 56px 96px; min-width: 0; }
+  @media (max-width: 780px) { .layout { flex-direction: column; } .sidebar { width: 100%; height: auto; position: static; } .main { padding: 32px 24px 64px; } }
+
+  /* Top nav */
+  .topnav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11,14,20,0.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; margin-bottom: 0;
+  }
+  .topnav-left { font-size: 14px; color: var(--dim); }
+  .topnav-left a { color: var(--teal); }
+  .topnav-right { display: flex; gap: 20px; font-size: 14px; }
+  .topnav-right a { color: var(--text); }
+  .topnav-right a:hover { color: var(--head); text-decoration: none; }
+
+  /* Typography */
+  .doc-section { margin-bottom: 56px; }
+  h1 { font-size: 28px; font-weight: 800; color: var(--head); margin-bottom: 12px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; font-weight: 700; color: var(--head); margin: 40px 0 12px; padding-top: 40px; border-top: 1px solid var(--border); }
+  h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+  h3 { font-size: 15px; font-weight: 600; color: var(--head); margin: 24px 0 8px; }
+  p { margin-bottom: 12px; }
+  ul, ol { padding-left: 20px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+
+  /* Code */
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--surface-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; color: var(--gold); }
+  pre {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; overflow-x: auto; margin: 12px 0 20px; position: relative;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 13px; }
+  .copy-pre { position: absolute; top: 10px; right: 12px; background: var(--surface-2); border: 1px solid var(--border); color: var(--dim); font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: var(--sans); }
+  .copy-pre:hover { color: var(--head); }
+
+  /* Callouts */
+  .callout { border-left: 3px solid var(--teal); background: rgba(63,182,168,0.07); padding: 12px 16px; border-radius: 0 var(--radius) var(--radius) 0; margin: 16px 0; font-size: 14px; }
+  .callout.warn { border-color: var(--gold); background: rgba(220,220,170,0.07); }
+  .callout strong { color: var(--head); }
+
+  /* Flag table */
+  .flag-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0 20px; }
+  .flag-table th { text-align: left; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .flag-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .flag-table td:first-child { font-family: var(--mono); font-size: 12px; color: var(--teal); white-space: nowrap; }
+  .flag-table tr:last-child td { border-bottom: none; }
+
+  /* Tier badges */
+  .tier { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.05em; vertical-align: middle; margin-left: 6px; }
+  .tier-free { background: rgba(63,182,168,0.15); color: var(--teal); }
+  .tier-pro { background: rgba(220,220,170,0.15); color: var(--gold); }
+</style>
+</head>
+<body>
+
+<div style="background:var(--surface); border-bottom:1px solid var(--border);">
+  <div style="max-width:1020px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:12px 24px;">
+    <a href="/" style="color:var(--head); font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; text-decoration:none;">
+      <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#0b0e14"/><circle cx="16" cy="16" r="8" stroke="#3fb6a8" stroke-width="2.5" fill="none"/><line x1="22" y1="22" x2="27" y2="27" stroke="#3fb6a8" stroke-width="2.5" stroke-linecap="round"/></svg>
+      Litescope
+    </a>
+    <div style="display:flex; gap:24px; font-size:14px;">
+      <a href="/#features" style="color:var(--text);">Features</a>
+      <a href="/#pricing" style="color:var(--text);">Pricing</a>
+      <a href="/docs" style="color:var(--teal);">Docs</a>
+      <a href="https://github.com/croc100/litescope-dist" target="_blank" rel="noopener" style="color:var(--text);">GitHub ↗</a>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-section">Getting started</div>
+    <nav>
+      <a href="#install">Installation</a>
+      <a href="#activate">Activate license</a>
+    </nav>
+    <div class="sidebar-section">CLI Reference</div>
+    <nav>
+      <a href="#diff">diff</a>
+      <a href="#check">check</a>
+      <a href="#migrate">migrate</a>
+      <a href="#monitor">monitor</a>
+      <a href="#fleet">fleet</a>
+    </nav>
+    <div class="sidebar-section">GUI</div>
+    <nav>
+      <a href="#gui">Desktop app</a>
+    </nav>
+    <div class="sidebar-section">More</div>
+    <nav>
+      <a href="#changelog">Changelog</a>
+      <a href="/#pricing">Pricing ↗</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+
+    <div class="doc-section">
+      <h1>Litescope Docs</h1>
+      <p>SQLite production operations — diff, validate, migrate, monitor, and fleet management from one binary.</p>
+    </div>
+
+    <!-- Install -->
+    <div class="doc-section" id="install">
+      <h2>Installation</h2>
+
+      <h3>macOS (Homebrew)</h3>
+      <pre><code>brew install croc100/tap/litescope</code></pre>
+
+      <h3>Linux</h3>
+      <p>Download the latest binary from <a href="https://github.com/croc100/litescope-dist/releases" target="_blank">Releases</a>, extract, and move to your <code>PATH</code>:</p>
+      <pre><code>curl -fsSL https://github.com/croc100/litescope-dist/releases/latest/download/litescope_Linux_x86_64.tar.gz | tar xz
+sudo mv litescope /usr/local/bin/</code></pre>
+
+      <h3>Windows</h3>
+      <p>Download <code>litescope_*_windows_amd64.zip</code> from <a href="https://github.com/croc100/litescope-dist/releases" target="_blank">Releases</a>, extract the <code>.exe</code>, and add its directory to <code>PATH</code>.</p>
+
+      <h3>Verify</h3>
+      <pre><code>litescope --version</code></pre>
+    </div>
+
+    <!-- License -->
+    <div class="doc-section" id="activate">
+      <h2>Activate Pro license</h2>
+      <p>After purchasing, you'll receive a license key by email (<code>lsc_pro_…</code>). Activate it in one of two ways:</p>
+
+      <h3>Option A — environment variable</h3>
+      <pre><code>export LITESCOPE_LICENSE=lsc_pro_your_key_here</code></pre>
+      <p>Add this to your shell profile (<code>~/.zshrc</code>, <code>~/.bashrc</code>) to persist it.</p>
+
+      <h3>Option B — license file</h3>
+      <pre><code>mkdir -p ~/.litescope
+echo "lsc_pro_your_key_here" > ~/.litescope/license</code></pre>
+
+      <h3>Verify activation</h3>
+      <pre><code>litescope license</code></pre>
+
+      <div class="callout">
+        <strong>Online verification.</strong> Litescope verifies your key against the license server on each run. An offline grace period applies — if the server is unreachable, the last known tier is used.
+      </div>
+    </div>
+
+    <!-- diff -->
+    <div class="doc-section" id="diff">
+      <h2>diff <span class="tier tier-free">free</span></h2>
+      <p>Compare schema and data between two SQLite databases.</p>
+      <pre><code>litescope diff &lt;old.db&gt; &lt;new.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code>, <code>markdown</code>, <code>html</code></td></tr>
+          <tr><td>--data</td><td>false</td><td>Include row-level data diff in addition to schema</td></tr>
+          <tr><td>--output, -o</td><td>stdout</td><td>Write output to file</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Human-readable schema diff
+litescope diff prod-before.db prod-after.db
+
+# JSON output for CI
+litescope diff old.db new.db --format json
+
+# Include data diff
+litescope diff old.db new.db --data
+
+# Save HTML report
+litescope diff old.db new.db --format html -o report.html</code></pre>
+    </div>
+
+    <!-- check -->
+    <div class="doc-section" id="check">
+      <h2>check <span class="tier tier-free">free</span></h2>
+      <p>Validate a backup database against a reference. Runs PRAGMA integrity check, compares schema, and optionally verifies row counts.</p>
+      <pre><code>litescope check &lt;backup.db&gt; &lt;reference.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--data</td><td>false</td><td>Also compare row counts per table</td></tr>
+          <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Basic integrity + schema check
+litescope check backup.db prod.db
+
+# Include row count comparison
+litescope check backup.db prod.db --data
+
+# Use in CI (exits 1 on failure)
+litescope check backup.db prod.db && echo "backup OK"</code></pre>
+    </div>
+
+    <!-- migrate -->
+    <div class="doc-section" id="migrate">
+      <h2>migrate <span class="tier tier-free">free</span></h2>
+      <p>Generate a migration SQL from a diff, then apply it safely with an automatic backup and rollback on failure.</p>
+
+      <h3>generate</h3>
+      <pre><code>litescope migrate generate &lt;old.db&gt; &lt;new.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--output, -o</td><td>stdout</td><td>Write SQL to file</td></tr>
+        </tbody>
+      </table>
+
+      <h3>apply</h3>
+      <pre><code>litescope migrate apply &lt;db&gt; &lt;migration.sql&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--dry-run</td><td>false</td><td>Preview what would run without writing to disk</td></tr>
+          <tr><td>--backup-dir</td><td>same dir as db</td><td>Where to store the automatic pre-migration backup</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Examples</h3>
+      <pre><code># Generate SQL
+litescope migrate generate old.db new.db -o migration.sql
+
+# Preview before applying
+litescope migrate apply prod.db migration.sql --dry-run
+
+# Apply (creates backup automatically)
+litescope migrate apply prod.db migration.sql</code></pre>
+
+      <div class="callout warn">
+        <strong>Safety.</strong> <code>apply</code> always creates a timestamped backup before writing. If any statement fails, the entire migration is rolled back.
+      </div>
+    </div>
+
+    <!-- monitor -->
+    <div class="doc-section" id="monitor">
+      <h2>monitor <span class="tier tier-pro">pro</span></h2>
+      <p>Baseline a known-good schema, then check for drift. The <code>watch</code> subcommand runs continuously and can alert on changes.</p>
+
+      <h3>snapshot</h3>
+      <pre><code>litescope monitor snapshot &lt;db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--output, -o</td><td>baseline.json</td><td>Path to write the baseline snapshot</td></tr>
+        </tbody>
+      </table>
+
+      <h3>check</h3>
+      <pre><code>litescope monitor check &lt;db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--baseline, -b</td><td>baseline.json</td><td>Path to the baseline snapshot</td></tr>
+          <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>watch</h3>
+      <pre><code>litescope monitor watch &lt;db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--baseline, -b</td><td>baseline.json</td><td>Path to the baseline snapshot</td></tr>
+          <tr><td>--interval</td><td>30s</td><td>Poll interval (e.g. <code>10s</code>, <code>1m</code>, <code>5m</code>)</td></tr>
+          <tr><td>--webhook</td><td>—</td><td>Slack or Discord webhook URL for drift alerts</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Examples</h3>
+      <pre><code># Baseline
+litescope monitor snapshot prod.db -o baseline.json
+
+# One-off check
+litescope monitor check prod.db -b baseline.json
+
+# Continuous watch with Slack alert
+litescope monitor watch prod.db -b baseline.json \
+  --interval 1m \
+  --webhook $SLACK_WEBHOOK_URL</code></pre>
+    </div>
+
+    <!-- fleet -->
+    <div class="doc-section" id="fleet">
+      <h2>fleet <span class="tier tier-pro">pro</span></h2>
+      <p>Discover and operate an entire Turso org or Cloudflare D1 account in parallel — baseline, drift-check, and migrate every database at once.</p>
+
+      <h3>check</h3>
+      <pre><code>litescope fleet check [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--provider</td><td>—</td><td><code>turso</code> or <code>d1</code></td></tr>
+          <tr><td>--org</td><td>—</td><td>Turso org slug or Cloudflare account ID</td></tr>
+          <tr><td>--token</td><td>—</td><td>Platform API token (Turso management token or CF API token)</td></tr>
+          <tr><td>--db-token</td><td>—</td><td>Turso database token (for connecting to each DB)</td></tr>
+          <tr><td>--concurrency</td><td>8</td><td>Max parallel workers</td></tr>
+          <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>snapshot</h3>
+      <pre><code>litescope fleet snapshot [flags]</code></pre>
+      <p>Same flags as <code>check</code>. Takes a baseline snapshot of every database in the fleet.</p>
+
+      <h3>Examples</h3>
+      <pre><code># Baseline entire Turso org
+litescope fleet snapshot \
+  --provider turso \
+  --org my-org \
+  --token $TURSO_TOKEN \
+  --db-token $TURSO_DB_TOKEN
+
+# Drift check all at once
+litescope fleet check \
+  --provider turso \
+  --org my-org \
+  --token $TURSO_TOKEN \
+  --db-token $TURSO_DB_TOKEN
+
+# Cloudflare D1
+litescope fleet check \
+  --provider d1 \
+  --org $CF_ACCOUNT_ID \
+  --token $CF_API_TOKEN</code></pre>
+
+      <div class="callout">
+        <strong>Baselines</strong> are stored at <code>~/.litescope/fleet/baselines/</code> keyed by database name.
+      </div>
+    </div>
+
+    <!-- GUI -->
+    <div class="doc-section" id="gui">
+      <h2>Desktop GUI</h2>
+      <p>The GUI app bundles all CLI operations in a visual interface. It ships as part of the same binary download — run <code>litescope gui</code> to launch, or double-click the <code>.app</code> on macOS.</p>
+
+      <h3>Named connections</h3>
+      <p>Add databases by clicking <strong>+ Add</strong> in the sidebar. Free tier supports up to 3 named connections; Pro is unlimited.</p>
+
+      <h3>Tools</h3>
+      <ul>
+        <li><strong>Diff</strong> — visual schema and data diff between two databases</li>
+        <li><strong>Explorer</strong> — browse tables and query rows</li>
+        <li><strong>Check</strong> — validate a backup against a reference</li>
+        <li><strong>Migrate</strong> — generate and apply migrations with dry-run preview</li>
+        <li><strong>Monitor</strong> (Pro) — snapshot, check drift, run continuous watch</li>
+        <li><strong>Fleet</strong> (Pro) — discover and check Turso / D1 databases</li>
+      </ul>
+
+      <h3>Activating Pro in the GUI</h3>
+      <p>Open <strong>Settings → License</strong> and paste your <code>lsc_pro_…</code> key, or set the <code>LITESCOPE_LICENSE</code> environment variable before launching.</p>
+    </div>
+
+    <!-- Changelog -->
+    <div class="doc-section" id="changelog">
+      <h2>Changelog</h2>
+
+      <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
+      <ul>
+        <li>GUI: Monitor Watch — continuous drift detection with live event feed</li>
+        <li>GUI: Fleet panel — Turso and D1 discover, snapshot, parallel check</li>
+        <li>GUI: Free/Pro tier — 3-connection limit, Pro gate on Monitor and Fleet</li>
+        <li>Lemon Squeezy payment integration — $89/year Pro subscription</li>
+        <li>Online license verification via Cloudflare Worker</li>
+        <li>Binary releases via <a href="https://github.com/croc100/litescope-dist" target="_blank">litescope-dist</a> + Homebrew tap</li>
+      </ul>
+
+      <h3>v0.1.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-05-01</span></h3>
+      <ul>
+        <li>Initial release: diff, check, migrate, monitor, fleet CLI</li>
+        <li>GUI desktop app (Wails/Go + React)</li>
+        <li>Named connections sidebar</li>
+      </ul>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Highlight active sidebar link on scroll
+  const links = document.querySelectorAll('.sidebar nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const match = document.querySelector(`.sidebar nav a[href="#${e.target.id}"]`);
+        if (match) match.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('.doc-section[id]').forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
