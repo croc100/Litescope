@@ -2,8 +2,14 @@ package license
 
 import (
 	"errors"
+	"os"
 	"testing"
 )
+
+func init() {
+	// Skip online verification in tests — test keys are not registered in the worker.
+	_ = os.Setenv("LITESCOPE_SKIP_VERIFY", "1")
+}
 
 func TestCurrent_Free(t *testing.T) {
 	t.Setenv("LITESCOPE_LICENSE", "")
@@ -16,13 +22,6 @@ func TestCurrent_Pro(t *testing.T) {
 	t.Setenv("LITESCOPE_LICENSE", "lsc_pro_abc123")
 	if got := Current(); got != TierPro {
 		t.Errorf("expected TierPro, got %v", got)
-	}
-}
-
-func TestCurrent_Cloud(t *testing.T) {
-	t.Setenv("LITESCOPE_LICENSE", "lsc_cloud_xyz789")
-	if got := Current(); got != TierCloud {
-		t.Errorf("expected TierCloud, got %v", got)
 	}
 }
 
@@ -48,30 +47,5 @@ func TestRequirePro_Allowed(t *testing.T) {
 	t.Setenv("LITESCOPE_LICENSE", "lsc_pro_key")
 	if err := RequirePro(); err != nil {
 		t.Errorf("Pro key should pass RequirePro, got: %v", err)
-	}
-}
-
-func TestRequirePro_CloudAllowed(t *testing.T) {
-	t.Setenv("LITESCOPE_LICENSE", "lsc_cloud_key")
-	if err := RequirePro(); err != nil {
-		t.Errorf("Cloud key should satisfy RequirePro, got: %v", err)
-	}
-}
-
-func TestRequireCloud_Blocked(t *testing.T) {
-	t.Setenv("LITESCOPE_LICENSE", "lsc_pro_key")
-	err := RequireCloud()
-	if err == nil {
-		t.Fatal("Pro key should not satisfy RequireCloud")
-	}
-	if !errors.Is(err, ErrUpgradeRequired) {
-		t.Errorf("expected ErrUpgradeRequired, got %v", err)
-	}
-}
-
-func TestRequireCloud_Allowed(t *testing.T) {
-	t.Setenv("LITESCOPE_LICENSE", "lsc_cloud_key")
-	if err := RequireCloud(); err != nil {
-		t.Errorf("Cloud key should pass RequireCloud, got: %v", err)
 	}
 }

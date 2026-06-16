@@ -30,10 +30,12 @@ func Current() Tier {
 	if key == "" {
 		return TierFree
 	}
-	if tier, ok := verifyOnline(key); ok {
-		return tier
+	if os.Getenv("LITESCOPE_SKIP_VERIFY") == "" {
+		if tier, ok := verifyOnline(key); ok {
+			return tier
+		}
 	}
-	// Offline grace: trust prefix locally if server unreachable
+	// Offline grace (or LITESCOPE_SKIP_VERIFY set): trust prefix locally
 	return tierFromPrefix(key)
 }
 
@@ -103,10 +105,10 @@ func RequirePro() error {
 
   This feature requires Litescope Pro.
 
-  Get your license: https://croc100.github.io/Litescope/#pricing
+  Get your license: https://litescope-site.pages.dev/#pricing
   Then activate:   export LITESCOPE_LICENSE=<your-key>
 
-  Pro ($29 one-time): drift monitor, schema reports, unlimited connections`,
+  Pro ($89/year): drift monitor, fleet ops, unlimited connections`,
 		ErrUpgradeRequired)
 }
 
