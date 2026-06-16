@@ -148,6 +148,7 @@
   .tier-free { background: rgba(118,131,144,0.18); color: var(--dim); }
   .tier-pro { background: rgba(63,182,168,0.16); color: var(--teal-bright); }
   .tier-cloud { background: rgba(220,220,170,0.14); color: var(--gold); }
+  .pricing { grid-template-columns: repeat(2, 1fr) !important; max-width: 700px; margin-left: auto; margin-right: auto; }
 
   /* ── Fleet spotlight ── */
   .spotlight { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -288,7 +289,7 @@
       <div class="card"><div class="cmd-name">check <span class="tier-tag tier-free">free</span></div><h3>Trust your backups</h3><p>PRAGMA integrity verification plus schema and row-count comparison against a reference. Catch a bad backup before you need it.</p></div>
       <div class="card"><div class="cmd-name">migrate <span class="tier-tag tier-pro">pro</span></div><h3>Generate &amp; apply safely</h3><p>Turn a diff into runnable SQL, then apply it with an automatic backup, a single transaction, FK verification, and rollback on any failure.</p></div>
       <div class="card"><div class="cmd-name">monitor <span class="tier-tag tier-pro">pro</span></div><h3>Catch drift continuously</h3><p>Baseline a known-good schema, then watch for unplanned changes with webhook alerts to Slack and Discord.</p></div>
-      <div class="card"><div class="cmd-name">fleet <span class="tier-tag tier-cloud">cloud</span></div><h3>Operate hundreds at once</h3><p>Discover, baseline, drift-check, and migrate an entire Turso org or D1 account — in parallel, from one command.</p></div>
+      <div class="card"><div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div><h3>Operate hundreds at once</h3><p>Discover, baseline, drift-check, and migrate an entire Turso org or D1 account — in parallel, from one command.</p></div>
     </div>
   </div>
 </section>
@@ -329,8 +330,8 @@
 <section id="pricing">
   <div class="wrap center">
     <div class="eyebrow">Pricing</div>
-    <h2>Free for one. Built for many.</h2>
-    <p class="section-sub">Everything you need for a single database is free, forever. You pay when you're automating a fleet.</p>
+    <h2>Free to use. Pro for power users.</h2>
+    <p class="section-sub">Core operations are free forever. Pay once for continuous monitoring and advanced features.</p>
   </div>
   <div class="wrap">
     <div class="pricing">
@@ -340,37 +341,25 @@
         <div class="plan-tagline">For individual developers and internal use.</div>
         <ul>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>diff, schema, validate, check</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>migrate — generate SQL</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor snapshot &amp; check</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>migrate — generate &amp; apply</li>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Turso, D1 &amp; local sources</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Up to 3 named connections (GUI)</li>
         </ul>
-        <a class="btn btn-ghost" href="#install">Install</a>
+        <a class="btn btn-ghost" href="#install">Install free</a>
       </div>
       <div class="plan featured">
         <div class="plan-name" style="color:var(--teal-bright)">PRO</div>
-        <div class="plan-price">$9<span>/mo</span></div>
-        <div class="plan-tagline">For solo operators and small teams running production.</div>
+        <div class="plan-price">$49<span> one-time</span></div>
+        <div class="plan-tagline">For developers running SQLite in production.</div>
         <ul>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Everything in Free</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>migrate apply — backup + rollback</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor watch — continuous</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor watch — continuous drift detection</li>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Webhook alerts (Slack, Discord)</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Drift reports for audit trails</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Drift reports &amp; audit history</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>fleet — parallel ops across Turso &amp; D1</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Unlimited named connections (GUI)</li>
         </ul>
-        <a class="btn btn-primary" href="https://github.com/sponsors/croc100" target="_blank" rel="noopener">Start with Pro</a>
-      </div>
-      <div class="plan">
-        <div class="plan-name" style="color:var(--gold)">CLOUD</div>
-        <div class="plan-price">$49<span>/mo</span></div>
-        <div class="plan-tagline">For teams operating SQLite as a fleet.</div>
-        <ul>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Everything in Pro</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>fleet</b> — discover, snapshot, check</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>fleet migrate — staged rollout</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor history — drift timeline</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Team access + audit trail</li>
-        </ul>
-        <a class="btn btn-ghost" href="https://github.com/sponsors/croc100" target="_blank" rel="noopener">Go Cloud</a>
+        <a class="btn btn-primary" href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro — $49</a>
       </div>
     </div>
   </div>
@@ -383,12 +372,11 @@
     <p class="section-sub">One pure-Go binary. No runtime, no dependencies.</p>
     <div class="install-box">
       <div class="install-tabs">
-        <button class="active" data-cmd="go install github.com/croc100/litescope/cmd/litescope@latest">Go</button>
-        <button data-cmd="brew install croc100/tap/litescope">Homebrew</button>
-        <button data-cmd="# Download from the Releases page on GitHub">Binary</button>
+        <button class="active" data-cmd="brew install croc100/tap/litescope">Homebrew</button>
+        <button data-cmd="# Download binary from github.com/croc100/litescope-dist/releases">Binary</button>
       </div>
       <div class="install-code">
-        <span class="c-line" id="installCmd">go install github.com/croc100/litescope/cmd/litescope@latest</span>
+        <span class="c-line" id="installCmd">brew install croc100/tap/litescope</span>
         <button class="copy-btn" id="copyBtn">Copy</button>
       </div>
     </div>
@@ -407,8 +395,8 @@
     <div class="links">
       <a href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/croc100/Litescope#readme" target="_blank" rel="noopener">Docs</a>
-      <a href="https://github.com/sponsors/croc100" target="_blank" rel="noopener">Sponsor</a>
-      <a href="https://github.com/croc100/Litescope/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro</a>
+      <a href="https://github.com/croc100/litescope-dist/releases" target="_blank" rel="noopener">Releases</a>
     </div>
   </div>
   <div class="wrap" style="margin-top:22px">
