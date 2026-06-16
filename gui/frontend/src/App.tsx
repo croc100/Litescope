@@ -7,13 +7,15 @@ import {
 } from 'lucide-react'
 import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
-  Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory
+  Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
+  MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
+  FleetDiscover, FleetSnapshot, FleetCheck
 } from '../wailsjs/go/main/App'
-import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
+import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor'
+type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor' | 'fleet'
 
 type ConnType = 'local' | 'turso' | 'd1'
 
@@ -170,7 +172,7 @@ export default function App() {
   function handleConnClick(conn: Connection) {
     touch(conn.path)
     addRecent(conn.path)
-    injectRef.current?.(conn.path)
+    injectRef?.current?.(conn.path)
   }
 
   const viewProps = { recent, addRecent, removeRecent, status }
@@ -201,6 +203,7 @@ export default function App() {
           {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
           {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
           {tool === 'monitor'  && <ProGate><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'fleet'    && <ProGate><FleetView    {...viewProps} /></ProGate>}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
@@ -216,6 +219,7 @@ const TOOLS: { id: Tool; icon: React.ReactNode; label: string }[] = [
   { id: 'check',    icon: <ShieldCheck size={20} strokeWidth={1.5} />, label: 'Check' },
   { id: 'migrate',  icon: <GitMerge size={20} strokeWidth={1.5} />,    label: 'Migrate' },
   { id: 'monitor',  icon: <Activity size={20} strokeWidth={1.5} />,    label: 'Monitor' },
+  { id: 'fleet',    icon: <Layers size={20} strokeWidth={1.5} />,      label: 'Fleet' },
 ]
 
 function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
@@ -340,7 +344,7 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
 
 const toolLabels: Record<Tool, string> = {
   diff: 'Schema Diff', explorer: 'DB Explorer', check: 'Integrity Check',
-  migrate: 'Migration Studio', monitor: 'Drift Monitor',
+  migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet',
 }
 
 function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: Tool }) {
@@ -499,8 +503,8 @@ function DiffView({ recent, addRecent, removeRecent, status, injectRef }: ViewPr
   const [newPath, setNewPath] = useState('')
 
   useEffect(() => {
-    injectRef.current = (p: string) => { setOldPath(p); addRecent(p) }
-    return () => { injectRef.current = null }
+    if (injectRef) injectRef.current = (p: string) => { setOldPath(p); addRecent(p) }
+    return () => { if (injectRef) injectRef.current = null }
   }, [])
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
@@ -722,7 +726,7 @@ type ViewProps = {
   addRecent: (p: string) => void
   removeRecent: (p: string) => void
   status: (t: string, k: 'ok'|'warn'|'err'|'idle') => void
-  injectRef: React.MutableRefObject<((path: string) => void) | null>
+  injectRef?: React.MutableRefObject<((path: string) => void) | null>
 }
 
 function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
@@ -733,8 +737,8 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
   const [tab, setTab] = useState<'schema' | 'data'>('schema')
 
   useEffect(() => {
-    injectRef.current = (p: string) => open(p)
-    return () => { injectRef.current = null }
+    if (injectRef) injectRef.current = (p: string) => open(p)
+    return () => { if (injectRef) injectRef.current = null }
   }, [])
 
   useEffect(() => {
@@ -892,8 +896,8 @@ function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    injectRef.current = (p: string) => { setBackupPath(p); addRecent(p) }
-    return () => { injectRef.current = null }
+    if (injectRef) injectRef.current = (p: string) => { setBackupPath(p); addRecent(p) }
+    return () => { if (injectRef) injectRef.current = null }
   }, [])
 
   useEffect(() => {
@@ -1047,8 +1051,8 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
   const [confirmApply, setConfirmApply] = useState(false)
 
   useEffect(() => {
-    injectRef.current = (p: string) => { setFromPath(p); addRecent(p) }
-    return () => { injectRef.current = null }
+    if (injectRef) injectRef.current = (p: string) => { setFromPath(p); addRecent(p) }
+    return () => { if (injectRef) injectRef.current = null }
   }, [])
 
   useEffect(() => {
@@ -1186,11 +1190,21 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
   const [snapInfo, setSnapInfo] = useState<any>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'check' | 'snapshot'>('check')
+  const [tab, setTab] = useState<'check' | 'watch' | 'snapshot'>('check')
+  const [watching, setWatching] = useState(false)
+  const [watchInterval, setWatchInterval] = useState(30)
+  const [watchEvents, setWatchEvents] = useState<{at: string; kind: string; message: string; changes?: number}[]>([])
 
   useEffect(() => {
-    injectRef.current = (p: string) => { setDbPath(p); addRecent(p) }
-    return () => { injectRef.current = null }
+    if (injectRef) injectRef.current = (p: string) => { setDbPath(p); addRecent(p) }
+    return () => { if (injectRef) injectRef.current = null }
+  }, [])
+
+  useEffect(() => {
+    const unsub = EventsOn('monitor:event', (ev: any) => {
+      setWatchEvents(prev => [ev, ...prev].slice(0, 100))
+    })
+    return () => { EventsOff('monitor:event') }
   }, [])
 
   async function pickDb() { const p = await OpenFile(); if (p) { setDbPath(p); addRecent(p) } }
@@ -1233,10 +1247,67 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 
       <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
         <SubTab label="Drift Check" active={tab === 'check'} onClick={() => setTab('check')} />
+        <SubTab label="Watch" active={tab === 'watch'} onClick={() => setTab('watch')} />
         <SubTab label="Snapshot" active={tab === 'snapshot'} onClick={() => setTab('snapshot')} />
       </div>
 
       {error && <ErrPanel message={error} />}
+
+      {tab === 'watch' && (
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 bg-[#252526] border-b border-[#252525] shrink-0">
+            <span className="text-[11px] text-[#858585]">Interval:</span>
+            <select value={watchInterval} onChange={e => setWatchInterval(Number(e.target.value))}
+              className="bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none">
+              <option value={10}>10s</option>
+              <option value={30}>30s</option>
+              <option value={60}>1m</option>
+              <option value={300}>5m</option>
+            </select>
+            <div className="flex-1" />
+            {watching
+              ? <Btn variant="danger" small onClick={async () => { await MonitorWatchStop(); setWatching(false) }}>
+                  <X size={11} />Stop Watch
+                </Btn>
+              : <Btn onClick={async () => {
+                  if (!dbPath || !baselinePath) return
+                  await MonitorWatchStart(dbPath, baselinePath, watchInterval)
+                  setWatching(true)
+                }} disabled={!dbPath || !baselinePath}>
+                  <Activity size={12} />Start Watch
+                </Btn>
+            }
+            {watching && <span className="flex items-center gap-1.5 text-[11px] text-[#4ec9b0]">
+              <span className="w-2 h-2 rounded-full bg-[#4ec9b0] animate-pulse" />live
+            </span>}
+          </div>
+          {(!dbPath || !baselinePath) && (
+            <div className="px-4 py-3 bg-[#2d2d00] border-b border-[#febc2e]/30 text-[11px] text-[#dcdcaa]">
+              Select a database and baseline above, then click Start Watch.
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto">
+            {watchEvents.length === 0
+              ? <EmptyState icon={<Activity size={36} />} text="No events yet" sub="Start watch to begin continuous drift monitoring" />
+              : <div className="divide-y divide-[#252525]">
+                  {watchEvents.map((ev, i) => (
+                    <div key={i} className="flex items-start gap-3 px-4 py-2.5">
+                      <span className={`text-[13px] mt-0.5 ${ev.kind === 'ok' ? 'text-[#4ec9b0]' : ev.kind === 'drift' ? 'text-[#dcdcaa]' : 'text-[#f44747]'}`}>
+                        {ev.kind === 'ok' ? '●' : ev.kind === 'drift' ? '▲' : '✗'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[12px] font-medium ${ev.kind === 'ok' ? 'text-[#4ec9b0]' : ev.kind === 'drift' ? 'text-[#dcdcaa]' : 'text-[#f44747]'}`}>
+                          {ev.message}
+                        </div>
+                        <div className="text-[10px] text-[#585858] mt-0.5 font-mono">{new Date(ev.at).toLocaleTimeString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>
+      )}
 
       {tab === 'snapshot' && (
         <div className="flex-1 overflow-y-auto p-4">
@@ -1317,6 +1388,186 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Fleet View ────────────────────────────────────────────────────────────────
+
+interface FleetEntry { name: string; dsn: string; tags?: string[] }
+interface FleetResult { database: string; state: string; error?: string; changes: number; duration_ms: number }
+interface FleetSnapResult { database: string; tables: number; error?: string }
+
+function FleetView({ status }: ViewProps) {
+  const [provider, setProvider] = useState<'turso' | 'd1'>('turso')
+  const [org, setOrg] = useState('')
+  const [token, setToken] = useState('')
+  const [dbToken, setDbToken] = useState('')
+  const [databases, setDatabases] = useState<FleetEntry[]>([])
+  const [results, setResults] = useState<FleetResult[]>([])
+  const [snapResults, setSnapResults] = useState<FleetSnapResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [tab, setTab] = useState<'discover' | 'check'>('discover')
+
+  async function discover() {
+    if (!org || !token) return
+    setLoading(true); setError(''); setDatabases([])
+    try {
+      const dbs = await FleetDiscover(provider, org, token, dbToken)
+      setDatabases(dbs ?? [])
+      status(`Discovered ${dbs?.length ?? 0} databases`, 'ok')
+    } catch (e: any) { setError(String(e)); status('Discovery failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function snapshotAll() {
+    if (!databases.length) return
+    setLoading(true); setError(''); setSnapResults([])
+    try {
+      const r = await FleetSnapshot(databases)
+      setSnapResults(r ?? [])
+      const ok = r?.filter((x: FleetSnapResult) => !x.error).length ?? 0
+      status(`Snapshot: ${ok}/${r?.length} captured`, ok === r?.length ? 'ok' : 'warn')
+    } catch (e: any) { setError(String(e)); status('Snapshot failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function checkAll() {
+    if (!databases.length) return
+    setLoading(true); setError(''); setResults([]); setTab('check')
+    try {
+      const r = await FleetCheck(databases)
+      setResults(r ?? [])
+      const ok = r?.filter((x: FleetResult) => x.state === 'ok').length ?? 0
+      const drift = r?.filter((x: FleetResult) => x.state === 'drift').length ?? 0
+      status(`Fleet: ${ok} ok, ${drift} drift`, drift > 0 ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Check failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<Layers size={14} />} title="Fleet"
+        meta={<span className="text-[10px] text-[#858585]">Turso &amp; Cloudflare D1 — parallel ops</span>} />
+
+      <div className="shrink-0 bg-[#252526] border-b border-[#252525] px-4 py-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#858585] w-16">Provider</span>
+          <button onClick={() => setProvider('turso')}
+            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'turso' ? 'border-[#4ec9b0] text-[#4ec9b0] bg-[#4ec9b0]/10' : 'border-[#3c3c3c] text-[#858585] hover:border-[#555]'}`}>
+            Turso
+          </button>
+          <button onClick={() => setProvider('d1')}
+            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'd1' ? 'border-[#dcdcaa] text-[#dcdcaa] bg-[#dcdcaa]/10' : 'border-[#3c3c3c] text-[#858585] hover:border-[#555]'}`}>
+            D1
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#858585] w-16">{provider === 'turso' ? 'Org' : 'Account'}</span>
+          <input value={org} onChange={e => setOrg(e.target.value)} placeholder={provider === 'turso' ? 'my-org' : 'cf-account-id'}
+            className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#858585] w-16">API Token</span>
+          <input value={token} onChange={e => setToken(e.target.value)} type="password" placeholder="platform API token"
+            className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+        </div>
+        {provider === 'turso' && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#858585] w-16">DB Token</span>
+            <input value={dbToken} onChange={e => setDbToken(e.target.value)} type="password" placeholder="group auth token"
+              className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+          </div>
+        )}
+        <div className="flex gap-2 pt-1">
+          <Btn onClick={discover} disabled={!org || !token || loading}>
+            {loading ? <Spinner /> : <RefreshCw size={11} />}Discover
+          </Btn>
+          {databases.length > 0 && <>
+            <Btn variant="ghost" onClick={snapshotAll} disabled={loading} small>
+              <Save size={11} />Snapshot All
+            </Btn>
+            <Btn variant="ghost" onClick={checkAll} disabled={loading} small>
+              <Activity size={11} />Check All
+            </Btn>
+          </>}
+        </div>
+      </div>
+
+      {error && <ErrPanel message={error} />}
+
+      {databases.length > 0 && (
+        <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+          <SubTab label={`Databases (${databases.length})`} active={tab === 'discover'} onClick={() => setTab('discover')} />
+          {results.length > 0 && <SubTab label="Check Results" active={tab === 'check'} onClick={() => setTab('check')} />}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {databases.length === 0 && !loading && (
+          <EmptyState icon={<Layers size={36} />} text="No databases discovered yet"
+            sub="Enter your Turso org or D1 account credentials above and click Discover" />
+        )}
+        {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Working…</div>}
+
+        {tab === 'discover' && databases.length > 0 && !loading && (
+          <div className="divide-y divide-[#252525]">
+            {databases.map((db, i) => {
+              const snap = snapResults.find(r => r.database === db.name)
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2a2d2e]">
+                  <Database size={13} className="text-[#569cd6] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-[#cccccc] font-medium">{db.name}</div>
+                    <div className="text-[10px] text-[#585858] font-mono truncate">{db.dsn}</div>
+                  </div>
+                  {snap && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-sm border ${snap.error ? 'border-[#f44747]/30 text-[#f44747]' : 'border-[#4ec9b0]/30 text-[#4ec9b0]'}`}>
+                      {snap.error ? 'error' : `${snap.tables} tables`}
+                    </span>
+                  )}
+                  {db.tags?.map(t => (
+                    <span key={t} className="text-[9px] px-1 border border-[#3c3c3c] text-[#585858] rounded-sm">{t}</span>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {tab === 'check' && results.length > 0 && !loading && (
+          <div>
+            <div className="flex items-center gap-4 px-4 py-2 bg-[#252526] border-b border-[#252525] text-[11px]">
+              {(['ok','drift','no-baseline','error'] as const).map(s => {
+                const count = results.filter(r => r.state === s).length
+                if (!count) return null
+                const color = s === 'ok' ? 'text-[#4ec9b0]' : s === 'drift' ? 'text-[#dcdcaa]' : s === 'error' ? 'text-[#f44747]' : 'text-[#585858]'
+                return <span key={s} className={color}>{count} {s}</span>
+              })}
+            </div>
+            <div className="divide-y divide-[#252525]">
+              {results.map((r, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2a2d2e]">
+                  <span className={`text-[14px] ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#585858]' : 'text-[#f44747]'}`}>
+                    {r.state === 'ok' ? '●' : r.state === 'drift' ? '▲' : r.state === 'no-baseline' ? '○' : '✗'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-[#cccccc]">{r.database}</div>
+                    {r.error && <div className="text-[10px] text-[#f44747] truncate">{r.error}</div>}
+                    {r.state === 'drift' && <div className="text-[10px] text-[#dcdcaa]">{r.changes} change(s) detected</div>}
+                    {r.state === 'no-baseline' && <div className="text-[10px] text-[#585858]">run Snapshot All first</div>}
+                  </div>
+                  <span className={`text-[11px] font-medium ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#585858]' : 'text-[#f44747]'}`}>
+                    {r.state}
+                  </span>
+                  <span className="text-[10px] text-[#585858]">{r.duration_ms}ms</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

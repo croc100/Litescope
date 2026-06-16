@@ -30,6 +30,30 @@ export function MonitorSnapshot(arg1, arg2) {
   return window['go']['main']['App']['MonitorSnapshot'](arg1, arg2);
 }
 
+export function MonitorWatchStart(arg1, arg2, arg3) {
+  return window['go']['main']['App']['MonitorWatchStart'](arg1, arg2, arg3);
+}
+
+export function MonitorWatchStop() {
+  return window['go']['main']['App']['MonitorWatchStop']();
+}
+
+export function MonitorWatchIsRunning() {
+  return window['go']['main']['App']['MonitorWatchIsRunning']();
+}
+
+export function FleetDiscover(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['FleetDiscover'](arg1, arg2, arg3, arg4);
+}
+
+export function FleetSnapshot(arg1) {
+  return window['go']['main']['App']['FleetSnapshot'](arg1);
+}
+
+export function FleetCheck(arg1) {
+  return window['go']['main']['App']['FleetCheck'](arg1);
+}
+
 export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
 }

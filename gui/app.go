@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
+	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/monitor"
 	"github.com/croc100/litescope/internal/schema"
@@ -19,6 +22,10 @@ import (
 
 type App struct {
 	ctx context.Context
+
+	watchMu      sync.Mutex
+	watchCancel  context.CancelFunc
+	watchRunning bool
 }
 
 func NewApp() *App {
@@ -273,6 +280,194 @@ func (a *App) MonitorCheck(dbPath, baselinePath string) (*monitor.DriftResult, e
 
 func (a *App) MonitorLoadHistory(reportPath string) ([]monitor.HistoryEntry, error) {
 	return monitor.LoadHistory(reportPath)
+}
+
+// MonitorWatchStart begins polling dbPath against baselinePath every intervalSec seconds.
+// Emits "monitor:event" events with WatchEvent payloads. Stops any existing watch first.
+func (a *App) MonitorWatchStart(dbPath, baselinePath string, intervalSec int) {
+	a.watchMu.Lock()
+	if a.watchCancel != nil {
+		a.watchCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.watchCancel = cancel
+	a.watchRunning = true
+	a.watchMu.Unlock()
+
+	if intervalSec < 5 {
+		intervalSec = 30
+	}
+
+	go func() {
+		ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
+		defer ticker.Stop()
+
+		runCheck := func() {
+			snap, err := monitor.Load(baselinePath)
+			if err != nil {
+				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
+					At: time.Now().Format(time.RFC3339), Kind: "error", Message: "baseline not found: " + err.Error(),
+				})
+				return
+			}
+			conn, err := connector.Open(dbPath)
+			if err != nil {
+				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
+					At: time.Now().Format(time.RFC3339), Kind: "error", Message: err.Error(),
+				})
+				return
+			}
+			defer conn.Close()
+			current, err := conn.Schema()
+			if err != nil {
+				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
+					At: time.Now().Format(time.RFC3339), Kind: "error", Message: err.Error(),
+				})
+				return
+			}
+			result := monitor.Check(dbPath, snap, current)
+			if result.HasDrift {
+				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
+					At: time.Now().Format(time.RFC3339), Kind: "drift",
+					Message: fmt.Sprintf("%d change(s) detected", len(result.Changes)),
+					Changes: len(result.Changes),
+				})
+			} else {
+				wailsRuntime.EventsEmit(a.ctx, "monitor:event", WatchEvent{
+					At: time.Now().Format(time.RFC3339), Kind: "ok", Message: "no drift",
+				})
+			}
+		}
+
+		runCheck()
+		for {
+			select {
+			case <-ctx.Done():
+				a.watchMu.Lock()
+				a.watchRunning = false
+				a.watchMu.Unlock()
+				return
+			case <-ticker.C:
+				runCheck()
+			}
+		}
+	}()
+}
+
+func (a *App) MonitorWatchStop() {
+	a.watchMu.Lock()
+	defer a.watchMu.Unlock()
+	if a.watchCancel != nil {
+		a.watchCancel()
+		a.watchCancel = nil
+	}
+	a.watchRunning = false
+}
+
+func (a *App) MonitorWatchIsRunning() bool {
+	a.watchMu.Lock()
+	defer a.watchMu.Unlock()
+	return a.watchRunning
+}
+
+type WatchEvent struct {
+	At      string `json:"at"`
+	Kind    string `json:"kind"` // "ok" | "drift" | "error"
+	Message string `json:"message"`
+	Changes int    `json:"changes,omitempty"`
+}
+
+// ── Fleet ─────────────────────────────────────────────────────────────────────
+
+type FleetDBEntry struct {
+	Name string   `json:"name"`
+	DSN  string   `json:"dsn"`
+	Tags []string `json:"tags,omitempty"`
+}
+
+type FleetCheckResult struct {
+	Database   string `json:"database"`
+	State      string `json:"state"` // "ok" | "drift" | "no-baseline" | "error"
+	Error      string `json:"error,omitempty"`
+	Changes    int    `json:"changes"`
+	DurationMs int64  `json:"duration_ms"`
+}
+
+type FleetSnapshotResult struct {
+	Database string `json:"database"`
+	Tables   int    `json:"tables"`
+	Error    string `json:"error,omitempty"`
+}
+
+func (a *App) FleetDiscover(provider, orgOrAccount, platformToken, dbToken string) ([]FleetDBEntry, error) {
+	var dbs []fleet.Database
+	var err error
+	switch provider {
+	case "turso":
+		dbs, err = fleet.DiscoverTurso(orgOrAccount, platformToken, dbToken)
+	case "d1":
+		dbs, err = fleet.DiscoverD1(orgOrAccount, platformToken)
+	default:
+		return nil, fmt.Errorf("unknown provider %q (use turso or d1)", provider)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FleetDBEntry, len(dbs))
+	for i, d := range dbs {
+		out[i] = FleetDBEntry{Name: d.Name, DSN: d.DSN, Tags: d.Tags}
+	}
+	return out, nil
+}
+
+func (a *App) FleetSnapshot(entries []FleetDBEntry) []FleetSnapshotResult {
+	baseDir := fleetBaselineDir()
+	cfg := &fleet.Config{BaselinesDir: baseDir}
+	dbs := toFleetDatabases(entries)
+	raw := fleet.Snapshot(cfg, dbs, 0)
+	out := make([]FleetSnapshotResult, len(raw))
+	for i, r := range raw {
+		res := FleetSnapshotResult{Database: r.Database, Tables: r.Tables}
+		if r.Err != nil {
+			res.Error = r.Err.Error()
+		}
+		out[i] = res
+	}
+	return out
+}
+
+func (a *App) FleetCheck(entries []FleetDBEntry) []FleetCheckResult {
+	baseDir := fleetBaselineDir()
+	cfg := &fleet.Config{BaselinesDir: baseDir}
+	dbs := toFleetDatabases(entries)
+	report := fleet.Check(cfg, dbs, 0)
+	out := make([]FleetCheckResult, len(report.Results))
+	for i, r := range report.Results {
+		res := FleetCheckResult{
+			Database:   r.Database,
+			State:      r.State,
+			Error:      r.Error,
+			DurationMs: r.Duration.Milliseconds(),
+		}
+		if r.Drift != nil {
+			res.Changes = len(r.Drift.Changes)
+		}
+		out[i] = res
+	}
+	return out
+}
+
+func fleetBaselineDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".litescope", "fleet", "baselines")
+}
+
+func toFleetDatabases(entries []FleetDBEntry) []fleet.Database {
+	dbs := make([]fleet.Database, len(entries))
+	for i, e := range entries {
+		dbs[i] = fleet.Database{Name: e.Name, DSN: e.DSN, Tags: e.Tags}
+	}
+	return dbs
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

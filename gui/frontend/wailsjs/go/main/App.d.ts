@@ -20,6 +20,18 @@ export function MonitorLoadHistory(arg1:string):Promise<Array<monitor.HistoryEnt
 
 export function MonitorSnapshot(arg1:string,arg2:string):Promise<main.SnapshotInfo>;
 
+export function MonitorWatchStart(arg1:string,arg2:string,arg3:number):Promise<void>;
+
+export function MonitorWatchStop():Promise<void>;
+
+export function MonitorWatchIsRunning():Promise<boolean>;
+
+export function FleetDiscover(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<main.FleetDBEntry>>;
+
+export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetSnapshotResult>>;
+
+export function FleetCheck(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetCheckResult>>;
+
 export function OpenFile():Promise<string>;
 
 export function QueryTable(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.TableRows>;

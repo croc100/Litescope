@@ -187,7 +187,43 @@ export namespace diff {
 }
 
 export namespace main {
-	
+
+	export class FleetDBEntry {
+	    name: string;
+	    dsn: string;
+	    tags?: string[];
+	    static createFrom(source: any = {}) { return new FleetDBEntry(source); }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"]; this.dsn = source["dsn"]; this.tags = source["tags"];
+	    }
+	}
+
+	export class FleetCheckResult {
+	    database: string;
+	    state: string;
+	    error?: string;
+	    changes: number;
+	    duration_ms: number;
+	    static createFrom(source: any = {}) { return new FleetCheckResult(source); }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"]; this.state = source["state"];
+	        this.error = source["error"]; this.changes = source["changes"]; this.duration_ms = source["duration_ms"];
+	    }
+	}
+
+	export class FleetSnapshotResult {
+	    database: string;
+	    tables: number;
+	    error?: string;
+	    static createFrom(source: any = {}) { return new FleetSnapshotResult(source); }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"]; this.tables = source["tables"]; this.error = source["error"];
+	    }
+	}
+
 	export class DiffedRow {
 	    Status: string;
 	    PK: any;
