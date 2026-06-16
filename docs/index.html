@@ -343,32 +343,32 @@
 <section id="pricing">
   <div class="wrap center">
     <div class="eyebrow">Pricing</div>
-    <h2>Free to use. Pro for power users.</h2>
-    <p class="section-sub">Core operations are free forever. Pay once for continuous monitoring and advanced features.</p>
+    <h2>Free to explore. Pro to operate.</h2>
+    <p class="section-sub">Browse and diff for free. Everything that touches production requires Pro.</p>
   </div>
   <div class="wrap">
     <div class="pricing">
       <div class="plan">
         <div class="plan-name">FREE</div>
         <div class="plan-price">$0</div>
-        <div class="plan-tagline">For individual developers and internal use.</div>
+        <div class="plan-tagline">Get familiar with your SQLite databases.</div>
         <ul>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>diff, schema, validate, check</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>migrate — generate &amp; apply</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Turso, D1 &amp; local sources</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Up to 3 named connections (GUI)</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Explorer — browse tables &amp; query rows</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>diff — schema comparison</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>1 named connection (GUI)</li>
         </ul>
         <a class="btn btn-ghost" href="#install">Install free</a>
       </div>
       <div class="plan featured">
+        <div class="plan-badge">Most popular</div>
         <div class="plan-name" style="color:var(--teal-bright)">PRO</div>
         <div class="plan-price">$89<span> /year</span></div>
-        <div class="plan-tagline">For developers running SQLite in production.</div>
+        <div class="plan-tagline">The full SQLite operations toolchain for production.</div>
         <ul>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Everything in Free</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor watch — continuous drift detection</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Webhook alerts (Slack, Discord)</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Drift reports &amp; audit history</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>check — backup integrity verification</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>migrate — generate &amp; apply with rollback</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>monitor — continuous drift detection + alerts</li>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>fleet — parallel ops across Turso &amp; D1</li>
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Unlimited named connections (GUI)</li>
         </ul>
@@ -388,23 +388,22 @@
         </tr>
       </thead>
       <tbody>
-        <tr class="section-row"><td colspan="3">Core CLI</td></tr>
-        <tr><td>diff — schema &amp; data diff</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>validate — migration locking</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>check — integrity &amp; backup verify</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>migrate — generate &amp; apply with rollback</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-        <tr class="section-row"><td colspan="3">Monitoring</td></tr>
-        <tr><td>monitor snapshot &amp; one-off check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+        <tr class="section-row"><td colspan="3">Explore</td></tr>
+        <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+        <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+        <tr class="section-row"><td colspan="3">Operate (Pro)</td></tr>
+        <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
+        <tr><td>migrate — generate &amp; apply with rollback</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
+        <tr class="section-row"><td colspan="3">Monitor (Pro)</td></tr>
         <tr><td>monitor watch — continuous drift detection</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>monitor schedule — cron-based checks</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
         <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>--save-report drift history</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
-        <tr class="section-row"><td colspan="3">Fleet (Turso &amp; D1)</td></tr>
+        <tr><td>Drift history &amp; audit trail</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
+        <tr class="section-row"><td colspan="3">Fleet (Pro)</td></tr>
         <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
-        <tr><td>fleet migrate — staged rollout with canary</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
-        <tr class="section-row"><td colspan="3">GUI (Desktop App)</td></tr>
-        <tr><td>Named connections</td><td><span class="val">3 max</span></td><td><span class="val">Unlimited</span></td></tr>
-        <tr><td>Drift Monitor panel</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
+        <tr><td>Turso &amp; Cloudflare D1 support</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
+        <tr class="section-row"><td colspan="3">GUI</td></tr>
+        <tr><td>Named connections</td><td><span class="val">1</span></td><td><span class="val">Unlimited</span></td></tr>
+        <tr><td>All Pro panels (Check, Migrate, Monitor, Fleet)</td><td><span class="no">✗</span></td><td><span class="yes">✓</span></td></tr>
       </tbody>
     </table>
   </div>

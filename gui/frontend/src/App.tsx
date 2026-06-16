@@ -101,7 +101,7 @@ function useConnections() {
 
 // ── Pro gate ──────────────────────────────────────────────────────────────────
 
-const FREE_CONN_LIMIT = 3
+const FREE_CONN_LIMIT = 1
 const LICENSE_KEY = 'litescope_license'
 
 function getLicenseKey(): string {
@@ -325,8 +325,8 @@ export default function App() {
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
           {tool === 'diff'     && <DiffView    {...viewProps} injectRef={injectRef} />}
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
-          {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
-          {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
+          {tool === 'check'    && <ProGate feature="Backup Check" onOpenSettings={() => setTool('settings')}><CheckView   {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'migrate'  && <ProGate feature="Migration Studio" onOpenSettings={() => setTool('settings')}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'monitor'  && <ProGate feature="Drift Monitor" onOpenSettings={() => setTool('settings')}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'fleet'    && <ProGate feature="Fleet Operations" onOpenSettings={() => setTool('settings')}><FleetView    {...viewProps} /></ProGate>}
           {tool === 'settings' && <SettingsView />}
