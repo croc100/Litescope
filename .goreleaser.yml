@@ -76,7 +76,7 @@ brews:
 release:
   github:
     owner: croc100
-    name: Litescope
+    name: litescope-dist
   name_template: "v{{ .Version }}"
   footer: |
     ## Install
