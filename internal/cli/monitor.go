@@ -301,7 +301,7 @@ Examples:
   Get Cloud: https://github.com/croc100/Litescope#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 

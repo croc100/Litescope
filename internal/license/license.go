@@ -1,4 +1,4 @@
-// Package license handles Pro/Cloud feature gating.
+// Package license handles Pro feature gating.
 // License key lookup order:
 //  1. LITESCOPE_LICENSE env var
 //  2. ~/.litescope/license file
@@ -17,9 +17,8 @@ import (
 type Tier int
 
 const (
-	TierFree  Tier = 0
-	TierPro   Tier = 1
-	TierCloud Tier = 2
+	TierFree Tier = 0
+	TierPro  Tier = 1
 )
 
 const workerURL = "https://litescope-license-worker.croc100.workers.dev/verify"
@@ -64,13 +63,11 @@ func verifyOnline(key string) (Tier, bool) {
 	client := &http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Get(workerURL + "?key=" + key)
 	if err != nil {
-		// Network unreachable — offline grace
 		return 0, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		// Key not in database — invalid
 		return TierFree, true
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -84,28 +81,20 @@ func verifyOnline(key string) (Tier, bool) {
 	if !v.Valid {
 		return TierFree, true
 	}
-	switch v.Tier {
-	case "cloud":
-		return TierCloud, true
-	case "pro":
+	if v.Tier == "pro" {
 		return TierPro, true
-	default:
-		return TierFree, true
 	}
+	return TierFree, true
 }
 
 func tierFromPrefix(key string) Tier {
-	switch {
-	case strings.HasPrefix(key, "lsc_cloud_"):
-		return TierCloud
-	case strings.HasPrefix(key, "lsc_pro_"):
+	if strings.HasPrefix(key, "lsc_pro_") {
 		return TierPro
-	default:
-		return TierFree
 	}
+	return TierFree
 }
 
-// RequirePro checks for Pro or Cloud tier.
+// RequirePro checks for Pro tier.
 func RequirePro() error {
 	if Current() >= TierPro {
 		return nil
@@ -114,26 +103,10 @@ func RequirePro() error {
 
   This feature requires Litescope Pro.
 
-  Upgrade at: https://croc100.github.io/Litescope/#pricing
-  Then set:   export LITESCOPE_LICENSE=lsc_pro_<your-key>
+  Get your license: https://croc100.github.io/Litescope/#pricing
+  Then activate:   export LITESCOPE_LICENSE=<your-key>
 
-  Pro ($9/mo): continuous monitoring, webhook alerts, CI reports`,
-		ErrUpgradeRequired)
-}
-
-// RequireCloud checks for Cloud tier.
-func RequireCloud() error {
-	if Current() >= TierCloud {
-		return nil
-	}
-	return fmt.Errorf(`%w
-
-  This feature requires Litescope Cloud.
-
-  Upgrade at: https://croc100.github.io/Litescope/#pricing
-  Then set:   export LITESCOPE_LICENSE=lsc_cloud_<your-key>
-
-  Cloud ($49/mo): hosted monitoring, team dashboard, audit trail`,
+  Pro ($29 one-time): drift monitor, schema reports, unlimited connections`,
 		ErrUpgradeRequired)
 }
 

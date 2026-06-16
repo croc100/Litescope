@@ -69,7 +69,7 @@ so you can verify before rolling out to the rest:
   litescope fleet migrate migration.sql            # the whole fleet`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 			sqlBytes, err := os.ReadFile(args[0])
@@ -221,7 +221,7 @@ By default this overwrites the config. Use --merge to update an existing one
 (preserves baselines and tags for databases that are already listed).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 			provider := strings.ToLower(args[0])
@@ -306,7 +306,7 @@ func cmdFleetSnapshot() *cobra.Command {
 		Short: "Capture baselines for the whole fleet in parallel",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 			cfg, dbs, err := loadFleet(configPath, tag)
@@ -363,7 +363,7 @@ Exit code is 1 when any database has drifted or errored — drop it into CI.
   litescope fleet check --format json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 			cfg, dbs, err := loadFleet(configPath, tag)
@@ -406,7 +406,7 @@ func cmdFleetStatus() *cobra.Command {
 		Short: "Show the configured fleet",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequireCloud(); err != nil {
+			if err := license.RequirePro(); err != nil {
 				return err
 			}
 			cfg, dbs, err := loadFleet(configPath, "")

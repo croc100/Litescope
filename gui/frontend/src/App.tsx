@@ -96,6 +96,41 @@ function useConnections() {
   return { conns, add, remove, rename, touch }
 }
 
+// ── Pro gate ──────────────────────────────────────────────────────────────────
+// Reads the license key from localStorage (set via Settings or env).
+// For GUI we just check the key prefix — server verify happens in the CLI/Go side.
+const FREE_CONN_LIMIT = 3
+
+function useIsPro(): boolean {
+  const key = localStorage.getItem('litescope_license') ?? ''
+  return key.startsWith('lsc_pro_')
+}
+
+function ProGate({ children }: { children: React.ReactNode }) {
+  const isPro = useIsPro()
+  if (isPro) return <>{children}</>
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
+      <div className="text-[40px]">🔒</div>
+      <div className="text-[16px] text-[#cccccc] font-medium">Drift Monitor — Pro Feature</div>
+      <div className="text-[13px] text-[#858585] max-w-[320px] leading-relaxed">
+        Continuous schema drift monitoring requires Litescope Pro.
+      </div>
+      <a
+        href="https://croc100.github.io/Litescope/#pricing"
+        target="_blank"
+        className="mt-2 px-5 py-2 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[13px] rounded-sm transition-colors"
+      >
+        Get Pro — $29 one-time
+      </a>
+      <div className="text-[11px] text-[#585858]">
+        Already have a key? Set <code className="bg-[#2d2d2d] px-1 rounded">LITESCOPE_LICENSE</code> env var
+        or save to <code className="bg-[#2d2d2d] px-1 rounded">~/.litescope/license</code>
+      </div>
+    </div>
+  )
+}
+
 // recent paths — lightweight, auto-populated for DbPicker dropdowns
 function useRecent() {
   const [recent, setRecent] = useState<string[]>(() => {
@@ -149,7 +184,13 @@ export default function App() {
         {sidebarOpen && (
           <Sidebar
             conns={conns} onConnClick={handleConnClick}
-            onAddConn={async () => { const p = await OpenFile(); if (p) { addConn(p); addRecent(p) } }}
+            onAddConn={async () => {
+              if (conns.length >= 3) {
+                alert('Free plan: up to 3 connections.\n\nUpgrade to Litescope Pro for unlimited connections.\nhttps://croc100.github.io/Litescope/#pricing')
+                return
+              }
+              const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
+            }}
             onRemoveConn={removeConn} onRenameConn={renameConn}
             activeTool={tool}
           />
@@ -159,7 +200,7 @@ export default function App() {
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
           {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
           {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
-          {tool === 'monitor'  && <MonitorView  {...viewProps} injectRef={injectRef} />}
+          {tool === 'monitor'  && <ProGate><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
@@ -282,8 +323,14 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
 
       <div className="border-t border-[#1e1e1e] px-3 py-2.5 shrink-0">
         <div className="text-[10px] text-[#585858] leading-relaxed">
-          Click a DB to inject it into the active panel
+          Click a DB to inject into the active panel
         </div>
+        {!useIsPro() && (
+          <div className="text-[10px] text-[#585858] mt-1">
+            Free: {conns.length}/{FREE_CONN_LIMIT} connections ·{' '}
+            <a href="https://croc100.github.io/Litescope/#pricing" target="_blank" className="text-[#007acc] hover:underline">Upgrade</a>
+          </div>
+        )}
       </div>
     </div>
   )
