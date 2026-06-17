@@ -131,25 +131,25 @@ function ProGate({ children, feature, onOpenSettings }: {
   if (pro) return <>{children}</>
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
-      <div className="w-14 h-14 rounded-full bg-[#2d2d2d] flex items-center justify-center mb-1">
+      <div className="w-14 h-14 rounded-full bg-[#1c2128] flex items-center justify-center mb-1">
         <Key size={24} className="text-[#dcdcaa]" strokeWidth={1.5} />
       </div>
-      <div className="text-[15px] text-[#cccccc] font-semibold">{feature ?? 'Pro Feature'}</div>
-      <div className="text-[13px] text-[#858585] max-w-[300px] leading-relaxed">
+      <div className="text-[15px] text-[#e6edf3] font-semibold">{feature ?? 'Pro Feature'}</div>
+      <div className="text-[13px] text-[#6e7681] max-w-[300px] leading-relaxed">
         This feature requires Litescope Pro — $89/year.
       </div>
       <div className="flex gap-2 mt-1">
         <a
           href="https://litescope-site.pages.dev/#pricing"
           target="_blank"
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
         >
           Get Pro <ExternalLink size={11} />
         </a>
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#3c3c3c] hover:bg-[#4a4a4a] text-[#cccccc] text-[12px] rounded-sm transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#161b22] hover:bg-[#21262d] text-[#e6edf3] text-[12px] rounded-sm transition-colors"
           >
             <Key size={12} />Enter key
           </button>
@@ -191,21 +191,21 @@ function SettingsView() {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-lg">
-        <div className="text-[15px] font-semibold text-[#cccccc] mb-1">Settings</div>
-        <div className="text-[12px] text-[#585858] mb-6">License and preferences</div>
+        <div className="text-[15px] font-semibold text-[#e6edf3] mb-1">Settings</div>
+        <div className="text-[12px] text-[#484f58] mb-6">License and preferences</div>
 
         {/* License section */}
-        <div className="bg-[#252526] border border-[#333] rounded-sm p-4 mb-4">
+        <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Key size={14} className="text-[#dcdcaa]" strokeWidth={1.5} />
-            <span className="text-[13px] font-medium text-[#cccccc]">License</span>
-            <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${active ? 'bg-[#1a3a2a] text-[#4ec9b0]' : 'bg-[#2d2d2d] text-[#858585]'}`}>
+            <span className="text-[13px] font-medium text-[#e6edf3]">License</span>
+            <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${active ? 'bg-[#0d2a22] text-[#4ec9b0]' : 'bg-[#1c2128] text-[#6e7681]'}`}>
               {active ? 'Pro' : 'Free'}
             </span>
           </div>
 
           {active && (
-            <div className="text-[11px] text-[#585858] font-mono bg-[#1e1e1e] px-3 py-2 rounded-sm border border-[#333] mb-3 truncate">
+            <div className="text-[11px] text-[#484f58] font-mono bg-[#0d1117] px-3 py-2 rounded-sm border border-[#30363d] mb-3 truncate">
               {currentKey}
             </div>
           )}
@@ -216,18 +216,18 @@ function SettingsView() {
               onChange={e => { setKey(e.target.value); setErr('') }}
               onKeyDown={e => e.key === 'Enter' && save()}
               placeholder="lsc_pro_…"
-              className="flex-1 bg-[#1e1e1e] border border-[#555] text-[#cccccc] text-[12px] px-3 py-1.5 rounded-sm outline-none focus:border-[#007acc] font-mono placeholder-[#484848]"
+              className="flex-1 bg-[#0d1117] border border-[#30363d] text-[#e6edf3] text-[12px] px-3 py-1.5 rounded-md outline-none focus:border-[#00d4aa] font-mono placeholder-[#484848]"
             />
             <button
               onClick={save}
-              className="px-3 py-1.5 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+              className="px-3 py-1.5 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
             >
               {saved ? <CheckIcon size={13} /> : 'Activate'}
             </button>
             {active && (
               <button
                 onClick={remove}
-                className="px-3 py-1.5 bg-[#3c3c3c] hover:bg-[#4a4a4a] text-[#858585] text-[12px] rounded-sm transition-colors"
+                className="px-3 py-1.5 bg-[#161b22] hover:bg-[#21262d] text-[#6e7681] text-[12px] rounded-sm transition-colors"
               >
                 Remove
               </button>
@@ -238,15 +238,15 @@ function SettingsView() {
         </div>
 
         {!active && (
-          <div className="bg-[#1a1a2a] border border-[#007acc]/30 rounded-sm p-4">
-            <div className="text-[12px] text-[#cccccc] font-medium mb-1">Litescope Pro — $89/year</div>
-            <div className="text-[11px] text-[#858585] mb-3 leading-relaxed">
+          <div className="bg-[#0d1117] border border-[#00d4aa]/30 rounded-sm p-4">
+            <div className="text-[12px] text-[#e6edf3] font-medium mb-1">Litescope Pro — $89/year</div>
+            <div className="text-[11px] text-[#6e7681] mb-3 leading-relaxed">
               Continuous drift monitoring, fleet operations across Turso & D1, unlimited connections.
             </div>
             <a
               href="https://litescope-site.pages.dev/#pricing"
               target="_blank"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#007acc] hover:bg-[#1b8ae4] text-white text-[12px] rounded-sm transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
             >
               Buy Pro <ExternalLink size={11} />
             </a>
@@ -302,9 +302,9 @@ export default function App() {
   const viewProps = { recent, addRecent, removeRecent, status }
 
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e1e] text-[#cccccc] text-[13px] font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] text-[13px] font-sans overflow-hidden select-none">
       {/* macOS titlebar drag region — sits above activity bar + sidebar */}
-      <div className="h-[28px] shrink-0 bg-[#252526]" style={{ WebkitAppRegion: 'drag' } as any} />
+      <div className="h-[28px] shrink-0 bg-[#161b22]" style={{ WebkitAppRegion: 'drag' } as any} />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
         {sidebarOpen && tool !== 'settings' && (
@@ -353,22 +353,22 @@ function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
   sidebarOpen: boolean; toggleSidebar: () => void
 }) {
   return (
-    <div className="w-[48px] flex flex-col items-center bg-[#2a2a2a] border-r border-[#1e1e1e] shrink-0" style={{ paddingTop: '28px' }}>
+    <div className="w-[48px] flex flex-col items-center bg-[#0d1117] border-r border-[#21262d] shrink-0" style={{ paddingTop: '28px' }}>
       {TOOLS.map(t => (
         <button key={t.id} title={t.label} onClick={() => { setTool(t.id); if (!sidebarOpen) toggleSidebar() }}
           className={`relative w-full h-[48px] flex items-center justify-center transition-colors
-            ${tool === t.id ? 'text-white' : 'text-[#858585] hover:text-[#cccccc]'}`}>
-          {tool === t.id && <span className="absolute left-0 top-3 bottom-3 w-[2px] bg-[#007acc] rounded-r-full" />}
+            ${tool === t.id ? 'text-white' : 'text-[#6e7681] hover:text-[#e6edf3]'}`}>
+          {tool === t.id && <span className="absolute left-0 top-3 bottom-3 w-[2px] bg-[#00d4aa] rounded-r-full" />}
           {t.icon}
         </button>
       ))}
       <div className="flex-1" />
       <button title="Settings" onClick={() => setTool('settings')}
-        className={`w-full h-[40px] flex items-center justify-center transition-colors ${tool === 'settings' ? 'text-white' : 'text-[#585858] hover:text-[#cccccc]'}`}>
+        className={`w-full h-[40px] flex items-center justify-center transition-colors ${tool === 'settings' ? 'text-white' : 'text-[#484f58] hover:text-[#e6edf3]'}`}>
         <Settings size={16} strokeWidth={1.5} />
       </button>
       <button title="Toggle sidebar" onClick={toggleSidebar}
-        className="w-full h-[40px] flex items-center justify-center text-[#585858] hover:text-[#cccccc] mb-1">
+        className="w-full h-[40px] flex items-center justify-center text-[#484f58] hover:text-[#e6edf3] mb-1">
         <Layers size={16} strokeWidth={1.5} />
       </button>
     </div>
@@ -406,27 +406,27 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
   }
 
   return (
-    <div className="w-[220px] flex flex-col bg-[#252526] border-r border-[#1a1a1a] shrink-0 overflow-hidden">
+    <div className="w-[220px] flex flex-col bg-[#161b22] border-r border-[#21262d] shrink-0 overflow-hidden">
       {/* traffic lights spacer */}
       <div className="shrink-0" style={{ height: '28px' }} />
-      <div className="flex items-center h-[35px] px-3 border-b border-[#1e1e1e] gap-2 shrink-0">
-        <span className="text-[10px] uppercase tracking-wider text-[#858585] font-medium flex-1">Databases</span>
-        <button onClick={onAddConn} title="Add connection" className="text-[#585858] hover:text-[#cccccc]">
+      <div className="flex items-center h-[35px] px-3 border-b border-[#21262d] gap-2 shrink-0">
+        <span className="text-[10px] uppercase tracking-wider text-[#6e7681] font-medium flex-1">Databases</span>
+        <button onClick={onAddConn} title="Add connection" className="text-[#484f58] hover:text-[#e6edf3]">
           <Plus size={14} strokeWidth={1.5} />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">
         {conns.length === 0 && (
-          <div className="px-3 py-6 text-[11px] text-[#585858] text-center leading-relaxed">
-            Click <span className="text-[#cccccc]">+</span> to add a database<br/>or drop a .db file
+          <div className="px-3 py-6 text-[11px] text-[#484f58] text-center leading-relaxed">
+            Click <span className="text-[#e6edf3]">+</span> to add a database<br/>or drop a .db file
           </div>
         )}
         {conns.slice().sort((a, b) => (b.lastUsed ?? b.addedAt) - (a.lastUsed ?? a.addedAt)).map(c => {
           const badge = TYPE_BADGE[c.type]
           return (
             <div key={c.id}
-              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-[#2a2d2e] group rounded-sm mx-1 cursor-pointer"
+              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-[#1c2128] group rounded-sm mx-1 cursor-pointer"
               onClick={() => onConnClick(c)}>
               <Database size={12} className="text-[#569cd6] shrink-0" strokeWidth={1.5} />
               <div className="flex-1 min-w-0">
@@ -435,19 +435,19 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
                       onBlur={commitRename}
                       onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingId(null) }}
                       onClick={e => e.stopPropagation()}
-                      className="w-full bg-[#3c3c3c] text-[#cccccc] text-[12px] px-1 rounded-sm outline-none border border-[#007acc]" />
-                  : <div className="text-[12px] text-[#cccccc] truncate">{c.name}</div>
+                      className="w-full bg-[#161b22] text-[#e6edf3] text-[12px] px-1 rounded-md outline-none border border-[#00d4aa]" />
+                  : <div className="text-[12px] text-[#e6edf3] truncate">{c.name}</div>
                 }
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className={`text-[9px] border rounded-sm px-1 ${badge.cls}`}>{badge.label}</span>
-                  <span className="text-[10px] text-[#585858] truncate">{c.path.split('/').slice(-2).join('/').slice(0, 28)}</span>
+                  <span className="text-[10px] text-[#484f58] truncate">{c.path.split('/').slice(-2).join('/').slice(0, 28)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0" onClick={e => e.stopPropagation()}>
-                <button title="Rename" onClick={() => startRename(c)} className="text-[#585858] hover:text-[#cccccc] p-0.5">
+                <button title="Rename" onClick={() => startRename(c)} className="text-[#484f58] hover:text-[#e6edf3] p-0.5">
                   <Pencil size={10} />
                 </button>
-                <button title="Remove" onClick={() => onRemoveConn(c.id)} className="text-[#585858] hover:text-[#f44747] p-0.5">
+                <button title="Remove" onClick={() => onRemoveConn(c.id)} className="text-[#484f58] hover:text-[#f44747] p-0.5">
                   <X size={10} />
                 </button>
               </div>
@@ -456,14 +456,14 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
         })}
       </div>
 
-      <div className="border-t border-[#1e1e1e] px-3 py-2.5 shrink-0">
-        <div className="text-[10px] text-[#585858] leading-relaxed">
+      <div className="border-t border-[#21262d] px-3 py-2.5 shrink-0">
+        <div className="text-[10px] text-[#484f58] leading-relaxed">
           Click a DB to inject into the active panel
         </div>
         {!useIsPro() && (
-          <div className="text-[10px] text-[#585858] mt-1">
+          <div className="text-[10px] text-[#484f58] mt-1">
             Free: {conns.length}/{FREE_CONN_LIMIT} connections ·{' '}
-            <button onClick={onOpenSettings} className="text-[#007acc] hover:underline bg-transparent border-0 p-0 cursor-pointer text-[10px]">Upgrade</button>
+            <button onClick={onOpenSettings} className="text-[#00d4aa] hover:underline bg-transparent border-0 p-0 cursor-pointer text-[10px]">Upgrade</button>
           </div>
         )}
       </div>
@@ -479,14 +479,14 @@ const toolLabels: Record<Tool, string> = {
 }
 
 function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: Tool }) {
-  const kindCls = { ok: 'text-[#4ec9b0]', warn: 'text-[#dcdcaa]', err: 'text-[#f44747]', idle: 'text-white' }[msg.kind] ?? 'text-white'
+  const kindCls = { ok: 'text-[#3fb950]', warn: 'text-[#e2c97e]', err: 'text-[#f87171]', idle: 'text-[#6e7681]' }[msg.kind] ?? 'text-[#6e7681]'
   return (
-    <div className="h-[22px] bg-[#007acc] flex items-center px-3 gap-3 text-white text-[11px] shrink-0">
-      <span className="flex items-center gap-1.5 opacity-90"><Database size={11} />Litescope</span>
-      <span className="opacity-40">|</span>
-      <span className="opacity-75">{toolLabels[tool]}</span>
+    <div className="h-[24px] bg-[#0d1117] border-t border-[#30363d] flex items-center px-3 gap-2 text-[11px] shrink-0">
+      <span className="flex items-center gap-1.5 text-[#00d4aa] font-medium"><Database size={10} />Litescope</span>
+      <span className="text-[#30363d]">·</span>
+      <span className="text-[#484f58]">{toolLabels[tool]}</span>
       <div className="flex-1" />
-      <span className={`${kindCls} opacity-90`}>{msg.text}</span>
+      <span className={kindCls}>{msg.text}</span>
     </div>
   )
 }
@@ -495,8 +495,8 @@ function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: T
 
 function PanelHeader({ icon, title, meta }: { icon: React.ReactNode; title: string; meta?: React.ReactNode }) {
   return (
-    <div className="flex items-center h-[35px] bg-[#2d2d2d] border-b border-[#252525] px-3 gap-2 shrink-0">
-      <span className="text-[#007acc]">{icon}</span>
+    <div className="flex items-center h-[35px] bg-[#1c2128] border-b border-[#30363d] px-3 gap-2 shrink-0">
+      <span className="text-[#00d4aa]">{icon}</span>
       <span className="text-[12px] font-medium">{title}</span>
       {meta && <div className="ml-auto">{meta}</div>}
     </div>
@@ -505,7 +505,7 @@ function PanelHeader({ icon, title, meta }: { icon: React.ReactNode; title: stri
 
 function Toolbar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center h-[32px] bg-[#3c3c3c] border-b border-[#252525] px-2 gap-2 shrink-0">
+    <div className="flex items-center h-[32px] bg-[#161b22] border-b border-[#30363d] px-2 gap-2 shrink-0">
       {children}
     </div>
   )
@@ -520,27 +520,27 @@ function DbPicker({ label, path, onPick, onRecent, recent, removeRecent }: {
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 h-[22px] px-2 rounded-sm text-[12px] hover:bg-[#505050] transition-colors max-w-[260px]">
-        <FolderOpen size={11} className="text-[#858585] shrink-0" />
-        <span className="text-[#858585] shrink-0">{label}:</span>
-        <span className={`truncate ${name ? 'text-[#cccccc]' : 'text-[#585858]'}`}>{name ?? 'select…'}</span>
+        className="flex items-center gap-1.5 h-[22px] px-2 rounded-sm text-[12px] hover:bg-[#21262d] transition-colors max-w-[260px]">
+        <FolderOpen size={11} className="text-[#6e7681] shrink-0" />
+        <span className="text-[#6e7681] shrink-0">{label}:</span>
+        <span className={`truncate ${name ? 'text-[#e6edf3]' : 'text-[#484f58]'}`}>{name ?? 'select…'}</span>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-px bg-[#252526] border border-[#3c3c3c] shadow-2xl z-50 w-[280px]">
+          <div className="absolute top-full left-0 mt-px bg-[#161b22] border border-[#30363d] shadow-2xl z-50 w-[280px]">
             <button onClick={() => { onPick(); setOpen(false) }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#2a2d2e] text-[12px] border-b border-[#3c3c3c]">
-              <FolderOpen size={12} className="text-[#858585]" />Browse…
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#1c2128] text-[12px] border-b border-[#30363d]">
+              <FolderOpen size={12} className="text-[#6e7681]" />Browse…
             </button>
             {recent.length > 0 && <>
-              <div className="px-3 py-1 text-[10px] text-[#585858] uppercase tracking-wider">Recent</div>
+              <div className="px-3 py-1 text-[10px] text-[#484f58] uppercase tracking-wider">Recent</div>
               {recent.map(p => (
-                <div key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#2a2d2e] group">
-                  <Clock size={11} className="text-[#585858] shrink-0" />
-                  <button className="flex-1 text-left text-[12px] truncate text-[#cccccc]"
+                <div key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#1c2128] group">
+                  <Clock size={11} className="text-[#484f58] shrink-0" />
+                  <button className="flex-1 text-left text-[12px] truncate text-[#e6edf3]"
                     onClick={() => { onRecent(p); setOpen(false) }}>{p.split('/').pop()}</button>
-                  <button onClick={() => removeRecent(p)} className="opacity-0 group-hover:opacity-100 text-[#585858] hover:text-[#cccccc]">
+                  <button onClick={() => removeRecent(p)} className="opacity-0 group-hover:opacity-100 text-[#484f58] hover:text-[#e6edf3]">
                     <X size={11} /></button>
                 </div>
               ))}
@@ -559,20 +559,20 @@ function Btn({ children, onClick, disabled, variant = 'primary', small }: {
   const base = `flex items-center gap-1.5 rounded-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed`
   const size = small ? 'h-[20px] px-2 text-[11px]' : 'h-[22px] px-3 text-[12px]'
   const v = {
-    primary: 'bg-[#0e639c] hover:bg-[#1177bb] text-white',
-    ghost:   'bg-transparent hover:bg-[#3c3c3c] text-[#cccccc] border border-[#555]',
+    primary: 'bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14]',
+    ghost:   'bg-transparent hover:bg-[#161b22] text-[#e6edf3] border border-[#30363d]',
     danger:  'bg-[#6a1717] hover:bg-[#8a2020] text-[#f44747] border border-[#8a2020]',
   }[variant]
   return <button onClick={onClick} disabled={disabled} className={`${base} ${size} ${v}`}>{children}</button>
 }
 
 function Spinner() {
-  return <RefreshCw size={12} className="animate-spin text-[#007acc]" />
+  return <RefreshCw size={12} className="animate-spin text-[#00d4aa]" />
 }
 
 function EmptyState({ icon, text, sub }: { icon: React.ReactNode; text: string; sub?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#585858]">
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#484f58]">
       <div className="opacity-30">{icon}</div>
       <div className="text-[13px]">{text}</div>
       {sub && <div className="text-[11px] opacity-70">{sub}</div>}
@@ -620,9 +620,9 @@ function SubTab({ label, active, onClick, count }: { label: string; active: bool
   return (
     <button onClick={onClick}
       className={`h-full px-3 text-[12px] flex items-center gap-1.5 border-b-2 transition-colors
-        ${active ? 'border-[#007acc] text-[#cccccc] bg-[#1e1e1e]' : 'border-transparent text-[#858585] hover:text-[#cccccc]'}`}>
+        ${active ? 'border-[#00d4aa] text-[#e6edf3] bg-[#0d1117]' : 'border-transparent text-[#6e7681] hover:text-[#e6edf3]'}`}>
       {label}
-      {count != null && count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-[#3c3c3c] text-[10px] text-[#858585]">{count}</span>}
+      {count != null && count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-[#161b22] text-[10px] text-[#6e7681]">{count}</span>}
     </button>
   )
 }
@@ -676,7 +676,7 @@ function DiffView({ recent, addRecent, removeRecent, status, injectRef }: ViewPr
       <Toolbar>
         <DbPicker label="Before" path={oldPath} onPick={() => pick(setOldPath)}
           recent={recent} onRecent={p => { setOldPath(p); addRecent(p) }} removeRecent={removeRecent} />
-        <span className="text-[#585858] text-[11px]">→</span>
+        <span className="text-[#484f58] text-[11px]">→</span>
         <DbPicker label="After" path={newPath} onPick={() => pick(setNewPath)}
           recent={recent} onRecent={p => { setNewPath(p); addRecent(p) }} removeRecent={removeRecent} />
         <div className="flex-1" />
@@ -693,7 +693,7 @@ function DiffView({ recent, addRecent, removeRecent, status, injectRef }: ViewPr
           sub="Compare schemas, column changes, index changes, and row-level data diffs" />
       )}
       {loading && (
-        <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]">
+        <div className="flex items-center justify-center h-32 gap-2 text-[#6e7681] text-[12px]">
           <Spinner />Comparing databases…
         </div>
       )}
@@ -704,7 +704,7 @@ function DiffView({ recent, addRecent, removeRecent, status, injectRef }: ViewPr
             ? <OkPanel message="Databases are identical — no differences found" />
             : (
               <>
-                <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+                <div className="flex items-center h-[30px] bg-[#1c2128] border-b border-[#30363d] px-2 gap-1 shrink-0">
                   <SubTab label="Schema" count={schema.length} active={activeTab === 'schema'} onClick={() => setActiveTab('schema')} />
                   <SubTab label="Data" count={data.length} active={activeTab === 'data'} onClick={() => setActiveTab('data')} />
                   <div className="flex-1" />
@@ -732,7 +732,7 @@ function SchemaDiffTable({ rows }: { rows: any[] }) {
   return (
     <table className="w-full text-[12px]">
       <thead>
-        <tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+        <tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
           <th className="text-left px-4 py-1.5 w-6" />
           <th className="text-left px-3 py-1.5">Table</th>
           <th className="text-left px-3 py-1.5">Change</th>
@@ -755,9 +755,9 @@ function SchemaRow({ td }: { td: any }) {
   ]
   return (
     <>
-      <tr className={`border-b border-[#2d2d2d] hover:bg-[#2a2d2e] cursor-pointer ${td.Added ? 'bg-[#4ec9b0]/5' : td.Removed ? 'bg-[#f44747]/5' : ''}`}
+      <tr className={`border-b border-[#2d2d2d] hover:bg-[#1c2128] cursor-pointer ${td.Added ? 'bg-[#4ec9b0]/5' : td.Removed ? 'bg-[#f44747]/5' : ''}`}
         onClick={() => details.length && setExpanded(e => !e)}>
-        <td className="px-4 py-1.5 text-[#858585]">
+        <td className="px-4 py-1.5 text-[#6e7681]">
           {details.length > 0 && <ChevronRight size={12} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />}
         </td>
         <td className="px-3 py-1.5 font-mono">
@@ -768,12 +768,12 @@ function SchemaRow({ td }: { td: any }) {
           {td.Removed && <Badge label="REMOVED" color="red" />}
           {!td.Added && !td.Removed && <Badge label="MODIFIED" color="yellow" />}
         </td>
-        <td className="px-3 py-1.5 text-[#858585] text-[11px]">
+        <td className="px-3 py-1.5 text-[#6e7681] text-[11px]">
           {td.Added ? `${td.AddedColumns?.length ?? 0} columns` : td.Removed ? 'table removed' : `${details.length} changes`}
         </td>
       </tr>
       {expanded && details.map((d, i) => (
-        <tr key={i} className="border-b border-[#252525] bg-[#252526]/50">
+        <tr key={i} className="border-b border-[#30363d] bg-[#161b22]/50">
           <td /><td colSpan={3} className="px-3 py-1 font-mono text-[11px]">
             <span className={`${d.cls} opacity-60 mr-3`}>{d.sign}</span>
             <span className={d.cls}>{d.text}</span>
@@ -803,9 +803,9 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
   }
   const allCols = rows.length > 0 ? Object.keys(rows[0].New ?? rows[0].Old ?? {}) : []
   return (
-    <div className="border-b border-[#252525]">
-      <button onClick={load} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#2a2d2e] text-left">
-        <ChevronRight size={12} className={`text-[#858585] shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+    <div className="border-b border-[#30363d]">
+      <button onClick={load} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#1c2128] text-left">
+        <ChevronRight size={12} className={`text-[#6e7681] shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         <span className="font-mono text-[#9cdcfe]">{dd.Table}</span>
         <div className="flex gap-3 text-[11px] ml-2">
           {dd.Added > 0 && <span className="text-[#4ec9b0]">+{dd.Added}</span>}
@@ -814,12 +814,12 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-[#252525]">
-          {loading && <div className="flex items-center gap-2 px-6 py-2 text-[11px] text-[#858585]"><Spinner />Loading…</div>}
+        <div className="border-t border-[#30363d]">
+          {loading && <div className="flex items-center gap-2 px-6 py-2 text-[11px] text-[#6e7681]"><Spinner />Loading…</div>}
           {!loading && rows.length > 0 && (
             <div className="overflow-x-auto">
               <table className="text-[11px] font-mono w-full">
-                <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585]">
+                <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681]">
                   <th className="px-3 py-1 text-left w-12">st</th>
                   {allCols.map(c => <th key={c} className="px-3 py-1 text-left">{c}</th>)}
                 </tr></thead>
@@ -832,7 +832,7 @@ function DataDiffSection({ dd, oldPath, newPath, result }: { dd: any; oldPath: s
                       </td>
                       {allCols.map(col => {
                         const changed = row.Status === 'changed' && String(row.Old?.[col]) !== String(row.New?.[col])
-                        return <td key={col} className="px-3 py-1 max-w-[180px] truncate text-[#cccccc]">
+                        return <td key={col} className="px-3 py-1 max-w-[180px] truncate text-[#e6edf3]">
                           {changed
                             ? <><span className="text-[#f44747] line-through mr-1">{String(row.Old?.[col] ?? '')}</span><span className="text-[#4ec9b0]">{String(row.New?.[col] ?? '')}</span></>
                             : String((isRemoved ? row.Old : row.New)?.[col] ?? '')}
@@ -892,22 +892,22 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
       <Toolbar>
         <DbPicker label="Database" path={path} onPick={async () => { const p = await OpenFile(); if (p) open(p) }}
           recent={recent} onRecent={open} removeRecent={removeRecent} />
-        {schemaData && <span className="text-[#858585] text-[11px]">{tables.length} tables</span>}
+        {schemaData && <span className="text-[#6e7681] text-[11px]">{tables.length} tables</span>}
       </Toolbar>
       {error && <ErrPanel message={error} />}
       {!schemaData && !error && <EmptyState icon={<Table2 size={48} />} text="Drop a .db file here to explore" sub="Browse schema, inspect columns, query table data" />}
       {schemaData && (
         <div className="flex flex-1 overflow-hidden">
-          <div className="w-[180px] border-r border-[#252525] flex flex-col shrink-0 bg-[#252526]">
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[#858585] border-b border-[#252525]">Tables</div>
+          <div className="w-[180px] border-r border-[#30363d] flex flex-col shrink-0 bg-[#161b22]">
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[#6e7681] border-b border-[#30363d]">Tables</div>
             <div className="flex-1 overflow-y-auto">
               {tables.map((t: any) => (
                 <button key={t.Name} onClick={() => { setSelectedTable(t.Name); setTab('schema') }}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors
-                    ${selectedTable === t.Name ? 'bg-[#094771] text-white' : 'text-[#cccccc] hover:bg-[#2a2d2e]'}`}>
-                  <Table2 size={11} className="shrink-0 text-[#858585]" />
+                    ${selectedTable === t.Name ? 'bg-[#094771] text-white' : 'text-[#e6edf3] hover:bg-[#1c2128]'}`}>
+                  <Table2 size={11} className="shrink-0 text-[#6e7681]" />
                   <span className="truncate font-mono">{t.Name}</span>
-                  <span className="ml-auto text-[10px] text-[#585858]">{t.Columns?.length}</span>
+                  <span className="ml-auto text-[10px] text-[#484f58]">{t.Columns?.length}</span>
                 </button>
               ))}
             </div>
@@ -916,11 +916,11 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
             {!selectedTable && <EmptyState icon={<Table2 size={32} />} text="Select a table" />}
             {selTable && (
               <>
-                <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+                <div className="flex items-center h-[30px] bg-[#1c2128] border-b border-[#30363d] px-2 gap-1 shrink-0">
                   <SubTab label="Schema" active={tab === 'schema'} onClick={() => setTab('schema')} />
                   <SubTab label="Data" active={tab === 'data'} onClick={() => setTab('data')} />
                   <div className="flex-1" />
-                  <span className="text-[11px] text-[#585858] pr-1 font-mono">{selectedTable}</span>
+                  <span className="text-[11px] text-[#484f58] pr-1 font-mono">{selectedTable}</span>
                 </div>
                 <div className="flex-1 overflow-auto">
                   {tab === 'schema' && <TableInspector table={selTable} />}
@@ -939,7 +939,7 @@ function TableInspector({ table }: { table: any }) {
   return (
     <div>
       <table className="w-full text-[12px]">
-        <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+        <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
           <th className="text-left px-4 py-1.5">#</th>
           <th className="text-left px-3 py-1.5">Name</th>
           <th className="text-left px-3 py-1.5">Type</th>
@@ -947,24 +947,24 @@ function TableInspector({ table }: { table: any }) {
         </tr></thead>
         <tbody>
           {(table.Columns ?? []).map((c: any, i: number) => (
-            <tr key={c.Name} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
-              <td className="px-4 py-1.5 text-[#585858] font-mono">{i + 1}</td>
+            <tr key={c.Name} className="border-b border-[#2d2d2d] hover:bg-[#1c2128]">
+              <td className="px-4 py-1.5 text-[#484f58] font-mono">{i + 1}</td>
               <td className="px-3 py-1.5 font-mono text-[#9cdcfe]">
                 {c.Name}{c.PK === 1 && <span className="ml-1.5 text-[10px] px-1 border border-[#dcdcaa]/40 text-[#dcdcaa] rounded-sm font-sans">PK</span>}
               </td>
               <td className="px-3 py-1.5 font-mono text-[#4ec9b0]">{c.Type || 'ANY'}</td>
-              <td className="px-3 py-1.5 text-[#858585]">{c.NotNull ? 'NOT NULL' : ''}</td>
+              <td className="px-3 py-1.5 text-[#6e7681]">{c.NotNull ? 'NOT NULL' : ''}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {(table.Indexes ?? []).length > 0 && (
-        <div className="border-t border-[#252525]">
-          <div className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-[#858585] bg-[#252526] border-b border-[#252525]">Indexes</div>
+        <div className="border-t border-[#30363d]">
+          <div className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-[#6e7681] bg-[#161b22] border-b border-[#30363d]">Indexes</div>
           {table.Indexes.map((idx: any) => (
-            <div key={idx.Name} className="flex items-center gap-3 px-4 py-1.5 border-b border-[#2d2d2d] hover:bg-[#2a2d2e] font-mono text-[12px]">
-              <Hash size={11} className={idx.Unique ? 'text-[#dcdcaa]' : 'text-[#585858]'} />
-              <span className="text-[#cccccc]">{idx.Name}</span>
+            <div key={idx.Name} className="flex items-center gap-3 px-4 py-1.5 border-b border-[#2d2d2d] hover:bg-[#1c2128] font-mono text-[12px]">
+              <Hash size={11} className={idx.Unique ? 'text-[#dcdcaa]' : 'text-[#484f58]'} />
+              <span className="text-[#e6edf3]">{idx.Name}</span>
               {idx.Unique && <Badge label="UNIQUE" color="yellow" />}
             </div>
           ))}
@@ -985,31 +985,31 @@ function TableDataView({ path, table }: { path: string; table: string }) {
     QueryTable(path, table, PAGE, page * PAGE).then(setRows).catch(() => setRows(null)).finally(() => setLoading(false))
   }, [path, table, page])
 
-  if (loading) return <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#858585]"><Spinner />Loading…</div>
-  if (!rows) return <div className="px-4 py-3 text-[12px] text-[#585858]">Failed to load</div>
-  if (!rows.Rows?.length) return <div className="px-4 py-3 text-[12px] text-[#585858]">Table is empty</div>
+  if (loading) return <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#6e7681]"><Spinner />Loading…</div>
+  if (!rows) return <div className="px-4 py-3 text-[12px] text-[#484f58]">Failed to load</div>
+  if (!rows.Rows?.length) return <div className="px-4 py-3 text-[12px] text-[#484f58]">Table is empty</div>
   const totalPages = Math.ceil((rows.Total ?? 0) / PAGE)
   return (
     <div className="flex flex-col h-full">
       <div className="overflow-auto flex-1">
         <table className="text-[12px] font-mono w-full">
-          <thead><tr className="bg-[#252526] border-b border-[#3c3c3c] text-[#858585] text-[11px] sticky top-0">
+          <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
             {(rows.Columns ?? []).map((c: string) => <th key={c} className="text-left px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>)}
           </tr></thead>
           <tbody>{(rows.Rows ?? []).map((row: any[], i: number) => (
-            <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#2a2d2e]">
-              {row.map((cell, j) => <td key={j} className="px-3 py-1 text-[#cccccc] max-w-[200px] truncate whitespace-nowrap">
-                {cell === null ? <span className="text-[#585858] italic">NULL</span> : String(cell)}
+            <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#1c2128]">
+              {row.map((cell, j) => <td key={j} className="px-3 py-1 text-[#e6edf3] max-w-[200px] truncate whitespace-nowrap">
+                {cell === null ? <span className="text-[#484f58] italic">NULL</span> : String(cell)}
               </td>)}
             </tr>
           ))}</tbody>
         </table>
       </div>
       {totalPages > 1 && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#252525] bg-[#252526] text-[11px] text-[#858585] shrink-0">
-          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronLeft size={13} /></button>
+        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] shrink-0">
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronLeft size={13} /></button>
           <span>Page {page + 1} / {totalPages} · {rows.Total} rows</span>
-          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#cccccc]"><ChevronRight size={13} /></button>
+          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronRight size={13} /></button>
         </div>
       )}
     </div>
@@ -1057,13 +1057,13 @@ function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader icon={<ShieldCheck size={14} />} title="Integrity Check"
-        meta={<span className="text-[10px] text-[#858585]">PRAGMA integrity_check · schema match · row counts</span>} />
+        meta={<span className="text-[10px] text-[#6e7681]">PRAGMA integrity_check · schema match · row counts</span>} />
       <Toolbar>
         <DbPicker label="Backup" path={backupPath} onPick={() => pick(setBackupPath)}
           recent={recent} onRecent={p => { setBackupPath(p); addRecent(p) }} removeRecent={removeRecent} />
         <DbPicker label="Reference (Pro)" path={refPath} onPick={() => pick(setRefPath)}
           recent={recent} onRecent={p => { setRefPath(p); addRecent(p) }} removeRecent={removeRecent} />
-        <label className="flex items-center gap-1.5 text-[11px] text-[#858585] cursor-pointer ml-1">
+        <label className="flex items-center gap-1.5 text-[11px] text-[#6e7681] cursor-pointer ml-1">
           <input type="checkbox" checked={withData} onChange={e => setWithData(e.target.checked)} className="accent-[#007acc]" />
           Row counts (Pro)
         </label>
@@ -1082,12 +1082,12 @@ function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
       )}
 
       {loading && (
-        <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Running checks…</div>
+        <div className="flex items-center justify-center h-32 gap-2 text-[#6e7681] text-[12px]"><Spinner />Running checks…</div>
       )}
 
       {result && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <div className="text-[11px] text-[#858585] font-mono mb-3">{result.Path}</div>
+          <div className="text-[11px] text-[#6e7681] font-mono mb-3">{result.Path}</div>
 
           <CheckRow
             icon={result.IntegrityOK ? <CheckCircle2 size={14} className="text-[#4ec9b0]" /> : <AlertCircle size={14} className="text-[#f44747]" />}
@@ -1117,7 +1117,7 @@ function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
             >
               {result.Tables?.length > 0 && (
                 <table className="w-full text-[11px] font-mono mt-2">
-                  <thead><tr className="text-[#858585]">
+                  <thead><tr className="text-[#6e7681]">
                     <th className="text-left py-1">Table</th>
                     <th className="text-right py-1">Backup</th>
                     <th className="text-right py-1">Reference</th>
@@ -1126,8 +1126,8 @@ function CheckView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
                   <tbody>{result.Tables.map((t: any, i: number) => (
                     <tr key={i} className="border-t border-[#2d2d2d]">
                       <td className="py-1 text-[#9cdcfe]">{t.Name}</td>
-                      <td className="py-1 text-right text-[#cccccc]">{t.BackupRows}</td>
-                      <td className="py-1 text-right text-[#cccccc]">{t.RefRows || '—'}</td>
+                      <td className="py-1 text-right text-[#e6edf3]">{t.BackupRows}</td>
+                      <td className="py-1 text-right text-[#e6edf3]">{t.RefRows || '—'}</td>
                       <td className="py-1 text-right">
                         {t.RowsMatch == null ? '—' : t.RowsMatch ? <span className="text-[#4ec9b0]">✓</span> : <span className="text-[#dcdcaa]">!</span>}
                       </td>
@@ -1155,16 +1155,16 @@ function CheckRow({ icon, label, detail, ok, errors, children }: {
 }) {
   const [open, setOpen] = useState(!ok)
   return (
-    <div className={`rounded-sm border ${ok ? 'border-[#3c3c3c]' : 'border-[#f44747]/30'}`}>
+    <div className={`rounded-sm border ${ok ? 'border-[#30363d]' : 'border-[#f44747]/30'}`}>
       <button onClick={() => children && setOpen(o => !o)}
-        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${children ? 'cursor-pointer hover:bg-[#2a2d2e]' : ''}`}>
+        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${children ? 'cursor-pointer hover:bg-[#1c2128]' : ''}`}>
         {icon}
-        <span className="text-[12px] font-medium text-[#cccccc]">{label}</span>
-        <span className="text-[11px] text-[#858585] ml-1">{detail}</span>
-        {children && <ChevronRight size={12} className={`ml-auto text-[#585858] transition-transform ${open ? 'rotate-90' : ''}`} />}
+        <span className="text-[12px] font-medium text-[#e6edf3]">{label}</span>
+        <span className="text-[11px] text-[#6e7681] ml-1">{detail}</span>
+        {children && <ChevronRight size={12} className={`ml-auto text-[#484f58] transition-transform ${open ? 'rotate-90' : ''}`} />}
       </button>
       {open && errors?.map((e, i) => <div key={i} className="px-4 pb-2 text-[11px] text-[#f48771] font-mono">{e}</div>)}
-      {open && children && <div className="px-4 pb-3 border-t border-[#3c3c3c]">{children}</div>}
+      {open && children && <div className="px-4 pb-3 border-t border-[#30363d]">{children}</div>}
     </div>
   )
 }
@@ -1235,11 +1235,11 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader icon={<GitMerge size={14} />} title="Migration Studio"
-        meta={<span className="text-[10px] text-[#858585]">Generate · preview · apply with auto-backup</span>} />
+        meta={<span className="text-[10px] text-[#6e7681]">Generate · preview · apply with auto-backup</span>} />
       <Toolbar>
         <DbPicker label="From" path={fromPath} onPick={() => pick(setFromPath)}
           recent={recent} onRecent={p => { setFromPath(p); addRecent(p) }} removeRecent={removeRecent} />
-        <span className="text-[#585858] text-[11px]">→</span>
+        <span className="text-[#484f58] text-[11px]">→</span>
         <DbPicker label="Target schema" path={toPath} onPick={() => pick(setToPath)}
           recent={recent} onRecent={p => { setToPath(p); addRecent(p) }} removeRecent={removeRecent} />
         <div className="flex-1" />
@@ -1256,7 +1256,7 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
           sub="Litescope generates safe SQLite migration SQL with VACUUM INTO backup" />
       )}
 
-      {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Generating…</div>}
+      {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#6e7681] text-[12px]"><Spinner />Generating…</div>}
 
       {preview && (
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -1264,7 +1264,7 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 
           {applyResult && (
             <div className={`mx-4 mt-3 px-4 py-2.5 rounded-sm border text-[12px] flex items-center gap-2
-              ${applyResult.DryRun ? 'bg-[#252526] border-[#3c3c3c] text-[#858585]' : 'bg-[#1a3a1a] border-[#4ec9b0]/40 text-[#4ec9b0]'}`}>
+              ${applyResult.DryRun ? 'bg-[#161b22] border-[#30363d] text-[#6e7681]' : 'bg-[#1a3a1a] border-[#4ec9b0]/40 text-[#4ec9b0]'}`}>
               <CheckCircle2 size={13} />
               {applyResult.DryRun
                 ? `Dry run: ${applyResult.Executed} statement(s) validated — no changes made`
@@ -1272,8 +1272,8 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
             </div>
           )}
 
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-[#252525] shrink-0">
-            <span className="text-[11px] text-[#858585]">{preview.SQL.split('\n').filter((l: string) => l.trim() && !l.startsWith('--')).length} statements</span>
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[#30363d] shrink-0">
+            <span className="text-[11px] text-[#6e7681]">{preview.SQL.split('\n').filter((l: string) => l.trim() && !l.startsWith('--')).length} statements</span>
             <div className="flex-1" />
             <Btn variant="ghost" small onClick={saveSQL}><FileJson size={11} />Copy SQL</Btn>
             <Btn variant="ghost" small onClick={() => apply(true)} disabled={applying}>
@@ -1294,7 +1294,7 @@ function MigrateView({ recent, addRecent, removeRecent, status, injectRef }: Vie
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <pre className="text-[12px] font-mono text-[#cccccc] whitespace-pre-wrap leading-relaxed">
+            <pre className="text-[12px] font-mono text-[#e6edf3] whitespace-pre-wrap leading-relaxed">
               {preview.SQL.split('\n').map((line: string, i: number) => {
                 const isComment = line.trim().startsWith('--')
                 const isWarning = line.includes('WARNING')
@@ -1367,7 +1367,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader icon={<Activity size={14} />} title="Drift Monitor"
-        meta={<span className="text-[10px] text-[#858585]">snapshot · check · continuous watch</span>} />
+        meta={<span className="text-[10px] text-[#6e7681]">snapshot · check · continuous watch</span>} />
       <Toolbar>
         <DbPicker label="Database" path={dbPath} onPick={pickDb}
           recent={recent} onRecent={p => { setDbPath(p); addRecent(p) }} removeRecent={removeRecent} />
@@ -1377,7 +1377,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
         </Btn>
       </Toolbar>
 
-      <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+      <div className="flex items-center h-[30px] bg-[#1c2128] border-b border-[#30363d] px-2 gap-1 shrink-0">
         <SubTab label="Drift Check" active={tab === 'check'} onClick={() => setTab('check')} />
         <SubTab label="Watch" active={tab === 'watch'} onClick={() => setTab('watch')} />
         <SubTab label="Snapshot" active={tab === 'snapshot'} onClick={() => setTab('snapshot')} />
@@ -1387,11 +1387,11 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 
       {tab === 'watch' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex flex-col gap-2 px-4 py-3 bg-[#252526] border-b border-[#252525] shrink-0">
+          <div className="flex flex-col gap-2 px-4 py-3 bg-[#161b22] border-b border-[#30363d] shrink-0">
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-[#858585]">Interval:</span>
+              <span className="text-[11px] text-[#6e7681]">Interval:</span>
               <select value={watchInterval} onChange={e => setWatchInterval(Number(e.target.value))}
-                className="bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none">
+                className="bg-[#161b22] text-[#e6edf3] text-[12px] px-2 py-1 rounded-sm border border-[#30363d] outline-none">
                 <option value={10}>10s</option>
                 <option value={30}>30s</option>
                 <option value={60}>1m</option>
@@ -1415,12 +1415,12 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
               </span>}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#585858] shrink-0">Webhook:</span>
+              <span className="text-[11px] text-[#484f58] shrink-0">Webhook:</span>
               <input
                 value={watchWebhook}
                 onChange={e => setWatchWebhook(e.target.value)}
                 placeholder="Slack or Discord webhook URL (optional)"
-                className="flex-1 bg-[#1e1e1e] border border-[#3c3c3c] text-[#cccccc] text-[11px] px-2 py-1 rounded-sm outline-none focus:border-[#007acc] placeholder-[#484848] font-mono"
+                className="flex-1 bg-[#0d1117] border border-[#30363d] text-[#e6edf3] text-[11px] px-2 py-1 rounded-md outline-none focus:border-[#00d4aa] placeholder-[#484848] font-mono"
               />
             </div>
           </div>
@@ -1442,7 +1442,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
                         <div className={`text-[12px] font-medium ${ev.kind === 'ok' ? 'text-[#4ec9b0]' : ev.kind === 'drift' ? 'text-[#dcdcaa]' : 'text-[#f44747]'}`}>
                           {ev.message}
                         </div>
-                        <div className="text-[10px] text-[#585858] mt-0.5 font-mono">{new Date(ev.at).toLocaleTimeString()}</div>
+                        <div className="text-[10px] text-[#484f58] mt-0.5 font-mono">{new Date(ev.at).toLocaleTimeString()}</div>
                       </div>
                     </div>
                   ))}
@@ -1455,15 +1455,15 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
       {tab === 'snapshot' && (
         <div className="flex-1 overflow-y-auto p-4">
           <div className="max-w-lg">
-            <p className="text-[12px] text-[#858585] mb-4 leading-relaxed">
+            <p className="text-[12px] text-[#6e7681] mb-4 leading-relaxed">
               Capture the current schema as a baseline. Run this once after a confirmed-good deployment, then use Drift Check to detect unexpected changes.
             </p>
             {snapInfo && (
-              <div className="bg-[#252526] border border-[#3c3c3c] rounded-sm p-4 mb-4 space-y-2 text-[12px]">
-                <div className="flex gap-2"><span className="text-[#858585] w-20">Source</span><span className="text-[#cccccc] font-mono truncate">{snapInfo.Source}</span></div>
-                <div className="flex gap-2"><span className="text-[#858585] w-20">Tables</span><span className="text-[#4ec9b0]">{snapInfo.TableCount}</span></div>
-                <div className="flex gap-2"><span className="text-[#858585] w-20">Saved at</span><span className="text-[#cccccc]">{new Date(snapInfo.CapturedAt).toLocaleString()}</span></div>
-                <div className="flex gap-2"><span className="text-[#858585] w-20">File</span><span className="text-[#569cd6] font-mono truncate">{baselinePath.split('/').pop()}</span></div>
+              <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-4 mb-4 space-y-2 text-[12px]">
+                <div className="flex gap-2"><span className="text-[#6e7681] w-20">Source</span><span className="text-[#e6edf3] font-mono truncate">{snapInfo.Source}</span></div>
+                <div className="flex gap-2"><span className="text-[#6e7681] w-20">Tables</span><span className="text-[#4ec9b0]">{snapInfo.TableCount}</span></div>
+                <div className="flex gap-2"><span className="text-[#6e7681] w-20">Saved at</span><span className="text-[#e6edf3]">{new Date(snapInfo.CapturedAt).toLocaleString()}</span></div>
+                <div className="flex gap-2"><span className="text-[#6e7681] w-20">File</span><span className="text-[#569cd6] font-mono truncate">{baselinePath.split('/').pop()}</span></div>
               </div>
             )}
             {!snapInfo && <EmptyState icon={<Save size={32} />} text="Select a database above and click Snapshot" />}
@@ -1473,12 +1473,12 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 
       {tab === 'check' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 bg-[#252526] border-b border-[#252525] shrink-0">
-            <span className="text-[11px] text-[#858585]">Baseline:</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-[#161b22] border-b border-[#30363d] shrink-0">
+            <span className="text-[11px] text-[#6e7681]">Baseline:</span>
             <button onClick={pickBaseline}
-              className="flex items-center gap-1.5 text-[12px] hover:text-[#cccccc] transition-colors truncate max-w-[300px]">
-              <FileJson size={11} className="text-[#858585]" />
-              <span className={baselinePath ? 'text-[#569cd6]' : 'text-[#585858]'}>
+              className="flex items-center gap-1.5 text-[12px] hover:text-[#e6edf3] transition-colors truncate max-w-[300px]">
+              <FileJson size={11} className="text-[#6e7681]" />
+              <span className={baselinePath ? 'text-[#569cd6]' : 'text-[#484f58]'}>
                 {baselinePath ? baselinePath.split('/').pop() : 'select baseline.json…'}
               </span>
             </button>
@@ -1494,11 +1494,11 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
                 text="Select database + baseline to check for drift"
                 sub="Exit code 1 on drift — use in CI/CD pipelines" />
             )}
-            {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Checking for drift…</div>}
+            {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#6e7681] text-[12px]"><Spinner />Checking for drift…</div>}
 
             {checkResult && (
               <div className="p-4 space-y-3">
-                <div className="text-[11px] text-[#858585] font-mono">
+                <div className="text-[11px] text-[#6e7681] font-mono">
                   Baseline: {new Date(checkResult.baseline_at).toLocaleString()} · Checked: {new Date(checkResult.checked_at).toLocaleString()}
                 </div>
 
@@ -1509,7 +1509,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
                 </div>
 
                 {checkResult.has_drift && checkResult.changes?.length > 0 && (
-                  <div className="bg-[#252526] border border-[#3c3c3c] rounded-sm overflow-hidden">
+                  <div className="bg-[#161b22] border border-[#30363d] rounded-sm overflow-hidden">
                     {checkResult.changes.map((td: any, i: number) => (
                       <div key={i} className="border-b border-[#2d2d2d] last:border-0 px-4 py-2.5">
                         <div className="flex items-center gap-2 mb-1">
@@ -1521,7 +1521,7 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
                         {[...(td.AddedColumns ?? []).map((c: any) => `+ column ${c.Name} ${c.Type}`),
                           ...(td.RemovedColumns ?? []).map((c: any) => `- column ${c.Name}`),
                           ...(td.ChangedColumns ?? []).map((c: any) => `~ column ${c.Name}: ${c.Old.Type} → ${c.New.Type}`),
-                        ].map((line, j) => <div key={j} className="text-[11px] font-mono text-[#858585] ml-2">{line}</div>)}
+                        ].map((line, j) => <div key={j} className="text-[11px] font-mono text-[#6e7681] ml-2">{line}</div>)}
                       </div>
                     ))}
                   </div>
@@ -1592,35 +1592,35 @@ function FleetView({ status }: ViewProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader icon={<Layers size={14} />} title="Fleet"
-        meta={<span className="text-[10px] text-[#858585]">Turso &amp; Cloudflare D1 — parallel ops</span>} />
+        meta={<span className="text-[10px] text-[#6e7681]">Turso &amp; Cloudflare D1 — parallel ops</span>} />
 
-      <div className="shrink-0 bg-[#252526] border-b border-[#252525] px-4 py-3 space-y-2">
+      <div className="shrink-0 bg-[#161b22] border-b border-[#30363d] px-4 py-3 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#858585] w-16">Provider</span>
+          <span className="text-[11px] text-[#6e7681] w-16">Provider</span>
           <button onClick={() => setProvider('turso')}
-            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'turso' ? 'border-[#4ec9b0] text-[#4ec9b0] bg-[#4ec9b0]/10' : 'border-[#3c3c3c] text-[#858585] hover:border-[#555]'}`}>
+            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'turso' ? 'border-[#4ec9b0] text-[#4ec9b0] bg-[#4ec9b0]/10' : 'border-[#30363d] text-[#6e7681] hover:border-[#30363d]'}`}>
             Turso
           </button>
           <button onClick={() => setProvider('d1')}
-            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'd1' ? 'border-[#dcdcaa] text-[#dcdcaa] bg-[#dcdcaa]/10' : 'border-[#3c3c3c] text-[#858585] hover:border-[#555]'}`}>
+            className={`px-3 py-1 text-[12px] rounded-sm border transition-colors ${provider === 'd1' ? 'border-[#dcdcaa] text-[#dcdcaa] bg-[#dcdcaa]/10' : 'border-[#30363d] text-[#6e7681] hover:border-[#30363d]'}`}>
             D1
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#858585] w-16">{provider === 'turso' ? 'Org' : 'Account'}</span>
+          <span className="text-[11px] text-[#6e7681] w-16">{provider === 'turso' ? 'Org' : 'Account'}</span>
           <input value={org} onChange={e => setOrg(e.target.value)} placeholder={provider === 'turso' ? 'my-org' : 'cf-account-id'}
-            className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+            className="flex-1 bg-[#161b22] text-[#e6edf3] text-[12px] px-2 py-1 rounded-sm border border-[#30363d] outline-none focus:border-[#00d4aa] font-mono" />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#858585] w-16">API Token</span>
+          <span className="text-[11px] text-[#6e7681] w-16">API Token</span>
           <input value={token} onChange={e => setToken(e.target.value)} type="password" placeholder="platform API token"
-            className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+            className="flex-1 bg-[#161b22] text-[#e6edf3] text-[12px] px-2 py-1 rounded-sm border border-[#30363d] outline-none focus:border-[#00d4aa] font-mono" />
         </div>
         {provider === 'turso' && (
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#858585] w-16">DB Token</span>
+            <span className="text-[11px] text-[#6e7681] w-16">DB Token</span>
             <input value={dbToken} onChange={e => setDbToken(e.target.value)} type="password" placeholder="group auth token"
-              className="flex-1 bg-[#3c3c3c] text-[#cccccc] text-[12px] px-2 py-1 rounded-sm border border-[#555] outline-none focus:border-[#007acc] font-mono" />
+              className="flex-1 bg-[#161b22] text-[#e6edf3] text-[12px] px-2 py-1 rounded-sm border border-[#30363d] outline-none focus:border-[#00d4aa] font-mono" />
           </div>
         )}
         <div className="flex gap-2 pt-1">
@@ -1641,7 +1641,7 @@ function FleetView({ status }: ViewProps) {
       {error && <ErrPanel message={error} />}
 
       {databases.length > 0 && (
-        <div className="flex items-center h-[30px] bg-[#2d2d2d] border-b border-[#252525] px-2 gap-1 shrink-0">
+        <div className="flex items-center h-[30px] bg-[#1c2128] border-b border-[#30363d] px-2 gap-1 shrink-0">
           <SubTab label={`Databases (${databases.length})`} active={tab === 'discover'} onClick={() => setTab('discover')} />
           {results.length > 0 && <SubTab label="Check Results" active={tab === 'check'} onClick={() => setTab('check')} />}
         </div>
@@ -1652,18 +1652,18 @@ function FleetView({ status }: ViewProps) {
           <EmptyState icon={<Layers size={36} />} text="No databases discovered yet"
             sub="Enter your Turso org or D1 account credentials above and click Discover" />
         )}
-        {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#858585] text-[12px]"><Spinner />Working…</div>}
+        {loading && <div className="flex items-center justify-center h-32 gap-2 text-[#6e7681] text-[12px]"><Spinner />Working…</div>}
 
         {tab === 'discover' && databases.length > 0 && !loading && (
           <div className="divide-y divide-[#252525]">
             {databases.map((db, i) => {
               const snap = snapResults.find(r => r.database === db.name)
               return (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2a2d2e]">
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1c2128]">
                   <Database size={13} className="text-[#569cd6] shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12px] text-[#cccccc] font-medium">{db.name}</div>
-                    <div className="text-[10px] text-[#585858] font-mono truncate">{db.dsn}</div>
+                    <div className="text-[12px] text-[#e6edf3] font-medium">{db.name}</div>
+                    <div className="text-[10px] text-[#484f58] font-mono truncate">{db.dsn}</div>
                   </div>
                   {snap && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-sm border ${snap.error ? 'border-[#f44747]/30 text-[#f44747]' : 'border-[#4ec9b0]/30 text-[#4ec9b0]'}`}>
@@ -1671,7 +1671,7 @@ function FleetView({ status }: ViewProps) {
                     </span>
                   )}
                   {db.tags?.map(t => (
-                    <span key={t} className="text-[9px] px-1 border border-[#3c3c3c] text-[#585858] rounded-sm">{t}</span>
+                    <span key={t} className="text-[9px] px-1 border border-[#30363d] text-[#484f58] rounded-sm">{t}</span>
                   ))}
                 </div>
               )
@@ -1681,30 +1681,30 @@ function FleetView({ status }: ViewProps) {
 
         {tab === 'check' && results.length > 0 && !loading && (
           <div>
-            <div className="flex items-center gap-4 px-4 py-2 bg-[#252526] border-b border-[#252525] text-[11px]">
+            <div className="flex items-center gap-4 px-4 py-2 bg-[#161b22] border-b border-[#30363d] text-[11px]">
               {(['ok','drift','no-baseline','error'] as const).map(s => {
                 const count = results.filter(r => r.state === s).length
                 if (!count) return null
-                const color = s === 'ok' ? 'text-[#4ec9b0]' : s === 'drift' ? 'text-[#dcdcaa]' : s === 'error' ? 'text-[#f44747]' : 'text-[#585858]'
+                const color = s === 'ok' ? 'text-[#4ec9b0]' : s === 'drift' ? 'text-[#dcdcaa]' : s === 'error' ? 'text-[#f44747]' : 'text-[#484f58]'
                 return <span key={s} className={color}>{count} {s}</span>
               })}
             </div>
             <div className="divide-y divide-[#252525]">
               {results.map((r, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2a2d2e]">
-                  <span className={`text-[14px] ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#585858]' : 'text-[#f44747]'}`}>
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1c2128]">
+                  <span className={`text-[14px] ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#484f58]' : 'text-[#f44747]'}`}>
                     {r.state === 'ok' ? '●' : r.state === 'drift' ? '▲' : r.state === 'no-baseline' ? '○' : '✗'}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12px] text-[#cccccc]">{r.database}</div>
+                    <div className="text-[12px] text-[#e6edf3]">{r.database}</div>
                     {r.error && <div className="text-[10px] text-[#f44747] truncate">{r.error}</div>}
                     {r.state === 'drift' && <div className="text-[10px] text-[#dcdcaa]">{r.changes} change(s) detected</div>}
-                    {r.state === 'no-baseline' && <div className="text-[10px] text-[#585858]">run Snapshot All first</div>}
+                    {r.state === 'no-baseline' && <div className="text-[10px] text-[#484f58]">run Snapshot All first</div>}
                   </div>
-                  <span className={`text-[11px] font-medium ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#585858]' : 'text-[#f44747]'}`}>
+                  <span className={`text-[11px] font-medium ${r.state === 'ok' ? 'text-[#4ec9b0]' : r.state === 'drift' ? 'text-[#dcdcaa]' : r.state === 'no-baseline' ? 'text-[#484f58]' : 'text-[#f44747]'}`}>
                     {r.state}
                   </span>
-                  <span className="text-[10px] text-[#585858]">{r.duration_ms}ms</span>
+                  <span className="text-[10px] text-[#484f58]">{r.duration_ms}ms</span>
                 </div>
               ))}
             </div>
