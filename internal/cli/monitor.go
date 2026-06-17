@@ -21,8 +21,7 @@ func cmdMonitor() *cobra.Command {
 		Long: `Monitor detects unexpected schema changes in your production databases.
 
   Free:  snapshot, check (one-shot)
-  Pro:   watch (continuous), webhook alerts, --save-report
-  Cloud: history (drift timeline), team alerts`,
+  Pro:   watch (continuous), webhook alerts, --save-report, history (drift timeline)`,
 	}
 	cmd.AddCommand(cmdMonitorSnapshot())
 	cmd.AddCommand(cmdMonitorCheck())
@@ -192,7 +191,7 @@ Examples:
   litescope monitor watch d1://TOKEN@ACC/prod --baseline baseline.json --webhook https://hooks.slack.com/...
 
   Set license: export LITESCOPE_LICENSE=lsc_pro_<key>
-  Get license: https://github.com/croc100/Litescope#pricing`,
+  Get license: https://litescope-site.pages.dev/#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// ── License gate ──────────────────────────────────────
@@ -289,7 +288,7 @@ func cmdMonitorHistory() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "history <report.jsonl>",
-		Short: "Show drift history from saved reports [Cloud]",
+		Short: "Show drift history from saved reports (Pro)",
 		Long: `Display a timeline of past drift checks from a JSONL report file.
 Build the report with: litescope monitor check --save-report report.jsonl (Pro)
 
@@ -298,7 +297,7 @@ Examples:
   litescope monitor history reports/drift.jsonl --last 10
   litescope monitor history reports/drift.jsonl --format json
 
-  Get Cloud: https://github.com/croc100/Litescope#pricing`,
+  Get Pro: https://litescope-site.pages.dev/#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := license.RequirePro(); err != nil {

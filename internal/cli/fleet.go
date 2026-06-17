@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/spf13/cobra"
@@ -15,23 +16,217 @@ import (
 func cmdFleet() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fleet",
-		Short: "Manage many databases at once: discover, baseline, drift-check (Cloud)",
+		Short: "Manage many databases at once: discover, baseline, drift-check (Pro)",
 		Long: `Fleet operates on every SQLite database in a Turso org or Cloudflare D1
 account as a single unit.
 
-  fleet discover  — list all databases and write a fleet config
-  fleet snapshot  — capture baselines for the whole fleet in parallel
-  fleet check     — detect schema drift across the whole fleet in parallel
-  fleet status    — show the configured fleet
+  fleet discover     — list all databases and write a fleet config
+  fleet snapshot     — capture baselines for the whole fleet in parallel
+  fleet check        — detect schema drift across the whole fleet in parallel
+  fleet fingerprint  — cluster the fleet by schema to reveal how many you run
+  fleet status       — show the configured fleet
 
-Fleet is a Cloud feature ($49/mo).`,
+Fleet is a Pro feature.`,
 	}
 	cmd.AddCommand(cmdFleetDiscover())
 	cmd.AddCommand(cmdFleetSnapshot())
 	cmd.AddCommand(cmdFleetCheck())
+	cmd.AddCommand(cmdFleetFingerprint())
 	cmd.AddCommand(cmdFleetStatus())
 	cmd.AddCommand(cmdFleetMigrate())
 	return cmd
+}
+
+// ── fingerprint ─────────────────────────────────────────────────────────────────
+
+func cmdFleetFingerprint() *cobra.Command {
+	var configPath, tag, format string
+	var concurrency int
+
+	cmd := &cobra.Command{
+		Use:   "fingerprint",
+		Short: "Cluster the fleet by schema — reveal how many distinct schemas you actually run",
+		Long: `Read every database's live schema in parallel and group identical schemas
+into clusters. You may think you run one schema; fingerprint shows the truth.
+
+The largest cluster is treated as canonical. Every other cluster is reported
+with a diff describing exactly how it drifted from canonical — a missed
+migration, a hotfix residue column, a stale zombie database.
+
+  litescope fleet fingerprint
+  litescope fleet fingerprint --tag group:prod
+  litescope fleet fingerprint --format json
+
+Exit code is 1 when more than one distinct schema is found or any database is
+unreachable — drop it into CI to enforce fleet uniformity.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+
+			report := fleet.Fingerprint(dbs, concurrency)
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
+			} else {
+				printFingerprintReport(cfg, report)
+			}
+
+			if len(report.Clusters) > 1 || len(report.Unreachable) > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
+	return cmd
+}
+
+func printFingerprintReport(cfg *fleet.Config, report *fleet.FingerprintReport) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	distinct := len(report.Clusters)
+	total := report.Total + len(report.Unreachable)
+
+	fmt.Printf("\n  Fleet: %s · %d database(s) · %s\n\n",
+		styleBold.Render(name), total,
+		distinctSummary(distinct, len(report.Unreachable)))
+
+	// Bar scale: longest bar = the largest cluster.
+	const barWidth = 18
+	maxCount := 0
+	for _, c := range report.Clusters {
+		if c.Count > maxCount {
+			maxCount = c.Count
+		}
+	}
+
+	for _, c := range report.Clusters {
+		bar := renderBar(c.Count, maxCount, barWidth)
+		label := fingerprintLabel(c)
+		countStr := fmt.Sprintf("%6d", c.Count)
+
+		var barStyled, labelStyled string
+		if c.IsCanonical {
+			barStyled = styleOK.Render(bar)
+			labelStyled = styleOK.Render(label)
+		} else {
+			barStyled = styleWarn.Render(bar)
+			labelStyled = styleWarn.Render(label)
+		}
+		fmt.Printf("  %s  %s  %s\n", barStyled, styleBold.Render(countStr), labelStyled)
+	}
+
+	if len(report.Unreachable) > 0 {
+		bar := renderBar(len(report.Unreachable), maxCount, barWidth)
+		fmt.Printf("  %s  %s  %s\n",
+			styleErr.Render(bar),
+			styleBold.Render(fmt.Sprintf("%6d", len(report.Unreachable))),
+			styleErr.Render("unreachable / corrupted"))
+	}
+
+	fmt.Println()
+
+	if distinct <= 1 && len(report.Unreachable) == 0 {
+		fmt.Printf("  %s  Fleet is uniform — every database shares one schema.\n\n", styleOK.Render("✓"))
+		return
+	}
+
+	// Detail: how each non-canonical cluster differs from canonical.
+	for _, c := range report.Clusters {
+		if c.IsCanonical {
+			continue
+		}
+		fmt.Printf("  %s  %s  %s\n",
+			styleWarn.Render("▲"),
+			styleBold.Render("schema "+c.ID),
+			styleDim.Render(fmt.Sprintf("%d database(s) · differs from canonical:", c.Count)))
+		for _, line := range fingerprintDriftLines(c.Drift) {
+			fmt.Printf("        %s\n", line)
+		}
+		fmt.Printf("        %s\n", styleDim.Render("e.g. "+sampleMembers(c.Members)))
+		fmt.Println()
+	}
+}
+
+func distinctSummary(distinct, unreachable int) string {
+	if distinct <= 1 && unreachable == 0 {
+		return styleOK.Render("1 schema")
+	}
+	s := styleWarn.Render(fmt.Sprintf("%d distinct schemas", distinct))
+	if unreachable > 0 {
+		s += styleDim.Render(" · ") + styleErr.Render(fmt.Sprintf("%d unreachable", unreachable))
+	}
+	return s
+}
+
+func fingerprintLabel(c fleet.FingerprintCluster) string {
+	if c.IsCanonical {
+		return fmt.Sprintf("schema %s  (canonical)", c.ID)
+	}
+	return fmt.Sprintf("schema %s", c.ID)
+}
+
+func renderBar(count, max, width int) string {
+	if max <= 0 {
+		return strings.Repeat("░", width)
+	}
+	filled := count * width / max
+	if filled == 0 && count > 0 {
+		filled = 1
+	}
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+}
+
+func fingerprintDriftLines(drift []diff.TableDiff) []string {
+	var lines []string
+	for _, td := range drift {
+		switch {
+		case td.Added:
+			// Present in this cluster, absent from canonical → canonical is missing it,
+			// i.e. this cluster has an EXTRA table relative to canonical.
+			lines = append(lines, fmt.Sprintf("%s extra table %s", styleOK.Render("+"), td.Name))
+		case td.Removed:
+			lines = append(lines, fmt.Sprintf("%s missing table %s", styleErr.Render("-"), td.Name))
+		default:
+			for _, c := range td.AddedColumns {
+				lines = append(lines, fmt.Sprintf("%s %s.%s extra column", styleOK.Render("+"), td.Name, c.Name))
+			}
+			for _, c := range td.RemovedColumns {
+				lines = append(lines, fmt.Sprintf("%s %s.%s missing column", styleErr.Render("-"), td.Name, c.Name))
+			}
+			for _, c := range td.ChangedColumns {
+				lines = append(lines, fmt.Sprintf("%s %s.%s type %s→%s",
+					styleWarn.Render("~"), td.Name, c.Name, c.Old.Type, c.New.Type))
+			}
+		}
+	}
+	if len(lines) == 0 {
+		lines = append(lines, styleDim.Render("(index-only difference)"))
+	}
+	return lines
+}
+
+func sampleMembers(members []string) string {
+	const max = 3
+	if len(members) <= max {
+		return strings.Join(members, ", ")
+	}
+	return strings.Join(members[:max], ", ") + fmt.Sprintf(", +%d more", len(members)-max)
 }
 
 // ── migrate ───────────────────────────────────────────────────────────────────
