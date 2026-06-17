@@ -7,9 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/license"
+	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -32,9 +34,177 @@ Fleet is a Pro feature.`,
 	cmd.AddCommand(cmdFleetSnapshot())
 	cmd.AddCommand(cmdFleetCheck())
 	cmd.AddCommand(cmdFleetFingerprint())
+	cmd.AddCommand(cmdFleetConverge())
 	cmd.AddCommand(cmdFleetStatus())
 	cmd.AddCommand(cmdFleetMigrate())
 	return cmd
+}
+
+// ── converge ────────────────────────────────────────────────────────────────────
+
+func cmdFleetConverge() *cobra.Command {
+	var (
+		configPath, tag, format, backupDir, to string
+		dryRun, noBackup, yes, force            bool
+		canary, concurrency                     int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "converge",
+		Short: "Bring every drifted database back to the canonical schema",
+		Long: `Close the loop: fingerprint the fleet, then generate and apply the migration
+that converges every drifted database onto one canonical schema.
+
+The canonical schema is the largest cluster by default, or a reference you name
+with --to (a local file or DSN). Each drifted cluster gets its own convergence
+SQL — a missed migration is re-applied, a hotfix residue column is removed.
+
+Always dry-run first — it validates the convergence against every database
+(apply + rollback) without committing, so you see every failure at once:
+
+  litescope fleet converge --dry-run
+  litescope fleet converge --to canonical.db --dry-run
+
+Then converge for real. Use --canary to fix the first N databases and stop:
+
+  litescope fleet converge --canary 5
+  litescope fleet converge                       # the whole fleet
+
+Convergence that drops a column or table is destructive and refused unless
+--force is given.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+
+			var canonical *schema.Schema
+			if to != "" {
+				canonical, err = loadSchemaFromSource(to)
+				if err != nil {
+					return fmt.Errorf("loading canonical schema from %s: %w", to, err)
+				}
+			}
+
+			plan, err := fleet.PlanConvergence(dbs, canonical, concurrency)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(plan); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			printConvergePlan(cfg, plan)
+
+			if plan.TotalToConverge == 0 {
+				return nil
+			}
+			if plan.HasDestructive() && !force {
+				fmt.Printf("  %s  Convergence drops a column or table on some databases.\n", styleWarn.Render("!"))
+				fmt.Printf("      Re-run with --force to proceed.\n\n")
+				return fmt.Errorf("aborted: destructive convergence (use --force to override)")
+			}
+
+			if !dryRun && !yes {
+				action := fmt.Sprintf("converge %d database(s) onto schema %s", plan.TotalToConverge, plan.CanonicalID)
+				if canary > 0 {
+					action = fmt.Sprintf("converge the first %d of %d database(s) onto schema %s", canary, plan.TotalToConverge, plan.CanonicalID)
+				}
+				if !confirm(fmt.Sprintf("About to %s. Continue?", action)) {
+					fmt.Println("  Aborted.")
+					return nil
+				}
+			}
+
+			report := fleet.Converge(plan, fleet.RolloutOptions{
+				DryRun:    dryRun,
+				Canary:    canary,
+				BackupDir: backupDir,
+				NoBackup:  noBackup,
+			})
+			printRolloutReport(cfg, report)
+
+			if _, failed, _ := report.Counts(); failed > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&to, "to", "", "canonical schema source (local file or DSN); default: largest cluster")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json (plan only)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate convergence against every database without committing")
+	cmd.Flags().IntVar(&canary, "canary", 0, "converge the first N databases then stop")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "directory for local backups (default: alongside each DB)")
+	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip local backups (not recommended)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVar(&force, "force", false, "proceed even when convergence is destructive")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections for fingerprinting (default 8)")
+	return cmd
+}
+
+func loadSchemaFromSource(src string) (*schema.Schema, error) {
+	conn, err := connector.Open(src)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return conn.Schema()
+}
+
+func printConvergePlan(cfg *fleet.Config, plan *fleet.ConvergePlan) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	fmt.Printf("\n  Convergence plan: %s → canonical schema %s\n\n",
+		styleBold.Render(name), styleOK.Render(plan.CanonicalID))
+
+	fmt.Printf("  %s  %d database(s) already canonical\n", styleOK.Render("✓"), plan.AlreadyOK)
+	if len(plan.Unreachable) > 0 {
+		fmt.Printf("  %s  %d database(s) unreachable — cannot converge\n",
+			styleErr.Render("✗"), len(plan.Unreachable))
+	}
+	fmt.Println()
+
+	if plan.TotalToConverge == 0 {
+		if len(plan.Unreachable) == 0 {
+			fmt.Printf("  %s  Fleet is already uniform — nothing to converge.\n\n", styleOK.Render("✓"))
+		} else {
+			fmt.Printf("  %s  No reachable database needs convergence.\n\n", styleOK.Render("✓"))
+		}
+		return
+	}
+
+	for _, cp := range plan.Clusters {
+		marker := styleWarn.Render("▲")
+		tag := ""
+		if cp.Destructive {
+			marker = styleErr.Render("✗")
+			tag = "  " + styleErr.Render("[destructive]")
+		}
+		fmt.Printf("  %s  %s  %s%s\n",
+			marker,
+			styleBold.Render("schema "+cp.ClusterID),
+			styleDim.Render(fmt.Sprintf("%d database(s) · %d statement(s) to reach canonical:", len(cp.Members), cp.Statements)),
+			tag)
+		for _, line := range fingerprintDriftLines(cp.Drift) {
+			fmt.Printf("        %s\n", line)
+		}
+		fmt.Printf("        %s\n", styleDim.Render("e.g. "+sampleMembers(cp.MemberNames)))
+		fmt.Println()
+	}
 }
 
 // ── fingerprint ─────────────────────────────────────────────────────────────────
