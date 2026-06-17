@@ -29,6 +29,7 @@ account as a single unit.
   fleet fingerprint  — cluster the fleet by schema to reveal how many you run
   fleet converge     — bring every drifted database back to canonical
   fleet health       — triage operational faults (corruption, WAL bloat, bloat)
+  fleet recover      — restore faulted databases from backups; quarantine the rest
   fleet migrate      — roll one migration out across the fleet, staged
   fleet status       — show the configured fleet
 
@@ -40,9 +41,161 @@ Fleet is a Pro feature.`,
 	cmd.AddCommand(cmdFleetFingerprint())
 	cmd.AddCommand(cmdFleetConverge())
 	cmd.AddCommand(cmdFleetHealth())
+	cmd.AddCommand(cmdFleetRecover())
 	cmd.AddCommand(cmdFleetStatus())
 	cmd.AddCommand(cmdFleetMigrate())
 	return cmd
+}
+
+// ── recover ─────────────────────────────────────────────────────────────────
+
+func cmdFleetRecover() *cobra.Command {
+	var configPath, tag, format, backupDir string
+	var dryRun, deep, noQuarantine, yes bool
+
+	cmd := &cobra.Command{
+		Use:   "recover",
+		Short: "Restore faulted databases from backups; quarantine the unrecoverable",
+		Long: `Close the incident loop. Triage the fleet and, for every critically faulted
+database (corrupt or unreachable), restore it from its most recent backup —
+the VACUUM INTO backup that 'migrate apply' already creates.
+
+Backups are verified healthy before use; if a database has no healthy backup it
+is quarantined and excluded from all future fleet operations until cleared.
+
+Always dry-run first to see the plan:
+
+  litescope fleet recover --dry-run
+  litescope fleet recover --backup-dir ./backups --dry-run
+
+Then recover for real:
+
+  litescope fleet recover
+  litescope fleet recover --no-quarantine    # restore only; never quarantine
+
+Bloat/warning issues are not recovery targets — use 'fleet health' to find
+VACUUM candidates. Recovery applies to local files; a faulted remote database
+is reported as needing manual recovery.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+
+			report := fleet.Recover(dbs, fleet.RecoverOptions{
+				BackupDir:  backupDir,
+				DryRun:     dryRun,
+				Deep:       deep,
+				Quarantine: !noQuarantine,
+			})
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
+			} else {
+				printRecoverReport(cfg, report)
+			}
+
+			// Persist quarantine decisions (unless dry-run or disabled).
+			if !dryRun && !noQuarantine {
+				names := report.Quarantine()
+				if len(names) > 0 {
+					if !yes && !confirm(fmt.Sprintf("Quarantine %d unrecoverable database(s) (excluded from future ops)?", len(names))) {
+						fmt.Println("  Quarantine skipped.")
+					} else if n := cfg.SetQuarantine(names, true); n > 0 {
+						if err := cfg.Save(""); err != nil {
+							return fmt.Errorf("saving quarantine state: %w", err)
+						}
+						fmt.Printf("  %s  Quarantined %d database(s) → %s\n\n", styleWarn.Render("!"), n, fleet.DefaultConfigFile)
+					}
+				}
+			}
+
+			_, _, failed, _ := report.Counts()
+			if failed > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "directory to search for backups (default: alongside each DB)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show the recovery plan without restoring or quarantining")
+	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check when assessing health")
+	cmd.Flags().BoolVar(&noQuarantine, "no-quarantine", false, "restore only; never quarantine unrecoverable databases")
+	cmd.Flags().BoolVar(&yes, "yes", false, "skip the quarantine confirmation prompt")
+	return cmd
+}
+
+func printRecoverReport(cfg *fleet.Config, report *fleet.RecoverReport) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	mode := "recovery"
+	if report.DryRun {
+		mode = "recovery (dry-run)"
+	}
+	fmt.Printf("\n  Fleet %s: %s · %d database(s)\n\n", mode, styleBold.Render(name), len(report.Results))
+
+	width := 0
+	for _, r := range report.Results {
+		if len(r.Database) > width {
+			width = len(r.Database)
+		}
+	}
+
+	for _, r := range report.Results {
+		var mark, state, detail string
+		switch r.State {
+		case fleet.RecoverRestored:
+			mark = styleOK.Render("✓")
+			state = styleOK.Render("restored")
+			detail = styleDim.Render(r.Detail)
+		case fleet.RecoverQuarantined:
+			mark = styleWarn.Render("⚠")
+			state = styleWarn.Render("quarantined")
+			detail = styleWarn.Render(r.Detail)
+		case fleet.RecoverFailed:
+			mark = styleErr.Render("✗")
+			state = styleErr.Render("failed")
+			detail = styleErr.Render(recoverFailDetail(r))
+		case fleet.RecoverRemote:
+			mark = styleErr.Render("✗")
+			state = styleErr.Render("remote")
+			detail = styleErr.Render(r.Detail)
+		default: // healthy
+			continue // don't clutter the report with healthy DBs
+		}
+		fmt.Printf("  %s  %-*s  %-12s  %s\n", mark, width, r.Database, state, detail)
+	}
+
+	restored, quarantined, failed, healthy := report.Counts()
+	fmt.Printf("\n  %s\n\n", summaryLine(len(report.Results),
+		kv{"restored", restored, styleOK},
+		kv{"quarantined", quarantined, styleWarn},
+		kv{"failed", failed, styleErr},
+		kv{"healthy", healthy, styleDim},
+	))
+}
+
+func recoverFailDetail(r fleet.RecoverResult) string {
+	if r.Detail != "" {
+		return r.Detail
+	}
+	if r.Err != nil {
+		return truncErr(r.Err)
+	}
+	return "recovery failed"
 }
 
 // ── health ──────────────────────────────────────────────────────────────────
@@ -922,7 +1075,10 @@ func cmdFleetStatus() *cobra.Command {
 			if err := license.RequirePro(); err != nil {
 				return err
 			}
-			cfg, dbs, err := loadFleet(configPath, "")
+			if configPath == "" {
+				configPath = fleet.DefaultConfigFile
+			}
+			cfg, err := fleet.Load(configPath)
 			if err != nil {
 				return err
 			}
@@ -931,16 +1087,26 @@ func cmdFleetStatus() *cobra.Command {
 			if name == "" {
 				name = "(unnamed)"
 			}
-			fmt.Printf("\n  Fleet: %s · %d database(s)\n\n", styleBold.Render(name), len(dbs))
+			// Show every database, including quarantined ones (which operational
+			// commands skip), so status reflects the true fleet.
+			all := cfg.Databases
+			quarantined := len(all) - len(cfg.Active())
+			suffix := ""
+			if quarantined > 0 {
+				suffix = styleDim.Render(" · ") + styleWarn.Render(fmt.Sprintf("%d quarantined", quarantined))
+			}
+			fmt.Printf("\n  Fleet: %s · %d database(s)%s\n\n", styleBold.Render(name), len(all), suffix)
 
-			width := nameWidth(dbsNames(dbs))
-			for _, db := range dbs {
-				baseline := cfg.BaselinePath(db)
+			width := nameWidth(dbsNames(all))
+			for _, db := range all {
 				mark := styleDim.Render("○")
 				note := styleDim.Render("no baseline")
-				if _, err := os.Stat(baseline); err == nil {
+				if db.Quarantined {
+					mark = styleWarn.Render("⚠")
+					note = styleWarn.Render("quarantined")
+				} else if _, err := os.Stat(cfg.BaselinePath(db)); err == nil {
 					mark = styleOK.Render("●")
-					note = styleDim.Render(baseline)
+					note = styleDim.Render(cfg.BaselinePath(db))
 				}
 				tags := ""
 				if len(db.Tags) > 0 {

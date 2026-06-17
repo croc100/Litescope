@@ -188,6 +188,13 @@ func backup(db *sql.DB, dbPath, backupDir string) (string, error) {
 	return path, nil
 }
 
+// Restore overwrites dbPath with the contents of backupPath, removing stale
+// WAL/SHM sidecars. The caller is responsible for verifying the backup's
+// integrity first (e.g. via health.Inspect).
+func Restore(dbPath, backupPath string) error {
+	return restore(dbPath, backupPath)
+}
+
 func restore(dbPath, backupPath string) error {
 	data, err := os.ReadFile(backupPath)
 	if err != nil {

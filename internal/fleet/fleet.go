@@ -24,6 +24,37 @@ type Database struct {
 	Baseline string `yaml:"baseline,omitempty"` // path to the baseline snapshot
 	// Tags allow grouping (e.g. region, tenant) for filtered operations.
 	Tags []string `yaml:"tags,omitempty"`
+	// Quarantined marks a database as excluded from fleet operations — set by
+	// `fleet recover` when a faulted database cannot be restored.
+	Quarantined bool `yaml:"quarantined,omitempty"`
+}
+
+// Active returns the databases that are not quarantined.
+func (c *Config) Active() []Database {
+	out := make([]Database, 0, len(c.Databases))
+	for _, db := range c.Databases {
+		if !db.Quarantined {
+			out = append(out, db)
+		}
+	}
+	return out
+}
+
+// SetQuarantine marks the named databases quarantined (or clears it) and
+// returns how many entries changed.
+func (c *Config) SetQuarantine(names []string, quarantined bool) int {
+	want := make(map[string]bool, len(names))
+	for _, n := range names {
+		want[n] = true
+	}
+	changed := 0
+	for i := range c.Databases {
+		if want[c.Databases[i].Name] && c.Databases[i].Quarantined != quarantined {
+			c.Databases[i].Quarantined = quarantined
+			changed++
+		}
+	}
+	return changed
 }
 
 // Config is a fleet definition, normally stored as litescope.fleet.yaml.
@@ -112,13 +143,19 @@ func (c *Config) BaselinePath(db Database) string {
 	return filepath.Join(c.BaselineDir(), db.Name+".json")
 }
 
-// Filter returns databases matching the given tag, or all when tag is "".
+// Filter returns non-quarantined databases matching the given tag, or all
+// non-quarantined databases when tag is "". Quarantined databases are excluded
+// from every fleet operation until cleared.
 func (c *Config) Filter(tag string) []Database {
-	if tag == "" {
-		return c.Databases
-	}
 	var out []Database
 	for _, db := range c.Databases {
+		if db.Quarantined {
+			continue
+		}
+		if tag == "" {
+			out = append(out, db)
+			continue
+		}
 		for _, t := range db.Tags {
 			if t == tag {
 				out = append(out, db)
