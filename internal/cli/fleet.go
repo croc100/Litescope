@@ -10,6 +10,7 @@ import (
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
+	"github.com/croc100/litescope/internal/health"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
@@ -26,6 +27,9 @@ account as a single unit.
   fleet snapshot     — capture baselines for the whole fleet in parallel
   fleet check        — detect schema drift across the whole fleet in parallel
   fleet fingerprint  — cluster the fleet by schema to reveal how many you run
+  fleet converge     — bring every drifted database back to canonical
+  fleet health       — triage operational faults (corruption, WAL bloat, bloat)
+  fleet migrate      — roll one migration out across the fleet, staged
   fleet status       — show the configured fleet
 
 Fleet is a Pro feature.`,
@@ -35,9 +39,153 @@ Fleet is a Pro feature.`,
 	cmd.AddCommand(cmdFleetCheck())
 	cmd.AddCommand(cmdFleetFingerprint())
 	cmd.AddCommand(cmdFleetConverge())
+	cmd.AddCommand(cmdFleetHealth())
 	cmd.AddCommand(cmdFleetStatus())
 	cmd.AddCommand(cmdFleetMigrate())
 	return cmd
+}
+
+// ── health ──────────────────────────────────────────────────────────────────
+
+func cmdFleetHealth() *cobra.Command {
+	var configPath, tag, format string
+	var deep bool
+	var concurrency int
+
+	cmd := &cobra.Command{
+		Use:   "health",
+		Short: "Triage operational faults across the whole fleet in parallel",
+		Long: `The first command to run when the pager goes off. Inspects every database
+for the faults that take down production SQLite at scale:
+
+  corruption       PRAGMA quick_check (or integrity_check with --deep)
+  WAL bloat        a -wal file growing unbounded — checkpoint starvation
+  fragmentation    reclaimable freelist space — a VACUUM candidate
+  reachability     databases that fail to open or connect
+
+Results are sorted worst-first. Local files get the full inspection; remote
+databases report reachability only.
+
+  litescope fleet health
+  litescope fleet health --deep        # exhaustive integrity_check
+  litescope fleet health --tag region:eu
+  litescope fleet health --format json
+
+Exit code is 1 when any database is in a warning or critical state — drop it
+into a scheduled job to get paged on fleet faults.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+
+			report := fleet.Health(dbs, deep, concurrency)
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
+			} else {
+				printFleetHealth(cfg, report)
+			}
+
+			if report.HasFaults() {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
+	return cmd
+}
+
+func printFleetHealth(cfg *fleet.Config, report *fleet.HealthReport) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	ok, warning, critical := report.Counts()
+
+	headline := styleOK.Render("all healthy")
+	if critical > 0 || warning > 0 {
+		var parts []string
+		if critical > 0 {
+			parts = append(parts, styleErr.Render(fmt.Sprintf("%d critical", critical)))
+		}
+		if warning > 0 {
+			parts = append(parts, styleWarn.Render(fmt.Sprintf("%d warning", warning)))
+		}
+		headline = strings.Join(parts, styleDim.Render(" · "))
+	}
+	fmt.Printf("\n  Fleet: %s · %d database(s) · %s\n\n",
+		styleBold.Render(name), len(report.Results), headline)
+
+	width := 0
+	for _, r := range report.Results {
+		if len(r.Database) > width {
+			width = len(r.Database)
+		}
+	}
+
+	for _, r := range report.Results {
+		rep := r.Report
+		var mark, detail string
+		switch rep.Severity {
+		case health.SevCritical:
+			mark = styleErr.Render("✗")
+			detail = styleErr.Render(strings.Join(rep.Issues, "; "))
+		case health.SevWarning:
+			mark = styleWarn.Render("⚠")
+			detail = styleWarn.Render(strings.Join(rep.Issues, "; "))
+		default:
+			mark = styleOK.Render("●")
+			detail = styleDim.Render(healthOKDetail(rep))
+		}
+		fmt.Printf("  %s  %-*s  %s\n", mark, width, r.Database, detail)
+	}
+
+	fmt.Printf("\n  %s\n\n", summaryLine(len(report.Results),
+		kv{"healthy", ok, styleOK},
+		kv{"warning", warning, styleWarn},
+		kv{"critical", critical, styleErr},
+	))
+}
+
+func healthOKDetail(r *health.Report) string {
+	if r.Remote {
+		return "remote · reachable"
+	}
+	parts := []string{humanBytes(r.SizeBytes)}
+	if r.WALBytes > 0 {
+		parts = append(parts, "wal "+humanBytes(r.WALBytes))
+	}
+	if r.JournalMode != "" {
+		parts = append(parts, strings.ToLower(r.JournalMode))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%dB", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
 // ── converge ────────────────────────────────────────────────────────────────────
