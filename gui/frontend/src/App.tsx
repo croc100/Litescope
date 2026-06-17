@@ -103,6 +103,8 @@ function useConnections() {
 
 const FREE_CONN_LIMIT = 1
 const LICENSE_KEY = 'litescope_license'
+const NAG_KEY = 'litescope_nag_count'
+const NAG_THRESHOLD = 3
 
 function getLicenseKey(): string {
   return localStorage.getItem(LICENSE_KEY) ?? ''
@@ -122,12 +124,88 @@ function useIsPro(): boolean {
   return pro
 }
 
-function ProGate({ children, feature, onOpenSettings }: {
+function getNagCount(): number {
+  return parseInt(localStorage.getItem(NAG_KEY) ?? '0', 10)
+}
+
+function bumpNagCount(): number {
+  const next = getNagCount() + 1
+  localStorage.setItem(NAG_KEY, String(next))
+  return next
+}
+
+function NagModal({ feature, onClose, onOpenSettings }: {
+  feature?: string
+  onClose: () => void
+  onOpenSettings: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl w-[380px] p-6 flex flex-col items-center text-center gap-4">
+        <button onClick={onClose} className="absolute top-3 right-3 text-[#484f58] hover:text-[#e6edf3] transition-colors">
+          <X size={14} />
+        </button>
+        <div className="w-14 h-14 rounded-full bg-[#0d1117] border border-[#00d4aa]/30 flex items-center justify-center">
+          <Key size={22} className="text-[#00d4aa]" strokeWidth={1.5} />
+        </div>
+        <div>
+          <div className="text-[15px] font-semibold text-[#e6edf3] mb-1">{feature ?? 'Pro Feature'}</div>
+          <div className="text-[12px] text-[#6e7681] leading-relaxed">
+            You've been exploring Pro features. Unlock <span className="text-[#e6edf3]">drift monitoring, migrations, fleet ops,</span> and more for $89/year.
+          </div>
+        </div>
+        <div className="w-full bg-[#0d1117] border border-[#30363d] rounded-sm p-3 text-left">
+          <div className="text-[11px] text-[#6e7681] mb-1.5">What you get with Pro</div>
+          {['Continuous drift monitoring', 'Migration Studio with auto-backup', 'Fleet ops across Turso & D1', 'Unlimited connections'].map(f => (
+            <div key={f} className="flex items-center gap-2 text-[12px] text-[#e6edf3] py-0.5">
+              <CheckCircle2 size={11} className="text-[#00d4aa] shrink-0" />
+              {f}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 w-full">
+          <a
+            href="https://litescope-site.pages.dev/#pricing"
+            target="_blank"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] font-medium rounded-sm transition-colors"
+          >
+            Get Pro — $89/yr <ExternalLink size={11} />
+          </a>
+          <button
+            onClick={() => { onOpenSettings(); onClose() }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#1c2128] hover:bg-[#21262d] text-[#e6edf3] text-[12px] rounded-sm transition-colors border border-[#30363d]"
+          >
+            <Key size={12} />Enter key
+          </button>
+        </div>
+        <button onClick={onClose} className="text-[11px] text-[#484f58] hover:text-[#6e7681] transition-colors">
+          Maybe later
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ProGate({ children, feature, onOpenSettings, onNag }: {
   children: React.ReactNode
   feature?: string
   onOpenSettings?: () => void
+  onNag?: (feature: string) => void
 }) {
   const pro = useIsPro()
+  const nagFiredRef = useRef(false)
+
+  useEffect(() => {
+    if (!pro && !nagFiredRef.current) {
+      nagFiredRef.current = true
+      const count = bumpNagCount()
+      if (count >= NAG_THRESHOLD) {
+        onNag?.(feature ?? 'Pro Feature')
+      }
+    }
+  }, [pro])
+
   if (pro) return <>{children}</>
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
@@ -287,6 +365,7 @@ export default function App() {
   const { conns, add: addConn, remove: removeConn, rename: renameConn, touch } = useConnections()
   const { recent, addRecent, removeRecent } = useRecent()
   const [statusMsg, setStatusMsg] = useState<{ text: string; kind: 'ok' | 'warn' | 'err' | 'idle' }>({ text: 'Ready', kind: 'idle' })
+  const [nagFeature, setNagFeature] = useState<string | null>(null)
 
   // inject: sidebarで connection をクリックすると active view に path が注入される
   const injectRef = useRef<((path: string) => void) | null>(null)
@@ -299,7 +378,12 @@ export default function App() {
     injectRef?.current?.(conn.path)
   }
 
+  function handleNag(feature: string) {
+    setNagFeature(feature)
+  }
+
   const viewProps = { recent, addRecent, removeRecent, status }
+  const proGateProps = { onOpenSettings: () => setTool('settings'), onNag: handleNag }
 
   return (
     <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] text-[13px] font-sans overflow-hidden select-none">
@@ -325,14 +409,21 @@ export default function App() {
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
           {tool === 'diff'     && <DiffView    {...viewProps} injectRef={injectRef} />}
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
-          {tool === 'check'    && <ProGate feature="Backup Check" onOpenSettings={() => setTool('settings')}><CheckView   {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'migrate'  && <ProGate feature="Migration Studio" onOpenSettings={() => setTool('settings')}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'monitor'  && <ProGate feature="Drift Monitor" onOpenSettings={() => setTool('settings')}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'fleet'    && <ProGate feature="Fleet Operations" onOpenSettings={() => setTool('settings')}><FleetView    {...viewProps} /></ProGate>}
+          {tool === 'check'    && <ProGate feature="Backup Check" {...proGateProps}><CheckView   {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'migrate'  && <ProGate feature="Migration Studio" {...proGateProps}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'monitor'  && <ProGate feature="Drift Monitor" {...proGateProps}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
+          {tool === 'fleet'    && <ProGate feature="Fleet Operations" {...proGateProps}><FleetView    {...viewProps} /></ProGate>}
           {tool === 'settings' && <SettingsView />}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
+      {nagFeature && (
+        <NagModal
+          feature={nagFeature}
+          onClose={() => setNagFeature(null)}
+          onOpenSettings={() => setTool('settings')}
+        />
+      )}
     </div>
   )
 }
