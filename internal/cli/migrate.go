@@ -70,35 +70,25 @@ func runMigrateGen(oldPath, newPath, output string, force bool) error {
 	migration := migrate.Generate(d, newSchema)
 	sql := migration.SQL()
 
-	// ── Risk analysis with measured blast radius ──────────────────────────
-	risks, err := migrate.Analyze(d, oldPath)
+	// ── Blast-radius analysis ─────────────────────────────────────────────
+	ops, err := migrate.AnalyzeAll(d, oldPath)
 	if err != nil {
-		// Fall back to plain warnings when the source DB can't be read.
-		risks = nil
+		ops = nil
 	}
 
-	if len(risks) > 0 {
-		fmt.Fprintf(os.Stderr, "\n  %s  Destructive changes detected:\n", styleWarn.Render("!"))
-		for _, r := range risks {
-			fmt.Fprintf(os.Stderr, "  %s  %s\n", styleDim.Render("·"), r)
-		}
-		fmt.Fprintln(os.Stderr)
+	printBlastRadius(ops)
 
-		if !force && output != "" {
-			fmt.Fprintf(os.Stderr, "  Use --force to write anyway.\n\n")
-			return fmt.Errorf("aborted: destructive migration (use --force to override)")
+	hasDestructive := false
+	for _, op := range ops {
+		if op.Kind == migrate.OpDestructive {
+			hasDestructive = true
+			break
 		}
-	} else if migration.HasWarnings() {
-		fmt.Fprintf(os.Stderr, "\n  %s  Destructive changes detected:\n", styleWarn.Render("!"))
-		for _, w := range migration.Warnings {
-			fmt.Fprintf(os.Stderr, "  %s  %s\n", styleDim.Render("·"), w)
-		}
-		fmt.Fprintln(os.Stderr)
+	}
 
-		if !force && output != "" {
-			fmt.Fprintf(os.Stderr, "  Use --force to write anyway.\n\n")
-			return fmt.Errorf("aborted: destructive migration (use --force to override)")
-		}
+	if hasDestructive && !force && output != "" {
+		fmt.Fprintf(os.Stderr, "  Use --force to write anyway.\n\n")
+		return fmt.Errorf("aborted: destructive migration (use --force to override)")
 	}
 
 	// ── Output ────────────────────────────────────────────────────────────
@@ -111,14 +101,48 @@ func runMigrateGen(oldPath, newPath, output string, force bool) error {
 		return err
 	}
 
-	fmt.Printf("\n  %s  Migration written → %s\n", styleOK.Render("✓"), output)
-	fmt.Printf("  %s  Statements: %d\n", styleDim.Render("·"), len(migration.Statements))
-	if len(risks) > 0 {
-		fmt.Printf("  %s  Risks:      %d (review before running)\n\n", styleWarn.Render("!"), len(risks))
-	} else {
-		fmt.Println()
+	risky, destructive := 0, 0
+	for _, op := range ops {
+		switch op.Kind {
+		case migrate.OpRisky:
+			risky++
+		case migrate.OpDestructive:
+			destructive++
+		}
 	}
+
+	fmt.Printf("\n  %s  Migration written → %s\n", styleOK.Render("✓"), output)
+	fmt.Printf("  %s  Statements:  %d\n", styleDim.Render("·"), len(migration.Statements))
+	if destructive > 0 {
+		fmt.Printf("  %s  Destructive: %d  (review before running)\n", styleWarn.Render("!"), destructive)
+	}
+	if risky > 0 {
+		fmt.Printf("  %s  Rebuild:     %d  (check estimated lock times above)\n", styleWarn.Render("⚠"), risky)
+	}
+	fmt.Println()
 	return nil
+}
+
+func printBlastRadius(ops []migrate.Operation) {
+	if len(ops) == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "\n  Blast radius analysis")
+	fmt.Fprintln(os.Stderr, "  ─────────────────────────────────────────────────────────────")
+	for _, op := range ops {
+		var iconStyle string
+		switch op.Kind {
+		case migrate.OpSafe:
+			iconStyle = styleOK.Render(op.Icon)
+		case migrate.OpRisky:
+			iconStyle = styleWarn.Render(op.Icon)
+		case migrate.OpDestructive:
+			iconStyle = styleErr.Render(op.Icon)
+		}
+		fmt.Fprintf(os.Stderr, "  %s  %-50s  %s\n", iconStyle, op.Headline, styleDim.Render(op.Detail))
+	}
+	fmt.Fprintln(os.Stderr, "  ─────────────────────────────────────────────────────────────")
+	fmt.Fprintln(os.Stderr)
 }
 
 func cmdMigrateApply() *cobra.Command {
