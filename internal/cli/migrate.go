@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/license"
@@ -48,6 +50,143 @@ Examples:
 	cmd.Flags().BoolVar(&force, "force", false, "write file even when destructive changes are present")
 
 	cmd.AddCommand(cmdMigrateApply())
+	cmd.AddCommand(cmdMigrateNew())
+	cmd.AddCommand(cmdMigrateStatus())
+	cmd.AddCommand(cmdMigrateUp())
+	return cmd
+}
+
+// ── versioned migration workflow ────────────────────────────────────────────
+
+const defaultMigrationsDir = "migrations"
+
+func cmdMigrateNew() *cobra.Command {
+	var dir, from, to string
+	cmd := &cobra.Command{
+		Use:   "new <name>",
+		Short: "Create the next versioned migration file (free)",
+		Long: `Create a numbered migration file in the migrations directory.
+
+  litescope migrate new add_users_table
+  litescope migrate new add_index --from prod.db --to desired.db
+
+With --from and --to, the file is pre-filled with the generated SQL (and a
+blast-radius report is printed). Otherwise an empty template is created.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body := ""
+			if from != "" || to != "" {
+				if from == "" || to == "" {
+					return fmt.Errorf("--from and --to must be given together")
+				}
+				d, err := diff.Compare(from, to)
+				if err != nil {
+					return err
+				}
+				newSchema, err := schema.Load(to)
+				if err != nil {
+					return err
+				}
+				body = migrate.Generate(d, newSchema).SQL()
+				if ops, err := migrate.AnalyzeAll(d, from); err == nil {
+					printBlastRadius(ops)
+				}
+			}
+			path, err := migrate.New(dir, args[0], body)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\n  %s  Created %s\n\n", styleOK.Render("✓"), path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", defaultMigrationsDir, "migrations directory")
+	cmd.Flags().StringVar(&from, "from", "", "generate SQL from this source database")
+	cmd.Flags().StringVar(&to, "to", "", "...to this target database's schema")
+	return cmd
+}
+
+func cmdMigrateStatus() *cobra.Command {
+	var dir, format string
+	cmd := &cobra.Command{
+		Use:   "status <db>",
+		Short: "Show applied and pending versioned migrations (free)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := migrate.GetStatus(args[0], dir)
+			if err != nil {
+				return err
+			}
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(st)
+			}
+			fmt.Printf("\n  Migrations: %s\n\n", styleDim.Render(dir))
+			for _, a := range st.Applied {
+				fmt.Printf("  %s  %s_%s  %s\n", styleOK.Render("✓"), a.Version, a.Name, styleDim.Render(a.AppliedAt))
+			}
+			for _, p := range st.Pending {
+				fmt.Printf("  %s  %s_%s  %s\n", styleDim.Render("○"), p.Version, p.Name, styleDim.Render("pending"))
+			}
+			if len(st.Drifted) > 0 {
+				fmt.Printf("\n  %s  history drift — file changed after apply: %s\n",
+					styleErr.Render("✗"), strings.Join(st.Drifted, ", "))
+			}
+			fmt.Printf("\n  %s\n\n", styleDim.Render(fmt.Sprintf("%d applied · %d pending", len(st.Applied), len(st.Pending))))
+			if len(st.Drifted) > 0 {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", defaultMigrationsDir, "migrations directory")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	return cmd
+}
+
+func cmdMigrateUp() *cobra.Command {
+	var dir, backupDir string
+	var dryRun, noBackup bool
+	cmd := &cobra.Command{
+		Use:   "up <db>",
+		Short: "Apply all pending versioned migrations in order (Pro)",
+		Long: `Apply every pending migration in order, each through the safe pipeline:
+pre-flight integrity check, VACUUM INTO backup, single transaction, foreign-key
+verification, and rollback on failure. Each applied migration is recorded in the
+litescope_schema_migrations table. Stops at the first failure.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			res, err := migrate.Up(args[0], dir, migrate.ApplyOptions{
+				DryRun:    dryRun,
+				BackupDir: backupDir,
+				NoBackup:  noBackup,
+			})
+			if err != nil {
+				if res != nil && len(res.Applied) > 0 {
+					fmt.Printf("\n  %s  Applied %d before failure: %s\n", styleWarn.Render("!"), len(res.Applied), strings.Join(res.Applied, ", "))
+				}
+				return err
+			}
+			if len(res.Applied) == 0 {
+				fmt.Printf("\n  %s  Up to date — no pending migrations.\n\n", styleOK.Render("✓"))
+				return nil
+			}
+			verb := "Applied"
+			if dryRun {
+				verb = "Validated (dry-run)"
+			}
+			fmt.Printf("\n  %s  %s %d migration(s): %s\n\n", styleOK.Render("✓"), verb, len(res.Applied), strings.Join(res.Applied, ", "))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", defaultMigrationsDir, "migrations directory")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "validate each migration (apply + rollback) without committing")
+	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip the automatic per-migration backup")
+	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "directory for backups (default: alongside the database)")
 	return cmd
 }
 
