@@ -1,7 +1,12 @@
 package fleet
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,6 +83,43 @@ func Health(dbs []Database, deep bool, concurrency int) *HealthReport {
 	})
 
 	return &HealthReport{Results: results, CheckedAt: time.Now().UTC()}
+}
+
+// SendHealthAlert POSTs a fault summary to a webhook (Slack-compatible when the
+// URL points at Slack, otherwise generic JSON). It is a no-op when the fleet is
+// healthy. Used by scheduled/continuous health watch.
+func SendHealthAlert(webhookURL string, r *HealthReport) error {
+	if !r.HasFaults() {
+		return nil
+	}
+	ok, warning, critical := r.Counts()
+	var lines []string
+	for _, res := range r.Results {
+		if res.Report.Severity == health.SevCritical || res.Report.Severity == health.SevWarning {
+			issue := "fault"
+			if len(res.Report.Issues) > 0 {
+				issue = strings.Join(res.Report.Issues, "; ")
+			}
+			lines = append(lines, fmt.Sprintf("• `%s` — %s", res.Database, issue))
+		}
+	}
+	text := fmt.Sprintf("⚠️ Litescope fleet health: %d critical, %d warning, %d healthy\n%s",
+		critical, warning, ok, strings.Join(lines, "\n"))
+
+	payload, err := json.Marshal(map[string]interface{}{"text": text})
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("webhook failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func healthOne(db Database, deep bool) HealthResult {

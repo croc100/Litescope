@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
@@ -202,8 +205,9 @@ func recoverFailDetail(r fleet.RecoverResult) string {
 // ── health ──────────────────────────────────────────────────────────────────
 
 func cmdFleetHealth() *cobra.Command {
-	var configPath, tag, format string
-	var deep bool
+	var configPath, tag, format, webhook string
+	var deep, watch, autoRecover bool
+	var interval time.Duration
 	var concurrency int
 
 	cmd := &cobra.Command{
@@ -221,12 +225,13 @@ Results are sorted worst-first. Local files get the full inspection; remote
 databases report reachability only.
 
   litescope fleet health
-  litescope fleet health --deep        # exhaustive integrity_check
-  litescope fleet health --tag region:eu
-  litescope fleet health --format json
+  litescope fleet health --deep                       # exhaustive integrity_check
+  litescope fleet health --webhook $SLACK_URL         # one-shot alert for cron
+  litescope fleet health --watch --interval 5m        # continuous monitoring
+  litescope fleet health --watch --webhook $URL --recover  # detect → alert → auto-recover
 
 Exit code is 1 when any database is in a warning or critical state — drop it
-into a scheduled job to get paged on fleet faults.`,
+into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := license.RequirePro(); err != nil {
@@ -237,28 +242,76 @@ into a scheduled job to get paged on fleet faults.`,
 				return err
 			}
 
-			report := fleet.Health(dbs, deep, concurrency)
-
-			if format == "json" {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(report); err != nil {
-					return err
+			// One scan: inspect, render, alert, and optionally auto-recover.
+			runOnce := func() *fleet.HealthReport {
+				report := fleet.Health(dbs, deep, concurrency)
+				if format == "json" {
+					enc := json.NewEncoder(os.Stdout)
+					enc.SetIndent("", "  ")
+					_ = enc.Encode(report)
+				} else {
+					printFleetHealth(cfg, report)
 				}
-			} else {
-				printFleetHealth(cfg, report)
+				if webhook != "" && report.HasFaults() {
+					if err := fleet.SendHealthAlert(webhook, report); err != nil {
+						fmt.Printf("  %s  Webhook error: %v\n", styleWarn.Render("!"), err)
+					} else {
+						fmt.Printf("  %s  Alert sent to webhook\n", styleOK.Render("✓"))
+					}
+				}
+				if autoRecover {
+					if _, _, critical := report.Counts(); critical > 0 {
+						rep := fleet.Recover(dbs, fleet.RecoverOptions{Quarantine: true})
+						restored, quarantined, _, _ := rep.Counts()
+						fmt.Printf("  %s  Auto-recover: %d restored, %d quarantined\n",
+							styleOK.Render("↻"), restored, quarantined)
+					}
+				}
+				return report
 			}
 
-			if report.HasFaults() {
-				os.Exit(1)
+			if !watch {
+				report := runOnce()
+				if report.HasFaults() {
+					os.Exit(1)
+				}
+				return nil
 			}
-			return nil
+
+			// ── Continuous watch ──────────────────────────────────
+			fmt.Printf("\n  %s  Watching %d database(s) · interval %s", styleOK.Render("◉"), len(dbs), interval)
+			if webhook != "" {
+				fmt.Printf(" · webhook on")
+			}
+			if autoRecover {
+				fmt.Printf(" · auto-recover on")
+			}
+			fmt.Printf("\n  Press Ctrl+C to stop.\n")
+
+			runOnce()
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			sig := make(chan os.Signal, 1)
+			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+			for {
+				select {
+				case <-ticker.C:
+					runOnce()
+				case <-sig:
+					fmt.Printf("\n  Stopped.\n\n")
+					return nil
+				}
+			}
 		},
 	}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
 	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
 	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
 	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
+	cmd.Flags().BoolVar(&watch, "watch", false, "run continuously on an interval")
+	cmd.Flags().DurationVar(&interval, "interval", 5*time.Minute, "watch interval (e.g. 30s, 5m, 1h)")
+	cmd.Flags().StringVar(&webhook, "webhook", "", "POST a fault alert to this URL (Slack-compatible)")
+	cmd.Flags().BoolVar(&autoRecover, "recover", false, "auto-recover critically faulted databases from backup")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
 	return cmd
 }
