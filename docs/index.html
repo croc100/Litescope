@@ -510,6 +510,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>Visual table explorer with row-level queries. Get oriented fast without writing SQL.</p>
       </div>
       <div class="card">
+        <span class="card-icon">🩺</span>
+        <div class="cmd-name">health <span class="tier-tag tier-free">free</span></div>
+        <h3>Spot faults early</h3>
+        <p>One command flags corruption, WAL bloat from a starved checkpoint, and fragmentation — the faults that silently break production SQLite.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">📈</span>
+        <div class="cmd-name">advise <span class="tier-tag tier-free">free</span></div>
+        <h3>Fix slow queries</h3>
+        <p>Catch the performance bugs AI-generated schemas ship: foreign keys with no index, redundant indexes, and full table scans. Get runnable CREATE INDEX fixes.</p>
+      </div>
+      <div class="card">
         <span class="card-icon">🛡️</span>
         <div class="cmd-name">check <span class="tier-tag tier-pro">pro</span></div>
         <h3>Trust your backups</h3>
@@ -532,6 +544,12 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div>
         <h3>Operate hundreds at once</h3>
         <p>The full lifecycle across a Turso org or D1 account, in parallel: fingerprint schemas, health-check for faults, converge drift to canonical, and recover corrupt databases from backup.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🤖</span>
+        <div class="cmd-name">mcp <span class="tier-tag tier-free">free</span></div>
+        <h3>Let your AI drive it</h3>
+        <p>An MCP server so Claude or any agent can call Litescope as read-only tools — and inspect the database it just built. Diagnose freely; a human commits the fix.</p>
       </div>
     </div>
   </div>
@@ -661,6 +679,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <li><span class="check">✓</span>Explorer — browse tables &amp; query rows</li>
           <li><span class="check">✓</span>diff — schema comparison</li>
           <li><span class="check">✓</span>health — single-DB fault check</li>
+          <li><span class="check">✓</span>advise — index &amp; query recommendations</li>
+          <li><span class="check">✓</span>mcp — AI agent integration</li>
           <li><span class="check">✓</span>1 named connection (GUI)</li>
         </ul>
         <a class="btn btn-ghost" href="#install">Install free</a>

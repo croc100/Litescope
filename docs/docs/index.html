@@ -123,6 +123,7 @@
     <nav>
       <a href="#diff">diff</a>
       <a href="#health">health</a>
+      <a href="#advise">advise</a>
       <a href="#check">check</a>
       <a href="#migrate">migrate</a>
       <a href="#monitor">monitor</a>
@@ -237,6 +238,36 @@ litescope health app.db
 litescope health app.db --deep</code></pre>
       <div class="callout">
         <strong>At fleet scale,</strong> use <a href="#fleet"><code>fleet health</code></a> to triage every database in parallel, then <a href="#fleet"><code>fleet recover</code></a> to restore the broken ones.
+      </div>
+    </div>
+
+    <!-- advise -->
+    <div class="doc-section" id="advise">
+      <h2>advise <span class="tier tier-free">free</span></h2>
+      <p>Recommend indexes and flag performance problems — the ones AI-generated schemas ship by default. Schema rules need no query input: point at a database and get instant advice. Exits <code>1</code> when any warning is found.</p>
+      <pre><code>litescope advise &lt;database.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--query</td><td>—</td><td>Analyze a single SQL query for full table scans</td></tr>
+          <tr><td>--sql</td><td>—</td><td>Analyze every query in a .sql file</td></tr>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+      <h3>What it catches</h3>
+      <ul>
+        <li><strong>fk-no-index</strong> — a foreign key with no index. SQLite, unlike MySQL, does not auto-index FK columns, so every join or cascade scans the whole table.</li>
+        <li><strong>redundant-index</strong> — an index whose columns are already a leading prefix of another.</li>
+        <li><strong>full-scan</strong> — a supplied query that does a full table scan (via <code>EXPLAIN QUERY PLAN</code>).</li>
+      </ul>
+      <h3>Examples</h3>
+      <pre><code># Point-and-shoot schema analysis
+litescope advise app.db
+
+# Check a specific query
+litescope advise app.db --query "SELECT * FROM orders WHERE user_id = ?"</code></pre>
+      <div class="callout">
+        Each finding includes a runnable fix, e.g. <code>CREATE INDEX idx_orders_user_id ON orders(user_id);</code>
       </div>
     </div>
 
@@ -447,6 +478,7 @@ litescope fleet recover</code></pre>
           <tr><td><code>litescope_health</code></td><td>Inspect a database for corruption, WAL bloat, fragmentation</td></tr>
           <tr><td><code>litescope_schema</code></td><td>Load tables, columns, and indexes</td></tr>
           <tr><td><code>litescope_diff</code></td><td>Compare two databases</td></tr>
+          <tr><td><code>litescope_advise</code></td><td>Recommend indexes; flag un-indexed FKs and full table scans</td></tr>
           <tr><td><code>litescope_migrate_plan</code></td><td>Migration SQL + blast-radius (write-lock estimate) — no apply</td></tr>
           <tr><td><code>litescope_check</code></td><td>Backup integrity; schema match vs a reference (Pro)</td></tr>
           <tr><td><code>litescope_fingerprint</code></td><td>Cluster a fleet by schema (Pro)</td></tr>
@@ -494,6 +526,7 @@ litescope fleet recover</code></pre>
         <li><code>fleet recover</code>: restore faulted databases from backup; quarantine the unrecoverable</li>
         <li>GUI: the full fleet lifecycle — fingerprint, converge, health, and recover</li>
         <li><code>mcp</code>: MCP server — let Claude and other AI agents call Litescope as read-only tools</li>
+        <li><code>advise</code>: index &amp; query advisor — flags un-indexed foreign keys, redundant indexes, and full table scans</li>
       </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
