@@ -70,10 +70,41 @@ func TestServe_ToolsList(t *testing.T) {
 	for _, ti := range tools {
 		names[ti.(map[string]interface{})["name"].(string)] = true
 	}
-	for _, want := range []string{"litescope_health", "litescope_schema", "litescope_diff"} {
+	for _, want := range []string{
+		"litescope_health", "litescope_schema", "litescope_diff",
+		"litescope_migrate_plan", "litescope_check",
+		"litescope_fingerprint", "litescope_fleet_health",
+	} {
 		if !names[want] {
 			t.Errorf("tools/list missing %s (got %v)", want, names)
 		}
+	}
+}
+
+func TestServe_ToolCall_MigratePlan(t *testing.T) {
+	dir := t.TempDir()
+	oldP, newP := dir+"/old.db", dir+"/new.db"
+	od, _ := sql.Open("sqlite", oldP)
+	od.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, legacy INTEGER)")
+	od.Exec("INSERT INTO users (name, legacy) VALUES ('a', 1)")
+	od.Close()
+	nd, _ := sql.Open("sqlite", newP)
+	nd.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)") // drop legacy
+	nd.Close()
+
+	req := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"litescope_migrate_plan","arguments":{"old":"` + oldP + `","new":"` + newP + `"}}}`
+	r := run(t, req)
+	res := r[9]["result"].(map[string]interface{})
+	if res["isError"] == true {
+		t.Fatalf("migrate_plan errored: %v", res)
+	}
+	text := res["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	// Dropping a column is a destructive table rebuild.
+	if !strings.Contains(text, `"destructive": true`) {
+		t.Errorf("expected destructive plan for a column drop, got: %s", text)
+	}
+	if !strings.Contains(text, "TABLE REBUILD") {
+		t.Errorf("expected a TABLE REBUILD operation, got: %s", text)
 	}
 }
 

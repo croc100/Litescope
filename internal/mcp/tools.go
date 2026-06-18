@@ -8,8 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/diff"
+	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
+	"github.com/croc100/litescope/internal/license"
+	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/schema"
 )
 
@@ -85,7 +89,165 @@ func Registry() []Tool {
 				return toJSON(r)
 			},
 		},
+		{
+			Name: "litescope_migrate_plan",
+			Description: "Plan a migration from one SQLite database to another WITHOUT applying it. " +
+				"Returns the migration SQL plus a blast-radius analysis: each operation classified " +
+				"safe / risky / destructive, with an estimated write-lock duration for table rebuilds " +
+				"(SQLite locks the whole file for DDL). Use this to judge whether a migration is safe " +
+				"before a human applies it. Read-only — never mutates a database.",
+			InputSchema: obj(props{
+				"old": strProp("Absolute path to the current ('before') database"),
+				"new": strProp("Absolute path to the target ('after') database with the desired schema"),
+			}, "old", "new"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				oldP, _ := args["old"].(string)
+				newP, _ := args["new"].(string)
+				if oldP == "" || newP == "" {
+					return "", fmt.Errorf("both 'old' and 'new' paths are required")
+				}
+				d, err := diff.Compare(oldP, newP)
+				if err != nil {
+					return "", err
+				}
+				newSchema, err := schema.Load(newP)
+				if err != nil {
+					return "", err
+				}
+				m := migrate.Generate(d, newSchema)
+				ops, _ := migrate.AnalyzeAll(d, oldP)
+				return toJSON(buildPlan(m, ops))
+			},
+		},
+		{
+			Name: "litescope_check",
+			Description: "Verify a SQLite backup. Runs a PRAGMA integrity check (free); if 'against' " +
+				"is given, also compares schema and row counts to a reference database (requires a Pro " +
+				"license). Returns a JSON report. Read-only.",
+			InputSchema: obj(props{
+				"path":    strProp("Absolute path to the backup database to verify"),
+				"against": strProp("Optional reference database to compare schema against (Pro)"),
+				"data":    boolProp("Also compare row counts per table (Pro)"),
+			}, "path"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				path, _ := args["path"].(string)
+				if path == "" {
+					return "", fmt.Errorf("path is required")
+				}
+				against, _ := args["against"].(string)
+				data, _ := args["data"].(bool)
+				if against != "" || data {
+					if err := license.RequirePro(); err != nil {
+						return "", err
+					}
+				}
+				r, err := check.Check(path, against, data)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(r)
+			},
+		},
+		{
+			Name: "litescope_fingerprint",
+			Description: "Cluster a fleet of SQLite databases by schema and report how many distinct " +
+				"schemas are actually running, with each cluster's drift from the canonical (largest) " +
+				"one. Reads a fleet config file (litescope.fleet.yaml). Requires a Pro license. Read-only.",
+			InputSchema: obj(props{
+				"config": strProp("Path to the fleet config (default: litescope.fleet.yaml)"),
+				"tag":    strProp("Only include databases with this tag"),
+			}),
+			Handler: func(args map[string]interface{}) (string, error) {
+				dbs, err := fleetDBs(args)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(fleet.Fingerprint(dbs, 0))
+			},
+		},
+		{
+			Name: "litescope_fleet_health",
+			Description: "Triage operational faults across a whole fleet of SQLite databases in " +
+				"parallel — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. " +
+				"Reads a fleet config file (litescope.fleet.yaml). Requires a Pro license. Read-only.",
+			InputSchema: obj(props{
+				"config": strProp("Path to the fleet config (default: litescope.fleet.yaml)"),
+				"tag":    strProp("Only include databases with this tag"),
+				"deep":   boolProp("Use the exhaustive integrity_check instead of quick_check"),
+			}),
+			Handler: func(args map[string]interface{}) (string, error) {
+				dbs, err := fleetDBs(args)
+				if err != nil {
+					return "", err
+				}
+				deep, _ := args["deep"].(bool)
+				return toJSON(fleet.Health(dbs, deep, 0))
+			},
+		},
 	}
+}
+
+// ── fleet + plan helpers ────────────────────────────────────────────────────
+
+// fleetDBs loads the fleet config (Pro-gated) and returns the databases matching
+// an optional tag.
+func fleetDBs(args map[string]interface{}) ([]fleet.Database, error) {
+	if err := license.RequirePro(); err != nil {
+		return nil, err
+	}
+	configPath, _ := args["config"].(string)
+	if configPath == "" {
+		configPath = fleet.DefaultConfigFile
+	}
+	cfg, err := fleet.Load(configPath)
+	if err != nil {
+		return nil, err
+	}
+	tag, _ := args["tag"].(string)
+	dbs := cfg.Filter(tag)
+	if len(dbs) == 0 {
+		return nil, fmt.Errorf("no databases in fleet config %q (tag %q)", configPath, tag)
+	}
+	return dbs, nil
+}
+
+type planOp struct {
+	Table   string `json:"table"`
+	Kind    string `json:"kind"` // safe | risky | destructive
+	Summary string `json:"summary"`
+	Detail  string `json:"detail"`
+	Rows    int64  `json:"rows,omitempty"`
+	LockMs  int64  `json:"lock_ms,omitempty"`
+}
+
+type plan struct {
+	Statements  int      `json:"statements"`
+	Destructive bool     `json:"destructive"`
+	Operations  []planOp `json:"operations"`
+	SQL         string   `json:"sql"`
+}
+
+func buildPlan(m *migrate.Migration, ops []migrate.Operation) plan {
+	p := plan{Statements: len(m.Statements), SQL: m.SQL()}
+	for _, op := range ops {
+		kind := "safe"
+		switch op.Kind {
+		case migrate.OpRisky:
+			kind = "risky"
+		case migrate.OpDestructive:
+			kind = "destructive"
+			p.Destructive = true
+		}
+		p.Operations = append(p.Operations, planOp{
+			Table:   op.Table,
+			Kind:    kind,
+			Summary: op.Headline,
+			Detail:  op.Detail,
+			Rows:    op.Rows,
+			LockMs:  op.LockMs,
+		})
+	}
+	return p
 }
 
 // ── JSON Schema helpers ─────────────────────────────────────────────────────
