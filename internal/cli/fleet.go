@@ -32,6 +32,7 @@ account as a single unit.
   fleet fingerprint  — cluster the fleet by schema to reveal how many you run
   fleet converge     — bring every drifted database back to canonical
   fleet health       — triage operational faults (corruption, WAL bloat, bloat)
+  fleet blast-radius — map a fault to the shared cohort (group/region) at risk
   fleet recover      — restore faulted databases from backups; quarantine the rest
   fleet migrate      — roll one migration out across the fleet, staged
   fleet status       — show the configured fleet
@@ -261,10 +262,17 @@ into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 				}
 				if autoRecover {
 					if _, _, critical := report.Counts(); critical > 0 {
-						rep := fleet.Recover(dbs, fleet.RecoverOptions{Quarantine: true})
-						restored, quarantined, _, _ := rep.Counts()
-						fmt.Printf("  %s  Auto-recover: %d restored, %d quarantined\n",
-							styleOK.Render("↻"), restored, quarantined)
+						// Auto-recover restores from backup only. Quarantine edits the
+						// fleet config and is a deliberate manual decision — we don't do
+						// it silently in an automated/watch context.
+						rep := fleet.Recover(dbs, fleet.RecoverOptions{Quarantine: false})
+						restored, q, failed, _ := rep.Counts()
+						unrecoverable := q + failed
+						fmt.Printf("  %s  Auto-recover: %d restored", styleOK.Render("↻"), restored)
+						if unrecoverable > 0 {
+							fmt.Printf(", %s", styleWarn.Render(fmt.Sprintf("%d unrecoverable — run 'fleet recover' to quarantine", unrecoverable)))
+						}
+						fmt.Println()
 					}
 				}
 				return report
