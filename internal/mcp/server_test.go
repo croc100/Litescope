@@ -50,6 +50,39 @@ func TestServe_Initialize(t *testing.T) {
 	}
 }
 
+func TestServe_Initialize_EchoesClientProtocolVersion(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
+	res := r[1]["result"].(map[string]interface{})
+	if res["protocolVersion"] != "2025-06-18" {
+		t.Errorf("protocolVersion = %v, want echoed 2025-06-18", res["protocolVersion"])
+	}
+}
+
+func TestServe_DiffOutput_IsCurated(t *testing.T) {
+	dir := t.TempDir()
+	oldP, newP := dir+"/old.db", dir+"/new.db"
+	od, _ := sql.Open("sqlite", oldP)
+	od.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY, legacy INTEGER)")
+	od.Close()
+	nd, _ := sql.Open("sqlite", newP)
+	nd.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY)") // drop legacy
+	nd.Exec("CREATE TABLE audit (id INTEGER PRIMARY KEY)") // add table
+	nd.Close()
+
+	r := run(t, `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"litescope_diff","arguments":{"old":"`+oldP+`","new":"`+newP+`"}}}`)
+	text := r[8]["result"].(map[string]interface{})["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+
+	// Curated output: lowercase keys, a summary, no raw Go field names.
+	for _, want := range []string{`"summary"`, `"schema_changes"`, `"tables_added"`, `"columns_removed"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("curated diff missing %s; got:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, `"AddedColumns"`) || strings.Contains(text, `"NotNull"`) {
+		t.Errorf("diff output leaked raw struct fields:\n%s", text)
+	}
+}
+
 func TestServe_Notification_NoResponse(t *testing.T) {
 	// A notification (no id) must not produce a response line.
 	in := strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n")

@@ -64,8 +64,17 @@ func handleLine(line []byte, w *bufio.Writer, tools []Tool, byName map[string]To
 
 	switch req.Method {
 	case "initialize":
+		// Agree to the client's requested protocol version when it sends one;
+		// otherwise fall back to ours.
+		ver := protocolVersion
+		var p struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		if json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
+			ver = p.ProtocolVersion
+		}
 		respond(w, req.ID, map[string]interface{}{
-			"protocolVersion": protocolVersion,
+			"protocolVersion": ver,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
 			"serverInfo":      map[string]interface{}{"name": "litescope", "version": version},
 		})

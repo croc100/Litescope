@@ -64,7 +64,7 @@ func Registry() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return toJSON(s)
+				return toJSON(shapeSchema(s))
 			},
 		},
 		{
@@ -86,7 +86,7 @@ func Registry() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return toJSON(r)
+				return toJSON(shapeDiff(r))
 			},
 		},
 		{
@@ -280,4 +280,122 @@ func toJSON(v interface{}) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// ── LLM-friendly output shaping ─────────────────────────────────────────────
+// schema.Schema and diff.Result are internal structs; dumping them raw leaks
+// Go field casing and empty fields. These shapers emit concise, lowercase JSON
+// curated for a model to read.
+
+func shapeSchema(s *schema.Schema) map[string]interface{} {
+	tables := make([]map[string]interface{}, 0, len(s.Tables))
+	for _, t := range s.Tables {
+		cols := make([]map[string]interface{}, 0, len(t.Columns))
+		for _, c := range t.Columns {
+			col := map[string]interface{}{"name": c.Name, "type": c.Type}
+			if c.NotNull {
+				col["not_null"] = true
+			}
+			if c.PK > 0 {
+				col["pk"] = true
+			}
+			if c.Default != "" {
+				col["default"] = c.Default
+			}
+			cols = append(cols, col)
+		}
+		tbl := map[string]interface{}{"name": t.Name, "columns": cols}
+		if idx := shapeIndexes(t.Indexes); len(idx) > 0 {
+			tbl["indexes"] = idx
+		}
+		tables = append(tables, tbl)
+	}
+	return map[string]interface{}{"tables": tables}
+}
+
+func shapeIndexes(idxs []schema.Index) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(idxs))
+	for _, ix := range idxs {
+		m := map[string]interface{}{"name": ix.Name}
+		if ix.Unique {
+			m["unique"] = true
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+func shapeDiff(d *diff.Result) map[string]interface{} {
+	added, removed, modified := 0, 0, 0
+	changes := make([]map[string]interface{}, 0, len(d.Schema))
+	for _, td := range d.Schema {
+		ch := map[string]interface{}{"table": td.Name}
+		switch {
+		case td.Added:
+			added++
+			ch["change"] = "added"
+			ch["columns_added"] = colNames(td.AddedColumns)
+		case td.Removed:
+			removed++
+			ch["change"] = "removed"
+		default:
+			modified++
+			ch["change"] = "modified"
+			if len(td.AddedColumns) > 0 {
+				ch["columns_added"] = colNames(td.AddedColumns)
+			}
+			if len(td.RemovedColumns) > 0 {
+				ch["columns_removed"] = colNames(td.RemovedColumns)
+			}
+			if len(td.ChangedColumns) > 0 {
+				cc := make([]map[string]interface{}, 0, len(td.ChangedColumns))
+				for _, c := range td.ChangedColumns {
+					cc = append(cc, map[string]interface{}{"name": c.Name, "from": c.Old.Type, "to": c.New.Type})
+				}
+				ch["columns_changed"] = cc
+			}
+			if len(td.AddedIndexes) > 0 {
+				ch["indexes_added"] = idxNames(td.AddedIndexes)
+			}
+			if len(td.RemovedIndexes) > 0 {
+				ch["indexes_removed"] = idxNames(td.RemovedIndexes)
+			}
+		}
+		changes = append(changes, ch)
+	}
+	out := map[string]interface{}{
+		"summary": map[string]interface{}{
+			"tables_added": added, "tables_removed": removed, "tables_modified": modified,
+		},
+		"schema_changes": changes,
+	}
+	var data []map[string]interface{}
+	for _, dd := range d.Data {
+		if dd.Added == 0 && dd.Removed == 0 && dd.Changed == 0 {
+			continue // skip no-op entries — don't feed the model noise
+		}
+		data = append(data, map[string]interface{}{
+			"table": dd.Table, "rows_added": dd.Added, "rows_removed": dd.Removed, "rows_changed": dd.Changed,
+		})
+	}
+	if len(data) > 0 {
+		out["data_changes"] = data
+	}
+	return out
+}
+
+func colNames(cols []schema.Column) []string {
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, c.Name)
+	}
+	return out
+}
+
+func idxNames(idxs []schema.Index) []string {
+	out := make([]string, 0, len(idxs))
+	for _, ix := range idxs {
+		out = append(out, ix.Name)
+	}
+	return out
 }
