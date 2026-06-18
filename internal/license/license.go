@@ -5,6 +5,8 @@
 package license
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -23,20 +25,96 @@ const (
 
 const workerURL = "https://litescope-license-worker.croc100.workers.dev/verify"
 
-// Current returns the active license tier, verified against the license server.
-// Falls back to local prefix check only if the server is unreachable (offline grace).
+// Verification caching removes the license server as a single point of failure
+// and keeps the CLI fast: a fresh cache skips the network entirely, and a recent
+// cache keeps paying users working while the server is unreachable.
+const (
+	verifyCacheTTL = 24 * time.Hour      // skip the network if verified this recently
+	offlineGrace   = 14 * 24 * time.Hour // honor the last known tier this long when offline
+)
+
+// Current returns the active license tier. Resolution order:
+//  1. fresh verification cache (no network)
+//  2. online verification (refreshes the cache)
+//  3. recent cache within the offline-grace window (server unreachable)
+//  4. local key-prefix trust (last resort)
 func Current() Tier {
 	key := resolveKey()
 	if key == "" {
 		return TierFree
 	}
-	if os.Getenv("LITESCOPE_SKIP_VERIFY") == "" {
-		if tier, ok := verifyOnline(key); ok {
-			return tier
-		}
+	if os.Getenv("LITESCOPE_SKIP_VERIFY") != "" {
+		return tierFromPrefix(key)
 	}
-	// Offline grace (or LITESCOPE_SKIP_VERIFY set): trust prefix locally
+
+	cache := loadCache()
+	if cache != nil && cache.matches(key) && time.Since(cache.VerifiedAt) < verifyCacheTTL {
+		return cache.Tier // fast path — no network
+	}
+
+	if tier, ok := verifyOnline(key); ok {
+		saveCache(key, tier)
+		return tier
+	}
+
+	// Server unreachable: honor the last known tier within the grace window.
+	if cache != nil && cache.matches(key) && time.Since(cache.VerifiedAt) < offlineGrace {
+		return cache.Tier
+	}
+	// Last resort: trust the key prefix so a valid key isn't hard-blocked.
 	return tierFromPrefix(key)
+}
+
+// ── verification cache ──────────────────────────────────────────────────────
+
+type cacheEntry struct {
+	KeyHash    string    `json:"key_hash"`
+	Tier       Tier      `json:"tier"`
+	VerifiedAt time.Time `json:"verified_at"`
+}
+
+func (e *cacheEntry) matches(key string) bool { return e.KeyHash == hashKey(key) }
+
+func hashKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+func cacheFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".litescope", ".verify_cache.json")
+}
+
+func loadCache() *cacheEntry {
+	path := cacheFilePath()
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var e cacheEntry
+	if err := json.Unmarshal(data, &e); err != nil {
+		return nil
+	}
+	return &e
+}
+
+func saveCache(key string, tier Tier) {
+	path := cacheFilePath()
+	if path == "" {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
+	data, err := json.Marshal(cacheEntry{KeyHash: hashKey(key), Tier: tier, VerifiedAt: time.Now().UTC()})
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0600)
 }
 
 func resolveKey() string {
