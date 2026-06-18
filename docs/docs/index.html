@@ -128,6 +128,10 @@
       <a href="#monitor">monitor</a>
       <a href="#fleet">fleet</a>
     </nav>
+    <div class="sidebar-section">AI / MCP</div>
+    <nav>
+      <a href="#mcp">MCP server</a>
+    </nav>
     <div class="sidebar-section">GUI</div>
     <nav>
       <a href="#gui">Desktop app</a>
@@ -421,6 +425,40 @@ litescope fleet recover</code></pre>
       </div>
     </div>
 
+    <!-- mcp -->
+    <div class="doc-section" id="mcp">
+      <h2>MCP server <span class="tier tier-free">free</span></h2>
+      <p>Let an AI agent drive Litescope. <code>litescope mcp</code> runs a <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a> server over stdio, so Claude Desktop, Claude Code, or any MCP client can call Litescope as a tool — "use litescope to check the health of ./app.db".</p>
+
+      <h3>Setup (Claude Desktop)</h3>
+      <p>Add Litescope to <code>claude_desktop_config.json</code>:</p>
+      <pre><code>{
+  "mcpServers": {
+    "litescope": { "command": "litescope", "args": ["mcp"] }
+  }
+}</code></pre>
+      <p>Restart Claude Desktop. Litescope's tools then appear to the model.</p>
+
+      <h3>Exposed tools</h3>
+      <p>All tools are <strong>read-only</strong> — an AI can diagnose your databases freely, but never mutates them.</p>
+      <table class="flag-table">
+        <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>litescope_health</code></td><td>Inspect a database for corruption, WAL bloat, fragmentation</td></tr>
+          <tr><td><code>litescope_schema</code></td><td>Load tables, columns, and indexes</td></tr>
+          <tr><td><code>litescope_diff</code></td><td>Compare two databases</td></tr>
+          <tr><td><code>litescope_migrate_plan</code></td><td>Migration SQL + blast-radius (write-lock estimate) — no apply</td></tr>
+          <tr><td><code>litescope_check</code></td><td>Backup integrity; schema match vs a reference (Pro)</td></tr>
+          <tr><td><code>litescope_fingerprint</code></td><td>Cluster a fleet by schema (Pro)</td></tr>
+          <tr><td><code>litescope_fleet_health</code></td><td>Parallel fault triage across a fleet (Pro)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Diagnose freely, treat with a human.</strong> The MCP server intentionally exposes only read-only tools. Destructive operations (apply, converge, recover) stay behind the CLI/GUI with dry-run and approval, so an agent can recommend a fix but a person commits it.
+      </div>
+    </div>
+
     <!-- GUI -->
     <div class="doc-section" id="gui">
       <h2>Desktop GUI</h2>
@@ -455,6 +493,7 @@ litescope fleet recover</code></pre>
         <li><code>fleet health</code> + <code>health</code>: parallel fault triage — corruption, WAL bloat, fragmentation</li>
         <li><code>fleet recover</code>: restore faulted databases from backup; quarantine the unrecoverable</li>
         <li>GUI: the full fleet lifecycle — fingerprint, converge, health, and recover</li>
+        <li><code>mcp</code>: MCP server — let Claude and other AI agents call Litescope as read-only tools</li>
       </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>

@@ -426,6 +426,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#fleet">Fleet</a>
+      <a href="#ai">AI / MCP</a>
       <a href="#pricing">Pricing</a>
       <a href="#install">Install</a>
       <a href="/docs">Docs</a>
@@ -603,6 +604,43 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 <span class="t-dim">      </span>                  <span class="t-dim">+ users.temp_col extra column</span>
 
 <span class="t-dim">→ litescope fleet converge   to bring all 312 onto canonical</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="ai">
+  <div class="wrap spot-grid">
+    <div>
+      <div class="eyebrow">AI-native</div>
+      <h2>Your AI can drive it too.</h2>
+      <p class="section-sub">Litescope ships an <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" style="color:var(--teal)">MCP</a> server, so Claude, Cursor, or any agent can call it as a tool — and inspect the database it just built.</p>
+      <ul class="spot-list">
+        <li>
+          <span class="spot-icon">🤖</span>
+          <div><b>One command</b> <span><code>litescope mcp</code> — point Claude Desktop at it and the tools appear.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">🔒</span>
+          <div><b>Diagnose freely, treat with a human</b> <span>The agent gets read-only tools — health, diff, fingerprint, and migration <em>plans</em> with blast-radius. It can recommend a fix; a person commits it.</span></div>
+        </li>
+      </ul>
+    </div>
+    <div class="terminal" style="margin-top:0">
+      <div class="term-bar">
+        <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
+        <span class="term-title">claude_desktop_config.json</span>
+      </div>
+      <div class="term-body"><span class="t-dim">{</span>
+  <span class="t-cmd">"mcpServers"</span>: {
+    <span class="t-cmd">"litescope"</span>: {
+      <span class="t-cmd">"command"</span>: <span class="t-ok">"litescope"</span>,
+      <span class="t-cmd">"args"</span>: [<span class="t-ok">"mcp"</span>]
+    }
+  }
+<span class="t-dim">}</span>
+
+<span class="t-prompt">›</span> <span class="t-cmd">"use litescope to health-check ./app.db"</span>
+<span class="t-ok">●</span> <span class="t-dim">Claude calls</span> litescope_health <span class="t-dim">→ reads the report</span></div>
     </div>
   </div>
 </section>
