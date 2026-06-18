@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/croc100/litescope/internal/advisor"
 	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
@@ -117,6 +118,41 @@ func Registry() []Tool {
 				m := migrate.Generate(d, newSchema)
 				ops, _ := migrate.AnalyzeAll(d, oldP)
 				return toJSON(buildPlan(m, ops))
+			},
+		},
+		{
+			Name: "litescope_advise",
+			Description: "Analyze a local SQLite database for performance problems and recommend " +
+				"fixes: foreign keys with no index (a full scan on every join — SQLite does not " +
+				"auto-index FK columns), redundant indexes, and full table scans for any supplied " +
+				"queries (via EXPLAIN QUERY PLAN). Returns findings with runnable CREATE/DROP INDEX " +
+				"suggestions. Read-only — recommends, never alters the schema.",
+			InputSchema: obj(props{
+				"path": strProp("Absolute path to the SQLite database file"),
+				"queries": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional SQL queries to check for full table scans",
+				},
+			}, "path"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				path, _ := args["path"].(string)
+				if path == "" {
+					return "", fmt.Errorf("path is required")
+				}
+				var queries []string
+				if raw, ok := args["queries"].([]interface{}); ok {
+					for _, q := range raw {
+						if s, ok := q.(string); ok && s != "" {
+							queries = append(queries, s)
+						}
+					}
+				}
+				r, err := advisor.Analyze(path, queries)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(r)
 			},
 		},
 		{

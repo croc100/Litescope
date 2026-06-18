@@ -13,6 +13,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdValidate())
 	root.AddCommand(cmdCheck())
 	root.AddCommand(cmdHealth())
+	root.AddCommand(cmdAdvise())
 	root.AddCommand(cmdMigrate())
 	root.AddCommand(cmdMonitor())
 	root.AddCommand(cmdFleet())
