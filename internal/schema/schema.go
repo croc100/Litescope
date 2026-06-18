@@ -3,10 +3,35 @@ package schema
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	_ "modernc.org/sqlite"
 )
+
+// FromSQL materializes a declarative schema (a body of CREATE statements) into a
+// throwaway database and returns the resulting Schema. This lets a checked-in
+// schema.sql be compared against a live database with the normal diff engine.
+func FromSQL(sqlText string) (*Schema, error) {
+	f, err := os.CreateTemp("", "litescope-schema-*.db")
+	if err != nil {
+		return nil, err
+	}
+	path := f.Name()
+	f.Close()
+	defer os.Remove(path)
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(sqlText); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("applying declarative schema: %w", err)
+	}
+	db.Close()
+	return Load(path)
+}
 
 type Column struct {
 	Name    string

@@ -50,9 +50,72 @@ Examples:
 	cmd.Flags().BoolVar(&force, "force", false, "write file even when destructive changes are present")
 
 	cmd.AddCommand(cmdMigrateApply())
+	cmd.AddCommand(cmdMigratePlan())
 	cmd.AddCommand(cmdMigrateNew())
 	cmd.AddCommand(cmdMigrateStatus())
 	cmd.AddCommand(cmdMigrateUp())
+	return cmd
+}
+
+// ── declarative schema-as-code ──────────────────────────────────────────────
+
+func cmdMigratePlan() *cobra.Command {
+	var schemaFile, output string
+	cmd := &cobra.Command{
+		Use:   "plan <db> --schema <schema.sql>",
+		Short: "Plan the migration to bring a database to a declarative schema (free)",
+		Long: `Declarative schema-as-code: keep your desired schema as a checked-in .sql file
+of CREATE statements, and plan the migration that brings a live database to match
+it. Shows the SQL and a blast-radius report; does not apply anything.
+
+  litescope migrate plan prod.db --schema schema.sql
+  litescope migrate plan prod.db --schema schema.sql -o migration.sql
+
+Pair with the versioned workflow:
+  litescope migrate new sync --from prod.db --schema schema.sql`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if schemaFile == "" {
+				return fmt.Errorf("--schema is required")
+			}
+			sqlText, err := os.ReadFile(schemaFile)
+			if err != nil {
+				return err
+			}
+			live, err := schema.Load(args[0])
+			if err != nil {
+				return err
+			}
+			desired, err := schema.FromSQL(string(sqlText))
+			if err != nil {
+				return err
+			}
+
+			d := diff.CompareSchemas(live, desired)
+			if len(d.Schema) == 0 {
+				fmt.Printf("\n  %s  %s already matches %s — nothing to do.\n\n",
+					styleOK.Render("✓"), args[0], schemaFile)
+				return nil
+			}
+
+			m := migrate.Generate(d, desired)
+			if ops, err := migrate.AnalyzeAll(d, args[0]); err == nil {
+				printBlastRadius(ops)
+			}
+
+			if output != "" {
+				if err := os.WriteFile(output, []byte(m.SQL()), 0644); err != nil {
+					return err
+				}
+				fmt.Printf("  %s  Migration written → %s\n\n", styleOK.Render("✓"), output)
+				return nil
+			}
+			fmt.Print(m.SQL())
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&schemaFile, "schema", "", "declarative schema file (CREATE statements)")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "write SQL to file instead of stdout")
 	return cmd
 }
 
@@ -61,33 +124,48 @@ Examples:
 const defaultMigrationsDir = "migrations"
 
 func cmdMigrateNew() *cobra.Command {
-	var dir, from, to string
+	var dir, from, to, schemaFile string
 	cmd := &cobra.Command{
 		Use:   "new <name>",
 		Short: "Create the next versioned migration file (free)",
 		Long: `Create a numbered migration file in the migrations directory.
 
   litescope migrate new add_users_table
-  litescope migrate new add_index --from prod.db --to desired.db
+  litescope migrate new add_index  --from prod.db --to desired.db
+  litescope migrate new sync       --from prod.db --schema schema.sql
 
-With --from and --to, the file is pre-filled with the generated SQL (and a
-blast-radius report is printed). Otherwise an empty template is created.`,
+With --from + --to (a database) or --from + --schema (a declarative .sql file),
+the migration is pre-filled with the generated SQL and a blast-radius report is
+printed. Otherwise an empty template is created.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body := ""
-			if from != "" || to != "" {
-				if from == "" || to == "" {
-					return fmt.Errorf("--from and --to must be given together")
+			if from != "" || to != "" || schemaFile != "" {
+				if from == "" {
+					return fmt.Errorf("--from is required with --to/--schema")
 				}
-				d, err := diff.Compare(from, to)
+				if (to == "") == (schemaFile == "") {
+					return fmt.Errorf("give exactly one of --to or --schema")
+				}
+				var desired *schema.Schema
+				var err error
+				if to != "" {
+					desired, err = schema.Load(to)
+				} else {
+					var sqlText []byte
+					if sqlText, err = os.ReadFile(schemaFile); err == nil {
+						desired, err = schema.FromSQL(string(sqlText))
+					}
+				}
 				if err != nil {
 					return err
 				}
-				newSchema, err := schema.Load(to)
+				live, err := schema.Load(from)
 				if err != nil {
 					return err
 				}
-				body = migrate.Generate(d, newSchema).SQL()
+				d := diff.CompareSchemas(live, desired)
+				body = migrate.Generate(d, desired).SQL()
 				if ops, err := migrate.AnalyzeAll(d, from); err == nil {
 					printBlastRadius(ops)
 				}
@@ -103,6 +181,7 @@ blast-radius report is printed). Otherwise an empty template is created.`,
 	cmd.Flags().StringVar(&dir, "dir", defaultMigrationsDir, "migrations directory")
 	cmd.Flags().StringVar(&from, "from", "", "generate SQL from this source database")
 	cmd.Flags().StringVar(&to, "to", "", "...to this target database's schema")
+	cmd.Flags().StringVar(&schemaFile, "schema", "", "...to this declarative schema file (instead of --to)")
 	return cmd
 }
 
