@@ -192,7 +192,7 @@ echo "lsc_pro_your_key_here" > ~/.litescope/license</code></pre>
       <p>In the desktop app, the current tier is shown as a badge in <strong>Settings → License</strong>.</p>
 
       <div class="callout">
-        <strong>Online verification.</strong> Litescope checks your key against the license server (it reads the env var first, then <code>~/.litescope/license</code>, then the key saved by the GUI). An offline grace period applies — if the server is unreachable, the last known tier is used.
+        <strong>Online verification, offline-resilient.</strong> Litescope checks your key against the license server (env var first, then <code>~/.litescope/license</code>, then the key saved by the GUI), but caches the result for 24h so most runs need no network. If the server is unreachable, your last verified tier keeps working for a 14-day grace window — the license server is never a hard dependency.
       </div>
     </div>
 
@@ -453,8 +453,20 @@ litescope fleet converge --canary 5       # fix the first 5, then stop
 litescope fleet converge --to canonical.db</code></pre>
 
       <h3>health</h3>
-      <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault.</p>
-      <pre><code>litescope fleet health [--deep] [--tag region:eu]</code></pre>
+      <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault. Run it on a schedule to get paged on fleet faults, or continuously with <code>--watch</code>.</p>
+      <pre><code>litescope fleet health [--deep] [--tag region:eu]
+litescope fleet health --webhook $SLACK_URL          # one-shot alert (cron)
+litescope fleet health --watch --interval 5m         # continuous monitoring
+litescope fleet health --watch --webhook $URL --recover  # detect → alert → auto-restore</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--watch</td><td>Run continuously on an interval</td></tr>
+          <tr><td>--interval</td><td>Watch interval (e.g. <code>30s</code>, <code>5m</code>, <code>1h</code>)</td></tr>
+          <tr><td>--webhook</td><td>POST a fault alert to this URL (Slack-compatible)</td></tr>
+          <tr><td>--recover</td><td>Auto-restore critically faulted databases from backup</td></tr>
+        </tbody>
+      </table>
 
       <h3>blast-radius</h3>
       <p>Map each critically faulted database to the cohorts it shares (Turso groups, regions — any tag). One corrupt database in a group often means the whole group's shared infrastructure is suspect — this shows who else to check.</p>
@@ -563,6 +575,8 @@ litescope fleet recover</code></pre>
         <li><code>license</code>: show the active tier (Free / Pro)</li>
         <li>GUI: fleet topology map — every database colored by health or schema cluster</li>
         <li><code>fleet blast-radius</code>: map a fault to the shared cohort (group/region) at risk</li>
+        <li><code>fleet health --watch / --webhook / --recover</code>: scheduled monitoring, Slack alerts, auto-recovery</li>
+        <li>License verification cached (24h) with a 14-day offline grace — the server is no longer a hard dependency</li>
       </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
