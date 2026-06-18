@@ -11,7 +11,7 @@ import {
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetSnapshot, FleetCheck,
-  FleetFingerprint, FleetConverge, FleetHealth, FleetRecover
+  FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
@@ -1638,6 +1638,8 @@ interface HealthResult { database: string; severity: string; remote: boolean; si
 interface RecoverResult { database: string; state: string; detail?: string }
 interface ConvergeCluster { cluster_id: string; count: number; statements: number; destructive: boolean; drift?: string[] }
 interface ConvergeResult { canonical_id: string; already_ok: number; total_to_converge: number; destructive: boolean; clusters: ConvergeCluster[]; applied: number; failed: number; mode: string }
+interface TopoNode { name: string; cluster_id: string; is_canonical: boolean; severity: string }
+interface TopologyResult { nodes: TopoNode[]; clusters: FpCluster[] }
 
 function FleetView({ status }: ViewProps) {
   const [provider, setProvider] = useState<'turso' | 'd1'>('turso')
@@ -1649,11 +1651,13 @@ function FleetView({ status }: ViewProps) {
   const [snapResults, setSnapResults] = useState<FleetSnapResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'discover' | 'check' | 'fingerprint' | 'health' | 'recover'>('discover')
+  const [tab, setTab] = useState<'discover' | 'check' | 'fingerprint' | 'health' | 'recover' | 'map'>('discover')
   const [fp, setFp] = useState<FpResult | null>(null)
   const [healthResults, setHealthResults] = useState<HealthResult[]>([])
   const [recoverResults, setRecoverResults] = useState<RecoverResult[]>([])
   const [converge, setConverge] = useState<ConvergeResult | null>(null)
+  const [topology, setTopology] = useState<TopologyResult | null>(null)
+  const [mapColorBy, setMapColorBy] = useState<'health' | 'schema'>('health')
 
   async function discover() {
     if (!org || !token) return
@@ -1699,6 +1703,18 @@ function FleetView({ status }: ViewProps) {
       setFp(r)
       status(r.distinct <= 1 ? 'Fleet is uniform' : `${r.distinct} distinct schemas`, r.distinct <= 1 ? 'ok' : 'warn')
     } catch (e: any) { setError(String(e)); status('Fingerprint failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function buildMap() {
+    if (!databases.length) return
+    setLoading(true); setError(''); setTopology(null); setTab('map')
+    try {
+      const r = await FleetTopology(databases)
+      setTopology(r)
+      const crit = r.nodes?.filter((n: TopoNode) => n.severity === 'critical').length ?? 0
+      status(`Map: ${r.nodes?.length ?? 0} databases, ${r.clusters?.length ?? 0} schema(s)`, crit > 0 ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Map failed', 'err') }
     finally { setLoading(false) }
   }
 
@@ -1803,6 +1819,9 @@ function FleetView({ status }: ViewProps) {
             <Btn variant="ghost" onClick={healthAll} disabled={loading} small>
               <ShieldCheck size={11} />Health
             </Btn>
+            <Btn variant="ghost" onClick={buildMap} disabled={loading} small>
+              <Layers size={11} />Map
+            </Btn>
           </>}
         </div>
       </div>
@@ -1816,6 +1835,7 @@ function FleetView({ status }: ViewProps) {
           {fp && <SubTab label="Fingerprint" count={fp.distinct} active={tab === 'fingerprint'} onClick={() => setTab('fingerprint')} />}
           {healthResults.length > 0 && <SubTab label="Health" active={tab === 'health'} onClick={() => setTab('health')} />}
           {recoverResults.length > 0 && <SubTab label="Recover" active={tab === 'recover'} onClick={() => setTab('recover')} />}
+          {topology && <SubTab label="Map" active={tab === 'map'} onClick={() => setTab('map')} />}
         </div>
       )}
 
@@ -2000,6 +2020,95 @@ function FleetView({ status }: ViewProps) {
             )}
           </div>
         )}
+
+        {tab === 'map' && topology && !loading && (
+          <FleetMap topology={topology} colorBy={mapColorBy} setColorBy={setMapColorBy} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Fleet topology map ──────────────────────────────────────────────────────
+
+const SEV_COLOR: Record<string, string> = {
+  ok: '#3fb950', warning: '#d29922', critical: '#f85149', '': '#6e7681',
+}
+// Distinct palette for schema clusters; canonical always uses the teal accent.
+const CLUSTER_PALETTE = ['#58a6ff', '#bc8cff', '#f778ba', '#d29922', '#79c0ff', '#ffa657', '#a5d6ff', '#ff7b72']
+
+function FleetMap({ topology, colorBy, setColorBy }: {
+  topology: TopologyResult
+  colorBy: 'health' | 'schema'
+  setColorBy: (v: 'health' | 'schema') => void
+}) {
+  const [hover, setHover] = useState<TopoNode | null>(null)
+
+  // Stable color per cluster id; canonical → teal.
+  const clusterColor: Record<string, string> = {}
+  topology.clusters.forEach((c, i) => {
+    clusterColor[c.id] = c.is_canonical ? '#00d4aa' : CLUSTER_PALETTE[i % CLUSTER_PALETTE.length]
+  })
+
+  const cellColor = (n: TopoNode) =>
+    colorBy === 'health'
+      ? (SEV_COLOR[n.severity] ?? SEV_COLOR[''])
+      : (n.cluster_id ? (clusterColor[n.cluster_id] ?? '#6e7681') : '#6e7681')
+
+  // Sort by cluster so the map visually groups schemas together.
+  const nodes = [...topology.nodes].sort((a, b) => (a.cluster_id || '~').localeCompare(b.cluster_id || '~') || a.name.localeCompare(b.name))
+
+  const crit = topology.nodes.filter(n => n.severity === 'critical').length
+  const warn = topology.nodes.filter(n => n.severity === 'warning').length
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <span className="text-[12px] text-[#e6edf3]">{topology.nodes.length} databases · {topology.clusters.length} schema(s)</span>
+        {crit > 0 && <span className="text-[11px] text-[#f85149]">{crit} critical</span>}
+        {warn > 0 && <span className="text-[11px] text-[#d29922]">{warn} warning</span>}
+        <div className="flex-1" />
+        <span className="text-[10px] text-[#6e7681]">color by</span>
+        <div className="flex rounded-sm overflow-hidden border border-[#30363d]">
+          {(['health', 'schema'] as const).map(m => (
+            <button key={m} onClick={() => setColorBy(m)}
+              className={`px-2.5 py-1 text-[11px] transition-colors ${colorBy === m ? 'bg-[#00d4aa] text-[#031a14]' : 'bg-[#161b22] text-[#6e7681] hover:text-[#e6edf3]'}`}>
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* The living map: one cell per database */}
+      <div className="flex flex-wrap gap-[3px]">
+        {nodes.map(n => (
+          <div key={n.name}
+            onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(null)}
+            title={`${n.name}\nschema: ${n.cluster_id || 'unreachable'}${n.is_canonical ? ' (canonical)' : ''}\nhealth: ${n.severity || 'unknown'}`}
+            className="w-[14px] h-[14px] rounded-[2px] cursor-pointer transition-transform hover:scale-150"
+            style={{ backgroundColor: cellColor(n) }} />
+        ))}
+      </div>
+
+      {/* Hover detail */}
+      <div className="h-[18px] mt-3 text-[11px] text-[#6e7681] font-mono">
+        {hover && <span><span className="text-[#e6edf3]">{hover.name}</span> · schema {hover.cluster_id || 'unreachable'}{hover.is_canonical ? ' (canonical)' : ''} · {hover.severity || 'unknown'}</span>}
+      </div>
+
+      {/* Legend */}
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+        {colorBy === 'health'
+          ? (['ok', 'warning', 'critical'] as const).map(s => (
+              <span key={s} className="flex items-center gap-1.5 text-[#6e7681]">
+                <span className="w-[10px] h-[10px] rounded-[2px]" style={{ backgroundColor: SEV_COLOR[s] }} />{s}
+              </span>
+            ))
+          : topology.clusters.map(c => (
+              <span key={c.id} className="flex items-center gap-1.5 text-[#6e7681]">
+                <span className="w-[10px] h-[10px] rounded-[2px]" style={{ backgroundColor: clusterColor[c.id] }} />
+                {c.id}{c.is_canonical ? ' (canonical)' : ''} · {c.count}
+              </span>
+            ))}
       </div>
     </div>
   )

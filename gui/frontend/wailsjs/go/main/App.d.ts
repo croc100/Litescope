@@ -40,6 +40,8 @@ export function FleetHealth(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<
 
 export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<any>>;
 
+export function FleetTopology(arg1:Array<main.FleetDBEntry>):Promise<any>;
+
 export function OpenFile():Promise<string>;
 
 export function QueryTable(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.TableRows>;

@@ -613,6 +613,59 @@ func (a *App) FleetRecover(entries []FleetDBEntry, dryRun bool) []FleetRecoverRe
 	return out
 }
 
+// ── Fleet: topology map ─────────────────────────────────────────────────────
+
+type FleetTopologyNode struct {
+	Name        string `json:"name"`
+	ClusterID   string `json:"cluster_id"` // "" when unreachable / not fingerprinted
+	IsCanonical bool   `json:"is_canonical"`
+	Severity    string `json:"severity"` // ok | warning | critical
+}
+
+type FleetTopologyResult struct {
+	Nodes    []FleetTopologyNode       `json:"nodes"`
+	Clusters []FleetFingerprintCluster `json:"clusters"` // for the legend (id, count, is_canonical)
+}
+
+// FleetTopology builds a per-database map combining schema cluster (fingerprint)
+// and operational health into one view — the data behind the topology map.
+func (a *App) FleetTopology(entries []FleetDBEntry) FleetTopologyResult {
+	dbs := toFleetDatabases(entries)
+	fp := fleet.Fingerprint(dbs, 0)
+	hr := fleet.Health(dbs, false, 0)
+
+	clusterOf := map[string]string{}
+	canonicalOf := map[string]bool{}
+	for _, c := range fp.Clusters {
+		for _, m := range c.Members {
+			clusterOf[m] = c.ID
+			canonicalOf[m] = c.IsCanonical
+		}
+	}
+	sevOf := map[string]string{}
+	for _, r := range hr.Results {
+		sevOf[r.Database] = r.Report.SeverityLabel
+	}
+
+	nodes := make([]FleetTopologyNode, 0, len(dbs))
+	for _, db := range dbs {
+		nodes = append(nodes, FleetTopologyNode{
+			Name:        db.Name,
+			ClusterID:   clusterOf[db.Name],
+			IsCanonical: canonicalOf[db.Name],
+			Severity:    sevOf[db.Name],
+		})
+	}
+
+	out := FleetTopologyResult{Nodes: nodes}
+	for _, c := range fp.Clusters {
+		out.Clusters = append(out.Clusters, FleetFingerprintCluster{
+			ID: c.ID, Count: c.Count, IsCanonical: c.IsCanonical,
+		})
+	}
+	return out
+}
+
 // driftToLines renders a schema diff as short human-readable lines, matching the
 // CLI's "missing table / extra column" vocabulary.
 func driftToLines(drift []diff.TableDiff) []string {

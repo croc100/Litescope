@@ -70,6 +70,10 @@ export function FleetRecover(arg1, arg2) {
   return window['go']['main']['App']['FleetRecover'](arg1, arg2);
 }
 
+export function FleetTopology(arg1) {
+  return window['go']['main']['App']['FleetTopology'](arg1);
+}
+
 export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
 }
