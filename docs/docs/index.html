@@ -173,7 +173,7 @@ sudo mv litescope /usr/local/bin/</code></pre>
     <!-- License -->
     <div class="doc-section" id="activate">
       <h2>Activate Pro license</h2>
-      <p>After purchasing, you'll receive a license key by email (<code>lsc_pro_…</code>). Activate it in one of two ways:</p>
+      <p>After purchasing, you'll receive a license key by email (<code>lsc_pro_…</code>). Activate it in any of three ways:</p>
 
       <h3>Option A — environment variable</h3>
       <pre><code>export LITESCOPE_LICENSE=lsc_pro_your_key_here</code></pre>
@@ -183,11 +183,16 @@ sudo mv litescope /usr/local/bin/</code></pre>
       <pre><code>mkdir -p ~/.litescope
 echo "lsc_pro_your_key_here" > ~/.litescope/license</code></pre>
 
+      <h3>Option C — desktop app (GUI)</h3>
+      <p>Open the app and go to <strong>Settings → License</strong>, paste your <code>lsc_pro_…</code> key, and click <strong>Activate</strong>. The tier badge updates immediately, and Pro panels unlock without a restart.</p>
+
       <h3>Verify activation</h3>
+      <p>Check the tier Litescope detects (CLI):</p>
       <pre><code>litescope license</code></pre>
+      <p>In the desktop app, the current tier is shown as a badge in <strong>Settings → License</strong>.</p>
 
       <div class="callout">
-        <strong>Online verification.</strong> Litescope verifies your key against the license server on each run. An offline grace period applies — if the server is unreachable, the last known tier is used.
+        <strong>Online verification.</strong> Litescope checks your key against the license server (it reads the env var first, then <code>~/.litescope/license</code>, then the key saved by the GUI). An offline grace period applies — if the server is unreachable, the last known tier is used.
       </div>
     </div>
 

@@ -18,6 +18,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdMonitor())
 	root.AddCommand(cmdFleet())
 	root.AddCommand(cmdMCP())
+	root.AddCommand(cmdLicense())
 
 	return root
 }
