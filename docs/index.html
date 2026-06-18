@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Litescope — SQLite production operations</title>
-<meta name="description" content="Diff, validate, migrate, and monitor SQLite in production — one database or an entire fleet of Turso and Cloudflare D1 databases." />
-<meta property="og:title" content="Litescope — SQLite production operations" />
-<meta property="og:description" content="The operations toolchain for production SQLite. Diff, validate, migrate, monitor — across an entire fleet." />
+<title>Litescope — the control plane for production SQLite fleets</title>
+<meta name="description" content="Diagnose and fix drift and faults across an entire fleet of Turso and Cloudflare D1 databases — fingerprint schemas, triage corruption and WAL bloat, converge drift, and recover from backup." />
+<meta property="og:title" content="Litescope — the control plane for production SQLite fleets" />
+<meta property="og:description" content="Diagnose and fix drift and faults across hundreds of SQLite databases — fingerprint, health, converge, recover. The ops layer Turso & D1 never had." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://litescope-site.pages.dev/" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -436,9 +436,9 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
 <header id="top">
   <div class="wrap">
-    <div class="badge"><span class="pulse"></span>Fleet operations for Turso &amp; Cloudflare D1</div>
-    <h1>SQLite ops for<br/><span class="accent">production</span></h1>
-    <p class="hero-sub">SQLite runs everywhere now. The operations tooling never caught up. Litescope closes the gap — diff, validate, migrate, monitor, and operate entire fleets.</p>
+    <div class="badge"><span class="pulse"></span>The control plane for production SQLite fleets</div>
+    <h1>When the pager goes off,<br/><span class="accent">run one command.</span></h1>
+    <p class="hero-sub">SQLite now runs production on Turso, D1, and the edge — one database per tenant, thousands of them. Litescope is the operations layer that never existed: diagnose drift and faults across the whole fleet, then fix them.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">View pricing</a>
@@ -447,19 +447,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     <div class="terminal">
       <div class="term-bar">
         <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
-        <span class="term-title">litescope fleet check</span>
+        <span class="term-title">litescope fleet health</span>
       </div>
-      <div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">litescope fleet check --provider turso --org my-org</span>
+      <div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">litescope fleet health</span>
 
-<span class="t-head">Fleet: production · 312 database(s)</span>
+<span class="t-head">Fleet: production · 312 database(s) ·</span> <span class="t-err">1 critical</span> <span class="t-dim">·</span> <span class="t-warn">1 warning</span>
 
-<span class="t-ok">●</span>  tenant-0001   <span class="t-ok">ok</span>         18ms
-<span class="t-ok">●</span>  tenant-0002   <span class="t-ok">ok</span>         21ms
-<span class="t-warn">▲</span>  tenant-0148   <span class="t-warn">drift</span>      +1 table, ~1 table
-<span class="t-dim">○</span>  tenant-0149   <span class="t-dim">no baseline</span>
-<span class="t-err">✗</span>  tenant-0203   <span class="t-err">error</span>      connection refused
+<span class="t-err">✗</span>  tenant-0203   <span class="t-err">CORRUPT</span> — integrity_check failed (page 142)
+<span class="t-warn">⚠</span>  tenant-0148   <span class="t-warn">WAL 2.1GB</span> — checkpoint starved, reads degraded
+<span class="t-ok">●</span>  tenant-0001   <span class="t-dim">18.4MB · wal 1.2MB · wal</span>
+<span class="t-ok">●</span>  tenant-0002   <span class="t-dim">17.9MB · wal 0.9MB · wal</span>
 
-<span class="t-dim">312 databases ·</span> <span class="t-ok">309 ok</span> <span class="t-dim">·</span> <span class="t-warn">1 drift</span> <span class="t-dim">· 1 no-baseline · 1 error</span></div>
+<span class="t-dim">312 databases ·</span> <span class="t-ok">310 healthy</span> <span class="t-dim">·</span> <span class="t-warn">1 warning</span> <span class="t-dim">·</span> <span class="t-err">1 critical</span></div>
     </div>
   </div>
 </header>
@@ -518,8 +517,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       <div class="card">
         <span class="card-icon">⚡</span>
         <div class="cmd-name">migrate <span class="tier-tag tier-pro">pro</span></div>
-        <h3>Apply migrations safely</h3>
-        <p>Turn a diff into runnable SQL, then apply it with an automatic backup, single transaction, FK verification, and rollback on any failure.</p>
+        <h3>See the blast radius first</h3>
+        <p>Every migration is classified Safe / Risky / Destructive with an estimated write-lock time — SQLite locks the whole file for a rebuild. Then apply with auto-backup, single transaction, FK verification, and rollback.</p>
       </div>
       <div class="card">
         <span class="card-icon">📡</span>
@@ -531,7 +530,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">🌐</span>
         <div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div>
         <h3>Operate hundreds at once</h3>
-        <p>Discover, baseline, drift-check, and migrate an entire Turso org or D1 account — in parallel, from one command.</p>
+        <p>The full lifecycle across a Turso org or D1 account, in parallel: fingerprint schemas, health-check for faults, converge drift to canonical, and recover corrupt databases from backup.</p>
       </div>
     </div>
   </div>
@@ -566,43 +565,44 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 <section id="fleet" class="spotlight">
   <div class="wrap spot-grid">
     <div>
-      <div class="eyebrow">Fleet operations</div>
-      <h2>One database is monitoring.<br/>A hundred is a fleet.</h2>
-      <p class="section-sub">Per-tenant SQLite is exploding — and nobody has tooling for the day you're running 300 of them.</p>
+      <div class="eyebrow">Fleet lifecycle</div>
+      <h2>Diagnose, then treat —<br/>schema and faults.</h2>
+      <p class="section-sub">Per-tenant SQLite is exploding, and they don't drift into one shape — they fracture into many. Litescope runs the fleet the way an SRE runs a service.</p>
       <ul class="spot-list">
         <li>
-          <span class="spot-icon">🔎</span>
-          <div><b>Auto-discovery</b> <span>Query a Turso org or D1 account and get every database registered instantly.</span></div>
+          <span class="spot-icon">🔬</span>
+          <div><b>fingerprint</b> <span>Cluster every database by schema. You think you run one — see how many you actually run, and exactly how each drifted.</span></div>
         </li>
         <li>
-          <span class="spot-icon">⚡</span>
-          <div><b>Parallel drift detection</b> <span>"309 ok, 1 drifted" across the whole fleet in seconds. Exit 1 gates CI.</span></div>
+          <span class="spot-icon">🩺</span>
+          <div><b>health</b> <span>Parallel fault triage: corruption, WAL bloat from a starved checkpoint, fragmentation, unreachable. Sorted worst-first.</span></div>
         </li>
         <li>
-          <span class="spot-icon">🚀</span>
-          <div><b>Staged rollouts</b> <span>Apply one migration across the fleet, halting at the first failure so a bad change can't cascade.</span></div>
+          <span class="spot-icon">🔧</span>
+          <div><b>converge</b> <span>Auto-generate and stage the migration that brings every drifted database back to canonical — canary, halt-on-failure, rollback.</span></div>
         </li>
         <li>
-          <span class="spot-icon">🛡️</span>
-          <div><b>Canary deploys</b> <span>Apply to the first N databases, verify, then continue — with per-database backups and rollback.</span></div>
+          <span class="spot-icon">♻️</span>
+          <div><b>recover</b> <span>Restore corrupt databases from verified backups; quarantine the unrecoverable so they're excluded from future ops.</span></div>
         </li>
       </ul>
     </div>
     <div class="terminal" style="margin-top:0">
       <div class="term-bar">
         <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
-        <span class="term-title">litescope fleet migrate</span>
+        <span class="term-title">litescope fleet fingerprint</span>
       </div>
-      <div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">litescope fleet migrate add_index.sql --canary 2</span>
+      <div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">litescope fleet fingerprint</span>
 
-<span class="t-head">Fleet rollout: production · 312 database(s)</span>
+<span class="t-head">Fleet: production · 312 database(s) ·</span> <span class="t-warn">3 distinct schemas</span>
 
-<span class="t-ok">✓</span>  tenant-0001   <span class="t-ok">applied</span>   3 stmts <span class="t-dim">· backup ✓</span>
-<span class="t-ok">✓</span>  tenant-0002   <span class="t-ok">applied</span>   3 stmts <span class="t-dim">· turso</span>
-<span class="t-dim">·</span>  tenant-0003   <span class="t-dim">held</span>      beyond canary limit
-<span class="t-dim">·</span>  tenant-0004   <span class="t-dim">held</span>      beyond canary limit
+<span class="t-ok">██████████████████</span>  264  <span class="t-ok">schema 645e9e58  (canonical)</span>
+<span class="t-warn">███░░░░░░░░░░░░░░░░</span>   45  <span class="t-warn">schema 530de62d</span>
+<span class="t-dim">      </span>                  <span class="t-dim">- missing table audit_logs</span>
+<span class="t-warn">█░░░░░░░░░░░░░░░░░░</span>    3  <span class="t-warn">schema 4aa5e064</span>
+<span class="t-dim">      </span>                  <span class="t-dim">+ users.temp_col extra column</span>
 
-<span class="t-dim">312 databases ·</span> <span class="t-ok">2 applied</span> <span class="t-dim">· 310 held</span></div>
+<span class="t-dim">→ litescope fleet converge   to bring all 312 onto canonical</span></div>
     </div>
   </div>
 </section>
@@ -622,6 +622,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <ul class="plan-features">
           <li><span class="check">✓</span>Explorer — browse tables &amp; query rows</li>
           <li><span class="check">✓</span>diff — schema comparison</li>
+          <li><span class="check">✓</span>health — single-DB fault check</li>
           <li><span class="check">✓</span>1 named connection (GUI)</li>
         </ul>
         <a class="btn btn-ghost" href="#install">Install free</a>
@@ -633,10 +634,10 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <div class="plan-desc">The full SQLite operations toolchain for production teams.</div>
         <ul class="plan-features">
           <li><span class="check">✓</span>Everything in Free</li>
+          <li><span class="check">✓</span>migrate — blast-radius analysis + safe apply</li>
           <li><span class="check">✓</span>check — backup integrity verification</li>
-          <li><span class="check">✓</span>migrate — generate &amp; apply with rollback</li>
           <li><span class="check">✓</span>monitor — continuous drift + webhook alerts</li>
-          <li><span class="check">✓</span>fleet — parallel ops across Turso &amp; D1</li>
+          <li><span class="check">✓</span>fleet — fingerprint, converge, health &amp; recover</li>
           <li><span class="check">✓</span>Unlimited named connections (GUI)</li>
         </ul>
         <a class="btn btn-primary" href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro — $89/yr</a>
@@ -656,19 +657,24 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <tr class="section-row"><td colspan="3">Explore</td></tr>
           <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="3">Operate</td></tr>
+          <tr><td>migrate — blast-radius analysis &amp; safe apply</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>migrate — generate &amp; apply with rollback</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="3">Monitor</td></tr>
           <tr><td>monitor watch — continuous drift detection</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="3">Fleet</td></tr>
+          <tr class="section-row"><td colspan="3">Fleet — Turso &amp; Cloudflare D1</td></tr>
           <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Turso &amp; Cloudflare D1 support</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint — schema clustering</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet health — parallel fault triage</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="3">GUI</td></tr>
           <tr><td>Named connections</td><td><span class="val">1</span></td><td><span class="val">Unlimited</span></td></tr>
-          <tr><td>All Pro panels (Check, Migrate, Monitor, Fleet)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>All Pro panels (Migrate, Check, Monitor, Fleet)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
         </tbody>
       </table>
     </div>

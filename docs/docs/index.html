@@ -122,6 +122,7 @@
     <div class="sidebar-section">CLI Reference</div>
     <nav>
       <a href="#diff">diff</a>
+      <a href="#health">health</a>
       <a href="#check">check</a>
       <a href="#migrate">migrate</a>
       <a href="#monitor">monitor</a>
@@ -212,65 +213,99 @@ litescope diff old.db new.db --data
 litescope diff old.db new.db --format html -o report.html</code></pre>
     </div>
 
-    <!-- check -->
-    <div class="doc-section" id="check">
-      <h2>check <span class="tier tier-free">free</span></h2>
-      <p>Validate a backup database against a reference. Runs PRAGMA integrity check, compares schema, and optionally verifies row counts.</p>
-      <pre><code>litescope check &lt;backup.db&gt; &lt;reference.db&gt; [flags]</code></pre>
+    <!-- health -->
+    <div class="doc-section" id="health">
+      <h2>health <span class="tier tier-free">free</span></h2>
+      <p>Inspect a database for the operational faults that take down production SQLite: corruption, WAL bloat from a starved checkpoint, freelist fragmentation, and reachability. Exits <code>1</code> on any warning or critical finding.</p>
+      <pre><code>litescope health &lt;database.db&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td>--data</td><td>false</td><td>Also compare row counts per table</td></tr>
+          <tr><td>--deep</td><td>false</td><td>Use the exhaustive <code>integrity_check</code> instead of the faster <code>quick_check</code></td></tr>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Quick triage
+litescope health app.db
+
+# Exhaustive integrity check
+litescope health app.db --deep</code></pre>
+      <div class="callout">
+        <strong>At fleet scale,</strong> use <a href="#fleet"><code>fleet health</code></a> to triage every database in parallel, then <a href="#fleet"><code>fleet recover</code></a> to restore the broken ones.
+      </div>
+    </div>
+
+    <!-- check -->
+    <div class="doc-section" id="check">
+      <h2>check <span class="tier tier-free">free</span> <span class="tier tier-pro">pro</span></h2>
+      <p>Verify a backup database. The PRAGMA integrity check is free; comparing schema and row counts against a reference with <code>--against</code> is Pro.</p>
+      <pre><code>litescope check &lt;backup.db&gt; [--against &lt;reference.db&gt;] [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--against</td><td>—</td><td>Reference DB to compare schema against <span class="tier tier-pro">pro</span></td></tr>
+          <tr><td>--data</td><td>false</td><td>Also compare row counts per table <span class="tier tier-pro">pro</span></td></tr>
+          <tr><td>--save-report</td><td>—</td><td>Append the result to a JSONL history file <span class="tier tier-pro">pro</span></td></tr>
           <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
         </tbody>
       </table>
       <h3>Examples</h3>
-      <pre><code># Basic integrity + schema check
-litescope check backup.db prod.db
+      <pre><code># Integrity check only (free)
+litescope check backup.db
 
-# Include row count comparison
-litescope check backup.db prod.db --data
+# Schema match against production (Pro)
+litescope check backup.db --against prod.db
 
-# Use in CI (exits 1 on failure)
-litescope check backup.db prod.db && echo "backup OK"</code></pre>
+# Include row count comparison (Pro)
+litescope check backup.db --against prod.db --data</code></pre>
     </div>
 
     <!-- migrate -->
     <div class="doc-section" id="migrate">
-      <h2>migrate <span class="tier tier-free">free</span></h2>
-      <p>Generate a migration SQL from a diff, then apply it safely with an automatic backup and rollback on failure.</p>
+      <h2>migrate <span class="tier tier-free">free</span> <span class="tier tier-pro">pro</span></h2>
+      <p>Generate migration SQL by diffing two databases (free), then apply it safely with backup and rollback (Pro). Generation always prints a <strong>blast-radius analysis</strong> first.</p>
 
       <h3>generate</h3>
-      <pre><code>litescope migrate generate &lt;old.db&gt; &lt;new.db&gt; [flags]</code></pre>
+      <pre><code>litescope migrate &lt;old.db&gt; &lt;new.db&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td>--output, -o</td><td>stdout</td><td>Write SQL to file</td></tr>
+          <tr><td>--force</td><td>false</td><td>Write the file even when the migration is destructive</td></tr>
         </tbody>
       </table>
+      <p>Each operation is classified before the SQL — SQLite locks the entire file for a table rebuild, so the estimated write-lock matters:</p>
+      <pre><code>  Blast radius analysis
+  ─────────────────────────────────────────────────────────────
+  ✓  CREATE TABLE audit_logs            new table — instant
+  ⚠  TABLE REBUILD orders               50.0K rows, 3 index(es) → ~1s write-lock
+  ✗  DROP TABLE sessions                12,400 rows permanently deleted
+  ─────────────────────────────────────────────────────────────</code></pre>
 
-      <h3>apply</h3>
+      <h3>apply <span class="tier tier-pro">pro</span></h3>
       <pre><code>litescope migrate apply &lt;db&gt; &lt;migration.sql&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td>--dry-run</td><td>false</td><td>Preview what would run without writing to disk</td></tr>
+          <tr><td>--dry-run</td><td>false</td><td>Run inside a transaction and roll back — validate without committing</td></tr>
           <tr><td>--backup-dir</td><td>same dir as db</td><td>Where to store the automatic pre-migration backup</td></tr>
+          <tr><td>--verify</td><td>—</td><td>After applying, verify the schema matches this reference DB</td></tr>
         </tbody>
       </table>
 
       <h3>Examples</h3>
-      <pre><code># Generate SQL
-litescope migrate generate old.db new.db -o migration.sql
+      <pre><code># Generate SQL with blast-radius report
+litescope migrate old.db new.db -o migration.sql
 
-# Preview before applying
+# Preview before applying (transaction + rollback)
 litescope migrate apply prod.db migration.sql --dry-run
 
-# Apply (creates backup automatically)
+# Apply (creates VACUUM INTO backup automatically)
 litescope migrate apply prod.db migration.sql</code></pre>
 
       <div class="callout warn">
-        <strong>Safety.</strong> <code>apply</code> always creates a timestamped backup before writing. If any statement fails, the entire migration is rolled back.
+        <strong>Safety.</strong> <code>apply</code> runs a pre-flight integrity check, creates a point-in-time <code>VACUUM INTO</code> backup, executes inside a single transaction with FK verification, and restores the backup if anything fails.
       </div>
     </div>
 
@@ -325,49 +360,64 @@ litescope monitor watch prod.db -b baseline.json \
     <!-- fleet -->
     <div class="doc-section" id="fleet">
       <h2>fleet <span class="tier tier-pro">pro</span></h2>
-      <p>Discover and operate an entire Turso org or Cloudflare D1 account in parallel — baseline, drift-check, and migrate every database at once.</p>
+      <p>Operate an entire Turso org or Cloudflare D1 account as one unit. <code>discover</code> writes a <code>litescope.fleet.yaml</code> config; every other subcommand reads it and runs in parallel. The lifecycle: <strong>diagnose</strong> (fingerprint, health), then <strong>treat</strong> (converge, recover).</p>
 
-      <h3>check</h3>
-      <pre><code>litescope fleet check [flags]</code></pre>
+      <h3>discover</h3>
+      <p>Query the provider API for every database and write the fleet config.</p>
+      <pre><code>litescope fleet discover &lt;turso|d1&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td>--provider</td><td>—</td><td><code>turso</code> or <code>d1</code></td></tr>
-          <tr><td>--org</td><td>—</td><td>Turso org slug or Cloudflare account ID</td></tr>
-          <tr><td>--token</td><td>—</td><td>Platform API token (Turso management token or CF API token)</td></tr>
-          <tr><td>--db-token</td><td>—</td><td>Turso database token (for connecting to each DB)</td></tr>
-          <tr><td>--concurrency</td><td>8</td><td>Max parallel workers</td></tr>
-          <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
+          <tr><td>--org</td><td>—</td><td>Turso org slug</td></tr>
+          <tr><td>--account</td><td>—</td><td>Cloudflare account ID (D1)</td></tr>
+          <tr><td>--token</td><td>—</td><td>Platform API token (Turso platform token or CF API token)</td></tr>
+          <tr><td>--db-token</td><td>—</td><td>Turso database/group auth token applied to each DSN</td></tr>
         </tbody>
       </table>
 
-      <h3>snapshot</h3>
-      <pre><code>litescope fleet snapshot [flags]</code></pre>
-      <p>Same flags as <code>check</code>. Takes a baseline snapshot of every database in the fleet.</p>
+      <h3>snapshot &amp; check</h3>
+      <p>Capture baselines, then detect schema drift across the whole fleet. <code>check</code> exits <code>1</code> if any database drifted — drop it into CI.</p>
+      <pre><code>litescope fleet snapshot
+litescope fleet check [--tag group:prod] [--format json]</code></pre>
 
-      <h3>Examples</h3>
-      <pre><code># Baseline entire Turso org
-litescope fleet snapshot \
-  --provider turso \
-  --org my-org \
-  --token $TURSO_TOKEN \
-  --db-token $TURSO_DB_TOKEN
+      <h3>fingerprint</h3>
+      <p>Cluster the fleet by schema. The largest cluster is canonical; every other shows exactly how it drifted. Exits <code>1</code> when more than one schema is found.</p>
+      <pre><code>litescope fleet fingerprint</code></pre>
 
-# Drift check all at once
-litescope fleet check \
-  --provider turso \
-  --org my-org \
-  --token $TURSO_TOKEN \
-  --db-token $TURSO_DB_TOKEN
+      <h3>converge</h3>
+      <p>Generate and apply the migration that brings every drifted database onto canonical — staged, halting on failure. Destructive convergence requires <code>--force</code>.</p>
+      <pre><code>litescope fleet converge --dry-run        # plan + validate
+litescope fleet converge --canary 5       # fix the first 5, then stop
+litescope fleet converge --to canonical.db</code></pre>
 
-# Cloudflare D1
-litescope fleet check \
-  --provider d1 \
-  --org $CF_ACCOUNT_ID \
-  --token $CF_API_TOKEN</code></pre>
+      <h3>health</h3>
+      <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault.</p>
+      <pre><code>litescope fleet health [--deep] [--tag region:eu]</code></pre>
+
+      <h3>recover</h3>
+      <p>Restore critically faulted databases from their most recent verified backup; quarantine the unrecoverable so they're excluded from future fleet ops.</p>
+      <pre><code>litescope fleet recover --dry-run
+litescope fleet recover</code></pre>
+
+      <h3>migrate</h3>
+      <p>Roll one migration out across the fleet, staged and fail-closed, halting at the first failure.</p>
+      <pre><code>litescope fleet migrate add_index.sql --canary 5</code></pre>
+
+      <h3>Example workflow</h3>
+      <pre><code># 1. Register every database in a Turso org
+litescope fleet discover turso --org my-org \
+  --token $TURSO_API_TOKEN --db-token $TURSO_GROUP_TOKEN
+
+# 2. Diagnose: how many schemas, and what's broken?
+litescope fleet fingerprint
+litescope fleet health
+
+# 3. Treat: converge drift, recover faults
+litescope fleet converge --dry-run
+litescope fleet recover</code></pre>
 
       <div class="callout">
-        <strong>Baselines</strong> are stored at <code>~/.litescope/fleet/baselines/</code> keyed by database name.
+        <strong>Config &amp; baselines.</strong> The fleet config is a checked-in <code>litescope.fleet.yaml</code>; baselines default to <code>.litescope/baselines/</code>. Quarantined databases are recorded in the config and skipped by every command until cleared.
       </div>
     </div>
 
@@ -377,16 +427,16 @@ litescope fleet check \
       <p>The GUI app bundles all CLI operations in a visual interface. It ships as part of the same binary download — run <code>litescope gui</code> to launch, or double-click the <code>.app</code> on macOS.</p>
 
       <h3>Named connections</h3>
-      <p>Add databases by clicking <strong>+ Add</strong> in the sidebar. Free tier supports up to 3 named connections; Pro is unlimited.</p>
+      <p>Add databases by clicking <strong>+ Add</strong> in the sidebar. The Free tier supports 1 named connection; Pro is unlimited.</p>
 
       <h3>Tools</h3>
       <ul>
         <li><strong>Diff</strong> — visual schema and data diff between two databases</li>
         <li><strong>Explorer</strong> — browse tables and query rows</li>
-        <li><strong>Check</strong> — validate a backup against a reference</li>
-        <li><strong>Migrate</strong> — generate and apply migrations with dry-run preview</li>
+        <li><strong>Check</strong> (Pro) — validate a backup against a reference</li>
+        <li><strong>Migrate</strong> (Pro) — blast-radius analysis, generate and apply with dry-run</li>
         <li><strong>Monitor</strong> (Pro) — snapshot, check drift, run continuous watch</li>
-        <li><strong>Fleet</strong> (Pro) — discover and check Turso / D1 databases</li>
+        <li><strong>Fleet</strong> (Pro) — discover, fingerprint, converge, health, and recover Turso / D1 databases</li>
       </ul>
 
       <h3>Activating Pro in the GUI</h3>
@@ -396,6 +446,16 @@ litescope fleet check \
     <!-- Changelog -->
     <div class="doc-section" id="changelog">
       <h2>Changelog</h2>
+
+      <h3>v0.3.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-19</span></h3>
+      <ul>
+        <li><code>migrate</code>: blast-radius analysis — every operation classified Safe/Risky/Destructive with an estimated table-rebuild write-lock</li>
+        <li><code>fleet fingerprint</code>: cluster the fleet by schema and see drift from canonical</li>
+        <li><code>fleet converge</code>: auto-generate and stage the migration that fixes drift</li>
+        <li><code>fleet health</code> + <code>health</code>: parallel fault triage — corruption, WAL bloat, fragmentation</li>
+        <li><code>fleet recover</code>: restore faulted databases from backup; quarantine the unrecoverable</li>
+        <li>GUI: the full fleet lifecycle — fingerprint, converge, health, and recover</li>
+      </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
       <ul>
