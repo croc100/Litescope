@@ -531,7 +531,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">⚡</span>
         <div class="cmd-name">migrate <span class="tier-tag tier-pro">pro</span></div>
         <h3>See the blast radius first</h3>
-        <p>Every migration is classified Safe / Risky / Destructive with an estimated write-lock time — SQLite locks the whole file for a rebuild. Then apply with auto-backup, single transaction, FK verification, and rollback.</p>
+        <p>Versioned migrations (new / status / up) on a tracking table, or ad-hoc diffs. Every migration is classified Safe / Risky / Destructive with an estimated write-lock time, then applied with auto-backup, single transaction, FK verification, and rollback.</p>
       </div>
       <div class="card">
         <span class="card-icon">📡</span>

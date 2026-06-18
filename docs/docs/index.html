@@ -347,6 +347,28 @@ litescope migrate apply prod.db migration.sql</code></pre>
       <div class="callout warn">
         <strong>Safety.</strong> <code>apply</code> runs a pre-flight integrity check, creates a point-in-time <code>VACUUM INTO</code> backup, executes inside a single transaction with FK verification, and restores the backup if anything fails.
       </div>
+
+      <h3>Versioned migrations</h3>
+      <p>Beyond ad-hoc diffs, Litescope manages an ordered, versioned migration history — the Atlas/Flyway workflow. Migration files live in a <code>migrations/</code> directory (<code>0001_name.sql</code>, <code>0002_…</code>) and applied versions are tracked in a <code>litescope_schema_migrations</code> table.</p>
+      <table class="flag-table">
+        <thead><tr><th>Command</th><th>Tier</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>migrate new &lt;name&gt;</code></td><td>free</td><td>Create the next numbered migration file (use <code>--from</code>/<code>--to</code> to pre-fill from a diff)</td></tr>
+          <tr><td><code>migrate status &lt;db&gt;</code></td><td>free</td><td>Show applied vs pending migrations; flags history drift</td></tr>
+          <tr><td><code>migrate up &lt;db&gt;</code></td><td>pro</td><td>Apply all pending migrations in order, each through the safe pipeline</td></tr>
+        </tbody>
+      </table>
+      <pre><code># Generate a versioned migration from a schema change
+litescope migrate new add_users --from prod.db --to desired.db
+
+# See what's pending
+litescope migrate status prod.db
+
+# Apply pending migrations (records each in the tracking table)
+litescope migrate up prod.db</code></pre>
+      <div class="callout">
+        <strong>History integrity.</strong> Each applied migration is recorded with a checksum. Editing a migration file after it has run is detected — <code>status</code> reports drift and <code>up</code> refuses to proceed, so your migration history can't silently diverge from what actually ran.
+      </div>
     </div>
 
     <!-- monitor -->
@@ -532,6 +554,8 @@ litescope fleet recover</code></pre>
         <li>GUI: the full fleet lifecycle — fingerprint, converge, health, and recover</li>
         <li><code>mcp</code>: MCP server — let Claude and other AI agents call Litescope as read-only tools</li>
         <li><code>advise</code>: index &amp; query advisor — flags un-indexed foreign keys, redundant indexes, and full table scans</li>
+        <li><code>migrate new/status/up</code>: versioned migration workflow with a tracking table and checksum history-drift detection</li>
+        <li><code>license</code>: show the active tier (Free / Pro)</li>
       </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
