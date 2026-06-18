@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Litescope — the control plane for production SQLite fleets</title>
-<meta name="description" content="Diagnose and fix drift and faults across an entire fleet of Turso and Cloudflare D1 databases — fingerprint schemas, triage corruption and WAL bloat, converge drift, and recover from backup." />
-<meta property="og:title" content="Litescope — the control plane for production SQLite fleets" />
-<meta property="og:description" content="Diagnose and fix drift and faults across hundreds of SQLite databases — fingerprint, health, converge, recover. The ops layer Turso & D1 never had." />
+<title>Litescope — the operations layer for the databases AI apps run on</title>
+<meta name="description" content="AI apps, agents, and edge services all ship on SQLite. Litescope is the ops layer that keeps it safe: visualize your schema, catch drift, corruption, and WAL bloat, and recover — from one local file to a fleet of thousands on Turso and Cloudflare D1." />
+<meta property="og:title" content="Litescope — the ops layer for the databases AI apps run on" />
+<meta property="og:description" content="Your AI app runs on SQLite. Litescope watches it: schema, drift, corruption, and recovery — one file or a fleet of thousands." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://litescope-site.pages.dev/" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -436,9 +436,9 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
 <header id="top">
   <div class="wrap">
-    <div class="badge"><span class="pulse"></span>The control plane for production SQLite fleets</div>
-    <h1>When the pager goes off,<br/><span class="accent">run one command.</span></h1>
-    <p class="hero-sub">SQLite now runs production on Turso, D1, and the edge — one database per tenant, thousands of them. Litescope is the operations layer that never existed: diagnose drift and faults across the whole fleet, then fix them.</p>
+    <div class="badge"><span class="pulse"></span>The ops layer for the databases AI apps run on</div>
+    <h1>Your AI app runs on SQLite.<br/><span class="accent">Who's watching it?</span></h1>
+    <p class="hero-sub">Agents, RAG pipelines, and edge services all ship on SQLite — then drift, bloat, and corrupt in the dark. Litescope is the operations layer: see your schema, catch faults, and fix them — from one local file to a fleet of thousands.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">View pricing</a>
@@ -467,18 +467,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   <div class="wrap problem-grid">
     <div>
       <div class="eyebrow">The problem</div>
-      <h2>Schemas change.<br/>Nobody's watching.</h2>
-      <p>A migration runs clean. Monitoring stays green. Three weeks later a column is gone, a foreign key is broken, and the backup you never tested can't be restored.</p>
-      <p>Postgres has a decade of tooling for this. SQLite — now running <strong>production workloads on Turso and D1</strong> — has almost none.</p>
+      <h2>AI shipped on SQLite.<br/>Nobody's watching it.</h2>
+      <p>Every agent, RAG store, and AI app reaches for SQLite — it's the zero-config default. Then the schema drifts, the WAL bloats, a file corrupts, and the backup nobody tested can't be restored.</p>
+      <p>Postgres has a decade of tooling for this. SQLite — now running <strong>real production behind AI apps, Turso, and D1</strong> — has almost none. Litescope is that tooling.</p>
     </div>
     <div class="stack">
       <div class="stack-item">
         <span class="stack-icon">◆</span>
-        <div><b>Turso</b> &nbsp;<span>libSQL, edge replicas, per-tenant databases</span></div>
+        <div><b>AI apps &amp; agents</b> &nbsp;<span>LangChain, RAG stores, local-first AI, MCP servers</span></div>
       </div>
       <div class="stack-item">
         <span class="stack-icon">◆</span>
-        <div><b>Cloudflare D1</b> &nbsp;<span>SQLite on the Workers platform</span></div>
+        <div><b>Turso &amp; Cloudflare D1</b> &nbsp;<span>libSQL edge replicas, per-tenant databases at scale</span></div>
       </div>
       <div class="stack-item">
         <span class="stack-icon">◆</span>
