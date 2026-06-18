@@ -10,7 +10,8 @@ import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
-  FleetDiscover, FleetSnapshot, FleetCheck
+  FleetDiscover, FleetSnapshot, FleetCheck,
+  FleetFingerprint, FleetConverge, FleetHealth, FleetRecover
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
@@ -1631,6 +1632,12 @@ function MonitorView({ recent, addRecent, removeRecent, status, injectRef }: Vie
 interface FleetEntry { name: string; dsn: string; tags?: string[] }
 interface FleetResult { database: string; state: string; error?: string; changes: number; duration_ms: number }
 interface FleetSnapResult { database: string; tables: number; error?: string }
+interface FpCluster { id: string; count: number; is_canonical: boolean; members: string[]; drift?: string[] }
+interface FpResult { total: number; distinct: number; clusters: FpCluster[]; unreachable?: string[] }
+interface HealthResult { database: string; severity: string; remote: boolean; size_mb: number; wal_mb: number; issues?: string[] }
+interface RecoverResult { database: string; state: string; detail?: string }
+interface ConvergeCluster { cluster_id: string; count: number; statements: number; destructive: boolean; drift?: string[] }
+interface ConvergeResult { canonical_id: string; already_ok: number; total_to_converge: number; destructive: boolean; clusters: ConvergeCluster[]; applied: number; failed: number; mode: string }
 
 function FleetView({ status }: ViewProps) {
   const [provider, setProvider] = useState<'turso' | 'd1'>('turso')
@@ -1642,7 +1649,11 @@ function FleetView({ status }: ViewProps) {
   const [snapResults, setSnapResults] = useState<FleetSnapResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'discover' | 'check'>('discover')
+  const [tab, setTab] = useState<'discover' | 'check' | 'fingerprint' | 'health' | 'recover'>('discover')
+  const [fp, setFp] = useState<FpResult | null>(null)
+  const [healthResults, setHealthResults] = useState<HealthResult[]>([])
+  const [recoverResults, setRecoverResults] = useState<RecoverResult[]>([])
+  const [converge, setConverge] = useState<ConvergeResult | null>(null)
 
   async function discover() {
     if (!org || !token) return
@@ -1677,6 +1688,67 @@ function FleetView({ status }: ViewProps) {
       const drift = r?.filter((x: FleetResult) => x.state === 'drift').length ?? 0
       status(`Fleet: ${ok} ok, ${drift} drift`, drift > 0 ? 'warn' : 'ok')
     } catch (e: any) { setError(String(e)); status('Check failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function fingerprintAll() {
+    if (!databases.length) return
+    setLoading(true); setError(''); setFp(null); setConverge(null); setTab('fingerprint')
+    try {
+      const r = await FleetFingerprint(databases)
+      setFp(r)
+      status(r.distinct <= 1 ? 'Fleet is uniform' : `${r.distinct} distinct schemas`, r.distinct <= 1 ? 'ok' : 'warn')
+    } catch (e: any) { setError(String(e)); status('Fingerprint failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function planConverge() {
+    if (!databases.length) return
+    setLoading(true); setError('')
+    try {
+      const r = await FleetConverge(databases, false, false)
+      setConverge(r)
+      status(r.total_to_converge === 0 ? 'Already uniform' : `${r.total_to_converge} db to converge`, 'idle')
+    } catch (e: any) { setError(String(e)); status('Converge plan failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function applyConverge(force: boolean) {
+    if (!databases.length) return
+    setLoading(true); setError('')
+    try {
+      const r = await FleetConverge(databases, true, force)
+      setConverge(r)
+      status(`Converged ${r.applied}, ${r.failed} failed`, r.failed > 0 ? 'err' : 'ok')
+      // refresh fingerprint after applying
+      const fpr = await FleetFingerprint(databases); setFp(fpr)
+    } catch (e: any) { setError(String(e)); status('Converge failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function healthAll() {
+    if (!databases.length) return
+    setLoading(true); setError(''); setHealthResults([]); setTab('health')
+    try {
+      const r = await FleetHealth(databases, false)
+      setHealthResults(r ?? [])
+      const crit = r?.filter((x: HealthResult) => x.severity === 'critical').length ?? 0
+      const warn = r?.filter((x: HealthResult) => x.severity === 'warning').length ?? 0
+      status(`Health: ${crit} critical, ${warn} warning`, crit > 0 ? 'err' : warn > 0 ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Health check failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  async function recoverAll(dryRun: boolean) {
+    if (!databases.length) return
+    setLoading(true); setError(''); setRecoverResults([]); setTab('recover')
+    try {
+      const r = await FleetRecover(databases, dryRun)
+      setRecoverResults(r ?? [])
+      const restored = r?.filter((x: RecoverResult) => x.state === 'restored').length ?? 0
+      const quar = r?.filter((x: RecoverResult) => x.state === 'quarantined').length ?? 0
+      status(`${dryRun ? 'Plan: ' : ''}${restored} restored, ${quar} quarantined`, quar > 0 ? 'warn' : 'ok')
+    } catch (e: any) { setError(String(e)); status('Recover failed', 'err') }
     finally { setLoading(false) }
   }
 
@@ -1725,6 +1797,12 @@ function FleetView({ status }: ViewProps) {
             <Btn variant="ghost" onClick={checkAll} disabled={loading} small>
               <Activity size={11} />Check All
             </Btn>
+            <Btn variant="ghost" onClick={fingerprintAll} disabled={loading} small>
+              <Layers size={11} />Fingerprint
+            </Btn>
+            <Btn variant="ghost" onClick={healthAll} disabled={loading} small>
+              <ShieldCheck size={11} />Health
+            </Btn>
           </>}
         </div>
       </div>
@@ -1734,7 +1812,10 @@ function FleetView({ status }: ViewProps) {
       {databases.length > 0 && (
         <div className="flex items-center h-[30px] bg-[#1c2128] border-b border-[#30363d] px-2 gap-1 shrink-0">
           <SubTab label={`Databases (${databases.length})`} active={tab === 'discover'} onClick={() => setTab('discover')} />
-          {results.length > 0 && <SubTab label="Check Results" active={tab === 'check'} onClick={() => setTab('check')} />}
+          {results.length > 0 && <SubTab label="Check" active={tab === 'check'} onClick={() => setTab('check')} />}
+          {fp && <SubTab label="Fingerprint" count={fp.distinct} active={tab === 'fingerprint'} onClick={() => setTab('fingerprint')} />}
+          {healthResults.length > 0 && <SubTab label="Health" active={tab === 'health'} onClick={() => setTab('health')} />}
+          {recoverResults.length > 0 && <SubTab label="Recover" active={tab === 'recover'} onClick={() => setTab('recover')} />}
         </div>
       )}
 
@@ -1799,6 +1880,124 @@ function FleetView({ status }: ViewProps) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {tab === 'fingerprint' && fp && !loading && (
+          <div className="p-4 space-y-4">
+            <div className="text-[12px] text-[#e6edf3]">
+              {fp.total} database(s) · {fp.distinct <= 1
+                ? <span className="text-[#4ec9b0]">uniform — one schema</span>
+                : <span className="text-[#dcdcaa]">{fp.distinct} distinct schemas</span>}
+            </div>
+            {fp.clusters.map(c => {
+              const max = Math.max(...fp.clusters.map(x => x.count))
+              const filled = Math.max(1, Math.round((c.count / max) * 18))
+              return (
+                <div key={c.id} className="space-y-1">
+                  <div className="flex items-center gap-3 font-mono text-[12px]">
+                    <span className={c.is_canonical ? 'text-[#4ec9b0]' : 'text-[#dcdcaa]'}>
+                      {'█'.repeat(filled)}{'░'.repeat(18 - filled)}
+                    </span>
+                    <span className="text-[#e6edf3] font-semibold w-10 text-right">{c.count}</span>
+                    <span className={c.is_canonical ? 'text-[#4ec9b0]' : 'text-[#dcdcaa]'}>
+                      schema {c.id}{c.is_canonical ? '  (canonical)' : ''}
+                    </span>
+                  </div>
+                  {!c.is_canonical && c.drift?.map((d, i) => (
+                    <div key={i} className="text-[11px] text-[#6e7681] ml-3 font-mono">{d}</div>
+                  ))}
+                </div>
+              )
+            })}
+            {fp.unreachable && fp.unreachable.length > 0 && (
+              <div className="text-[11px] text-[#f44747]">{fp.unreachable.length} unreachable: {fp.unreachable.join(', ')}</div>
+            )}
+            {fp.distinct > 1 && (
+              <div className="pt-2 border-t border-[#30363d] space-y-2">
+                <div className="flex gap-2">
+                  <Btn variant="ghost" onClick={planConverge} disabled={loading} small><GitMerge size={11} />Plan Converge</Btn>
+                </div>
+                {converge && converge.total_to_converge > 0 && (
+                  <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-3 space-y-2">
+                    <div className="text-[12px] text-[#e6edf3]">
+                      Converge {converge.total_to_converge} db → schema <span className="text-[#4ec9b0]">{converge.canonical_id}</span>
+                      {converge.destructive && <span className="text-[#f44747] ml-2">[destructive]</span>}
+                    </div>
+                    {converge.clusters.map(cc => (
+                      <div key={cc.cluster_id} className="text-[11px] text-[#6e7681]">
+                        schema {cc.cluster_id}: {cc.count} db · {cc.statements} stmt(s){cc.destructive ? ' · destructive' : ''}
+                      </div>
+                    ))}
+                    {converge.mode === 'applied'
+                      ? <div className="text-[11px] text-[#4ec9b0]">Applied {converge.applied}, {converge.failed} failed</div>
+                      : <div className="flex gap-2">
+                          {!converge.destructive
+                            ? <Btn onClick={() => applyConverge(false)} disabled={loading} small><Play size={11} />Apply</Btn>
+                            : <Btn variant="danger" onClick={() => applyConverge(true)} disabled={loading} small><Play size={11} />Force Apply (destructive)</Btn>}
+                        </div>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'health' && healthResults.length > 0 && !loading && (
+          <div>
+            <div className="flex items-center gap-4 px-4 py-2 bg-[#161b22] border-b border-[#30363d] text-[11px]">
+              {(['critical','warning','ok'] as const).map(s => {
+                const count = healthResults.filter(r => r.severity === s).length
+                if (!count) return null
+                const color = s === 'critical' ? 'text-[#f44747]' : s === 'warning' ? 'text-[#dcdcaa]' : 'text-[#4ec9b0]'
+                return <span key={s} className={color}>{count} {s}</span>
+              })}
+              <div className="flex-1" />
+              <Btn variant="ghost" onClick={() => recoverAll(true)} disabled={loading} small><RefreshCw size={11} />Recover (dry-run)</Btn>
+              <Btn variant="ghost" onClick={() => recoverAll(false)} disabled={loading} small><Play size={11} />Recover</Btn>
+            </div>
+            <div className="divide-y divide-[#252525]">
+              {healthResults.map((r, i) => {
+                const color = r.severity === 'critical' ? 'text-[#f44747]' : r.severity === 'warning' ? 'text-[#dcdcaa]' : 'text-[#4ec9b0]'
+                const mark = r.severity === 'critical' ? '✗' : r.severity === 'warning' ? '⚠' : '●'
+                return (
+                  <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1c2128]">
+                    <span className={`text-[14px] ${color}`}>{mark}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] text-[#e6edf3]">{r.database}</div>
+                      {r.issues && r.issues.length > 0
+                        ? <div className={`text-[10px] ${color} truncate`}>{r.issues.join('; ')}</div>
+                        : <div className="text-[10px] text-[#484f58]">
+                            {r.remote ? 'remote · reachable' : `${r.size_mb.toFixed(1)}MB${r.wal_mb > 0 ? ` · wal ${r.wal_mb.toFixed(1)}MB` : ''}`}
+                          </div>}
+                    </div>
+                    <span className={`text-[11px] font-medium ${color}`}>{r.severity}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {tab === 'recover' && recoverResults.length > 0 && !loading && (
+          <div className="divide-y divide-[#252525]">
+            {recoverResults.filter(r => r.state !== 'healthy').map((r, i) => {
+              const color = r.state === 'restored' ? 'text-[#4ec9b0]' : r.state === 'quarantined' ? 'text-[#dcdcaa]' : 'text-[#f44747]'
+              const mark = r.state === 'restored' ? '✓' : r.state === 'quarantined' ? '⚠' : '✗'
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1c2128]">
+                  <span className={`text-[14px] ${color}`}>{mark}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-[#e6edf3]">{r.database}</div>
+                    {r.detail && <div className={`text-[10px] ${color} truncate`}>{r.detail}</div>}
+                  </div>
+                  <span className={`text-[11px] font-medium ${color}`}>{r.state}</span>
+                </div>
+              )
+            })}
+            {recoverResults.every(r => r.state === 'healthy') && (
+              <div className="px-4 py-6 text-center text-[12px] text-[#4ec9b0]">All databases healthy — nothing to recover.</div>
+            )}
           </div>
         )}
       </div>

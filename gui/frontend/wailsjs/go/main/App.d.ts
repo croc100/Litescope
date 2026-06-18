@@ -32,6 +32,14 @@ export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.
 
 export function FleetCheck(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetCheckResult>>;
 
+export function FleetFingerprint(arg1:Array<main.FleetDBEntry>):Promise<any>;
+
+export function FleetConverge(arg1:Array<main.FleetDBEntry>,arg2:boolean,arg3:boolean):Promise<any>;
+
+export function FleetHealth(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<any>>;
+
+export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<any>>;
+
 export function OpenFile():Promise<string>;
 
 export function QueryTable(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.TableRows>;

@@ -463,6 +463,181 @@ func (a *App) FleetCheck(entries []FleetDBEntry) []FleetCheckResult {
 	return out
 }
 
+// ── Fleet: fingerprint ──────────────────────────────────────────────────────
+
+type FleetFingerprintCluster struct {
+	ID          string   `json:"id"`
+	Count       int      `json:"count"`
+	IsCanonical bool     `json:"is_canonical"`
+	Members     []string `json:"members"`
+	Drift       []string `json:"drift,omitempty"` // human-readable "missing table x" lines vs canonical
+}
+
+type FleetFingerprintResult struct {
+	Total       int                       `json:"total"`
+	Distinct    int                       `json:"distinct"`
+	Clusters    []FleetFingerprintCluster `json:"clusters"`
+	Unreachable []string                  `json:"unreachable,omitempty"`
+}
+
+func (a *App) FleetFingerprint(entries []FleetDBEntry) FleetFingerprintResult {
+	dbs := toFleetDatabases(entries)
+	report := fleet.Fingerprint(dbs, 0)
+
+	out := FleetFingerprintResult{Total: report.Total, Distinct: len(report.Clusters)}
+	for _, c := range report.Clusters {
+		out.Clusters = append(out.Clusters, FleetFingerprintCluster{
+			ID:          c.ID,
+			Count:       c.Count,
+			IsCanonical: c.IsCanonical,
+			Members:     c.Members,
+			Drift:       driftToLines(c.Drift),
+		})
+	}
+	for _, u := range report.Unreachable {
+		out.Unreachable = append(out.Unreachable, u.Database)
+	}
+	return out
+}
+
+// ── Fleet: converge ─────────────────────────────────────────────────────────
+
+type FleetConvergeCluster struct {
+	ClusterID   string   `json:"cluster_id"`
+	Count       int      `json:"count"`
+	Statements  int      `json:"statements"`
+	Destructive bool     `json:"destructive"`
+	Drift       []string `json:"drift,omitempty"`
+}
+
+type FleetConvergeResult struct {
+	CanonicalID     string                 `json:"canonical_id"`
+	AlreadyOK       int                    `json:"already_ok"`
+	TotalToConverge int                    `json:"total_to_converge"`
+	Destructive     bool                   `json:"destructive"`
+	Clusters        []FleetConvergeCluster `json:"clusters"`
+	Applied         int                    `json:"applied"`  // populated when apply=true
+	Failed          int                    `json:"failed"`   // populated when apply=true
+	Mode            string                 `json:"mode"`     // "plan" | "dry-run" | "applied"
+}
+
+// FleetConverge plans (and optionally applies) convergence to the largest
+// cluster. When apply is false, only the plan is returned. When apply is true,
+// a destructive plan is refused unless force is set.
+func (a *App) FleetConverge(entries []FleetDBEntry, apply, force bool) (FleetConvergeResult, error) {
+	dbs := toFleetDatabases(entries)
+	plan, err := fleet.PlanConvergence(dbs, nil, 0)
+	if err != nil {
+		return FleetConvergeResult{}, err
+	}
+
+	out := FleetConvergeResult{
+		CanonicalID:     plan.CanonicalID,
+		AlreadyOK:       plan.AlreadyOK,
+		TotalToConverge: plan.TotalToConverge,
+		Destructive:     plan.HasDestructive(),
+		Mode:            "plan",
+	}
+	for _, c := range plan.Clusters {
+		out.Clusters = append(out.Clusters, FleetConvergeCluster{
+			ClusterID:   c.ClusterID,
+			Count:       len(c.Members),
+			Statements:  c.Statements,
+			Destructive: c.Destructive,
+			Drift:       driftToLines(c.Drift),
+		})
+	}
+
+	if !apply || plan.TotalToConverge == 0 {
+		return out, nil
+	}
+	if plan.HasDestructive() && !force {
+		return out, fmt.Errorf("convergence is destructive — pass force to proceed")
+	}
+
+	report := fleet.Converge(plan, fleet.RolloutOptions{})
+	applied, failed, _ := report.Counts()
+	out.Applied = applied
+	out.Failed = failed
+	out.Mode = "applied"
+	return out, nil
+}
+
+// ── Fleet: health ───────────────────────────────────────────────────────────
+
+type FleetHealthResult struct {
+	Database string   `json:"database"`
+	Severity string   `json:"severity"` // "ok" | "warning" | "critical"
+	Remote   bool     `json:"remote"`
+	SizeMB   float64  `json:"size_mb"`
+	WALMB    float64  `json:"wal_mb"`
+	Issues   []string `json:"issues,omitempty"`
+}
+
+func (a *App) FleetHealth(entries []FleetDBEntry, deep bool) []FleetHealthResult {
+	dbs := toFleetDatabases(entries)
+	report := fleet.Health(dbs, deep, 0)
+	out := make([]FleetHealthResult, len(report.Results))
+	for i, r := range report.Results {
+		out[i] = FleetHealthResult{
+			Database: r.Database,
+			Severity: r.Report.SeverityLabel,
+			Remote:   r.Report.Remote,
+			SizeMB:   float64(r.Report.SizeBytes) / (1024 * 1024),
+			WALMB:    float64(r.Report.WALBytes) / (1024 * 1024),
+			Issues:   r.Report.Issues,
+		}
+	}
+	return out
+}
+
+// ── Fleet: recover ──────────────────────────────────────────────────────────
+
+type FleetRecoverResult struct {
+	Database string `json:"database"`
+	State    string `json:"state"` // "healthy" | "restored" | "quarantined" | "failed" | "remote"
+	Detail   string `json:"detail,omitempty"`
+}
+
+func (a *App) FleetRecover(entries []FleetDBEntry, dryRun bool) []FleetRecoverResult {
+	dbs := toFleetDatabases(entries)
+	report := fleet.Recover(dbs, fleet.RecoverOptions{DryRun: dryRun, Quarantine: true})
+	out := make([]FleetRecoverResult, len(report.Results))
+	for i, r := range report.Results {
+		out[i] = FleetRecoverResult{
+			Database: r.Database,
+			State:    string(r.State),
+			Detail:   r.Detail,
+		}
+	}
+	return out
+}
+
+// driftToLines renders a schema diff as short human-readable lines, matching the
+// CLI's "missing table / extra column" vocabulary.
+func driftToLines(drift []diff.TableDiff) []string {
+	var lines []string
+	for _, td := range drift {
+		switch {
+		case td.Added:
+			lines = append(lines, "+ extra table "+td.Name)
+		case td.Removed:
+			lines = append(lines, "- missing table "+td.Name)
+		default:
+			for _, c := range td.AddedColumns {
+				lines = append(lines, fmt.Sprintf("+ %s.%s extra column", td.Name, c.Name))
+			}
+			for _, c := range td.RemovedColumns {
+				lines = append(lines, fmt.Sprintf("- %s.%s missing column", td.Name, c.Name))
+			}
+			for _, c := range td.ChangedColumns {
+				lines = append(lines, fmt.Sprintf("~ %s.%s type %s→%s", td.Name, c.Name, c.Old.Type, c.New.Type))
+			}
+		}
+	}
+	return lines
+}
+
 func fleetBaselineDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".litescope", "fleet", "baselines")

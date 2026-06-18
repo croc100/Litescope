@@ -54,6 +54,22 @@ export function FleetCheck(arg1) {
   return window['go']['main']['App']['FleetCheck'](arg1);
 }
 
+export function FleetFingerprint(arg1) {
+  return window['go']['main']['App']['FleetFingerprint'](arg1);
+}
+
+export function FleetConverge(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FleetConverge'](arg1, arg2, arg3);
+}
+
+export function FleetHealth(arg1, arg2) {
+  return window['go']['main']['App']['FleetHealth'](arg1, arg2);
+}
+
+export function FleetRecover(arg1, arg2) {
+  return window['go']['main']['App']['FleetRecover'](arg1, arg2);
+}
+
 export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
 }
