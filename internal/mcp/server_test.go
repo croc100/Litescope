@@ -1,0 +1,119 @@
+package mcp
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	_ "modernc.org/sqlite"
+)
+
+// run feeds newline-delimited JSON-RPC requests through Serve and returns the
+// decoded responses keyed by their numeric id.
+func run(t *testing.T, requests ...string) map[float64]map[string]interface{} {
+	t.Helper()
+	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
+	var out bytes.Buffer
+	if err := Serve(in, &out, "test"); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	resps := map[float64]map[string]interface{}{}
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("bad response line %q: %v", line, err)
+		}
+		if id, ok := m["id"].(float64); ok {
+			resps[id] = m
+		}
+	}
+	return resps
+}
+
+func TestServe_Initialize(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+	res, ok := r[1]["result"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("no result in initialize response: %v", r[1])
+	}
+	if res["protocolVersion"] != protocolVersion {
+		t.Errorf("protocolVersion = %v, want %s", res["protocolVersion"], protocolVersion)
+	}
+	info := res["serverInfo"].(map[string]interface{})
+	if info["name"] != "litescope" || info["version"] != "test" {
+		t.Errorf("serverInfo = %v", info)
+	}
+}
+
+func TestServe_Notification_NoResponse(t *testing.T) {
+	// A notification (no id) must not produce a response line.
+	in := strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n")
+	var out bytes.Buffer
+	if err := Serve(in, &out, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "" {
+		t.Errorf("notification produced output: %q", out.String())
+	}
+}
+
+func TestServe_ToolsList(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`)
+	res := r[7]["result"].(map[string]interface{})
+	tools := res["tools"].([]interface{})
+	names := map[string]bool{}
+	for _, ti := range tools {
+		names[ti.(map[string]interface{})["name"].(string)] = true
+	}
+	for _, want := range []string{"litescope_health", "litescope_schema", "litescope_diff"} {
+		if !names[want] {
+			t.Errorf("tools/list missing %s (got %v)", want, names)
+		}
+	}
+}
+
+func TestServe_ToolCall_Health(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/ok.db"
+	db, _ := sql.Open("sqlite", path)
+	db.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+	db.Close()
+
+	req := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"litescope_health","arguments":{"path":"` + path + `"}}}`
+	r := run(t, req)
+	res := r[3]["result"].(map[string]interface{})
+	if res["isError"] != false {
+		t.Errorf("healthy DB reported isError=true: %v", res)
+	}
+	text := res["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+	if !strings.Contains(text, `"severity": "ok"`) {
+		t.Errorf("expected severity ok in result, got: %s", text)
+	}
+}
+
+func TestServe_ToolCall_MissingArg_IsError(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"litescope_health","arguments":{}}}`)
+	res := r[4]["result"].(map[string]interface{})
+	if res["isError"] != true {
+		t.Errorf("missing path should be a tool error, got: %v", res)
+	}
+}
+
+func TestServe_UnknownMethod_Error(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":5,"method":"does/not/exist"}`)
+	if _, ok := r[5]["error"].(map[string]interface{}); !ok {
+		t.Errorf("unknown method should return an error, got: %v", r[5])
+	}
+}
+
+func TestServe_UnknownTool_Error(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"nope","arguments":{}}}`)
+	if _, ok := r[6]["error"].(map[string]interface{}); !ok {
+		t.Errorf("unknown tool should return a protocol error, got: %v", r[6])
+	}
+}
