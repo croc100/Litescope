@@ -41,6 +41,7 @@ Fleet is a Pro feature.`,
 	cmd.AddCommand(cmdFleetFingerprint())
 	cmd.AddCommand(cmdFleetConverge())
 	cmd.AddCommand(cmdFleetHealth())
+	cmd.AddCommand(cmdFleetBlastRadius())
 	cmd.AddCommand(cmdFleetRecover())
 	cmd.AddCommand(cmdFleetStatus())
 	cmd.AddCommand(cmdFleetMigrate())
@@ -256,6 +257,73 @@ into a scheduled job to get paged on fleet faults.`,
 	}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
 	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
+	return cmd
+}
+
+// ── blast-radius ────────────────────────────────────────────────────────────
+
+func cmdFleetBlastRadius() *cobra.Command {
+	var configPath, format string
+	var deep bool
+	var concurrency int
+
+	cmd := &cobra.Command{
+		Use:   "blast-radius",
+		Short: "Show which shared cohorts a fault threatens (corruption → who else is at risk)",
+		Long: `Triage faults, then map each critically faulted database to the cohorts it
+shares (Turso groups, regions — any tag). One corrupt database in a group often
+means the whole group's shared infrastructure is suspect; this shows who else to
+check before the next page.
+
+  litescope fleet blast-radius
+
+Exit code is 1 when any cohort is affected.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := license.RequirePro(); err != nil {
+				return err
+			}
+			cfg, dbs, err := loadFleet(configPath, "")
+			if err != nil {
+				return err
+			}
+			report := fleet.Health(dbs, deep, concurrency)
+			groups := fleet.BlastRadius(dbs, report)
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(groups)
+			}
+
+			name := cfg.Name
+			if name == "" {
+				name = "(unnamed)"
+			}
+			fmt.Printf("\n  Blast radius: %s\n\n", styleBold.Render(name))
+			if len(groups) == 0 {
+				fmt.Printf("  %s  No faults — nothing at risk.\n\n", styleOK.Render("●"))
+				return nil
+			}
+			for _, g := range groups {
+				fmt.Printf("  %s  %s  %s\n",
+					styleErr.Render("✗"),
+					styleBold.Render(g.Tag),
+					styleErr.Render(fmt.Sprintf("%d of %d faulted", len(g.Faulted), g.Total)))
+				fmt.Printf("       %s %s\n", styleDim.Render("faulted:"), strings.Join(g.Faulted, ", "))
+				if len(g.AtRisk) > 0 {
+					fmt.Printf("       %s %s\n", styleWarn.Render("at risk:"), styleDim.Render(sampleMembers(g.AtRisk)))
+				}
+				fmt.Println()
+			}
+			os.Exit(1)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
 	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
 	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")

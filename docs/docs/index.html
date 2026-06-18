@@ -456,6 +456,10 @@ litescope fleet converge --to canonical.db</code></pre>
       <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault.</p>
       <pre><code>litescope fleet health [--deep] [--tag region:eu]</code></pre>
 
+      <h3>blast-radius</h3>
+      <p>Map each critically faulted database to the cohorts it shares (Turso groups, regions — any tag). One corrupt database in a group often means the whole group's shared infrastructure is suspect — this shows who else to check.</p>
+      <pre><code>litescope fleet blast-radius</code></pre>
+
       <h3>recover</h3>
       <p>Restore critically faulted databases from their most recent verified backup; quarantine the unrecoverable so they're excluded from future fleet ops.</p>
       <pre><code>litescope fleet recover --dry-run
@@ -534,6 +538,7 @@ litescope fleet recover</code></pre>
         <li><strong>Migrate</strong> (Pro) — blast-radius analysis, generate and apply with dry-run</li>
         <li><strong>Monitor</strong> (Pro) — snapshot, check drift, run continuous watch</li>
         <li><strong>Fleet</strong> (Pro) — discover, fingerprint, converge, health, and recover Turso / D1 databases</li>
+        <li><strong>Fleet Map</strong> (Pro) — every database as a cell in a living map, colored by health or schema cluster</li>
       </ul>
 
       <h3>Activating Pro in the GUI</h3>
@@ -556,6 +561,8 @@ litescope fleet recover</code></pre>
         <li><code>advise</code>: index &amp; query advisor — flags un-indexed foreign keys, redundant indexes, and full table scans</li>
         <li><code>migrate new/status/up</code>: versioned migration workflow with a tracking table and checksum history-drift detection</li>
         <li><code>license</code>: show the active tier (Free / Pro)</li>
+        <li>GUI: fleet topology map — every database colored by health or schema cluster</li>
+        <li><code>fleet blast-radius</code>: map a fault to the shared cohort (group/region) at risk</li>
       </ul>
 
       <h3>v0.2.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-06-16</span></h3>
