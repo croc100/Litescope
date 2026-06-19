@@ -33,7 +33,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ["zip"]
     files:
       - LICENSE
       - README.md
@@ -61,7 +61,7 @@ changelog:
 brews:
   - name: litescope
     homepage: "https://github.com/croc100/Litescope"
-    description: "SQLite production operations — diff, validate, backup check, schema drift monitoring"
+    description: "The database operations layer for AI apps — schema, migrations & fleet health for SQLite/Turso"
     license: "Elastic-2.0"
     repository:
       owner: croc100

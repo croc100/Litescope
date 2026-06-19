@@ -1,9 +1,10 @@
 name: Release
 
+# Manual-only: releases are cut locally with `goreleaser release --clean` to avoid
+# spending Actions minutes on this private repo. This workflow stays as a fallback
+# you can trigger by hand from the Actions tab if a local release isn't possible.
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
