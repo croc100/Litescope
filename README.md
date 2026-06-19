@@ -147,6 +147,23 @@ Other formats: `-f terminal` (default), `-f json`.
 
 ---
 
+### `dump` — Export a database as portable SQL (free)
+
+Write a database out as a standalone `.sql` file — schema plus data — that
+recreates it when replayed into `sqlite3` or `litescope migrate`. Same ordering
+and quoting as the sqlite3 shell's `.dump`, with safe handling of blobs, NULLs,
+and embedded quotes.
+
+```bash
+litescope dump app.db                  # full dump to stdout
+litescope dump app.db -o backup.sql    # ... to a file
+litescope dump app.db --schema-only    # DDL only (CREATE statements)
+litescope dump app.db --data-only      # INSERTs only
+litescope dump app.db --table users    # one table and its data
+```
+
+---
+
 ### `validate` — Lock migrations to a spec (free)
 
 Snapshot your expected migration once, then enforce it in CI. Fails loudly if something unexpected changes.
@@ -394,7 +411,7 @@ Three tiers, one funnel. See [ROADMAP.md](ROADMAP.md) for the full plan.
 | | **Free** | **Pro** — $89/yr | **Enterprise** |
 |---|---|---|---|
 | | Individual dev | Individual operator | Teams & large companies |
-| doctor · diff · schema · validate · lint | ✓ | ✓ | ✓ |
+| doctor · diff · schema · dump · validate · lint | ✓ | ✓ | ✓ |
 | check (single file) · health · advise · mcp | ✓ | ✓ | ✓ |
 | migrate (generate SQL) | ✓ | ✓ | ✓ |
 | monitor snapshot / check (CI) | ✓ | ✓ | ✓ |

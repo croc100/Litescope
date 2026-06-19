@@ -50,7 +50,8 @@ one genuinely proprietary asset and stays closed.
 
 ### Free — explore & inspect (single database)
 - `diff` — schema & data comparison (all formats, HTML, CI/PR markdown)
-- `schema` — inspect a single database (local / Turso / D1)
+- `schema` — inspect a single database (local / Turso / D1), Mermaid ERD output
+- `dump` — export a local database as portable SQL (schema + data)
 - `validate` — lock migrations to a spec, enforce in CI
 - `check` — single-file backup integrity (PRAGMA + one reference)
 - `migrate` (generate) — turn a diff into runnable SQL
@@ -138,8 +139,8 @@ gold-plating — it must serve the next gate (**Free adoption**). Four axes,
    - ✅ `litescope lint` — SQLite schema design anti-pattern linter (no PK,
      untyped columns, not STRICT, AUTOINCREMENT, non-integer PK). CI-native,
      a category Atlas/squawk own for PG/MySQL but SQLite lacked.
-   - ⬜ ERD output — `schema --erd` emitting Mermaid (shareable in GitHub READMEs).
-   - ⬜ `dump` / export — SQL dump (sqlite3 `.dump` / DB Browser parity).
+   - ✅ ERD output — `schema --erd` emitting Mermaid (shareable in GitHub READMEs).
+   - ✅ `dump` / export — SQL dump (sqlite3 `.dump` parity: schema+data, blob/NULL/quote-safe, round-trip verified). `--schema-only`/`--data-only`/`--table`/`-o`.
    - ⬜ HTML shareable reports for `doctor` / `diff`.
    - ⬜ `advise` accuracy — fewer false positives, clearer rationale.
    - Goal: maximize virality & shareability of the single-DB experience.
