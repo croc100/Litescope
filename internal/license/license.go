@@ -19,8 +19,9 @@ import (
 type Tier int
 
 const (
-	TierFree Tier = 0
-	TierPro  Tier = 1
+	TierFree       Tier = 0
+	TierPro        Tier = 1
+	TierEnterprise Tier = 2 // "Ex" — web SaaS / self-host, sold via contact sales
 )
 
 const workerURL = "https://litescope-license-worker.croc100.workers.dev/verify"
@@ -161,20 +162,26 @@ func verifyOnline(key string) (Tier, bool) {
 	if !v.Valid {
 		return TierFree, true
 	}
-	if v.Tier == "pro" {
+	switch v.Tier {
+	case "enterprise":
+		return TierEnterprise, true
+	case "pro":
 		return TierPro, true
 	}
 	return TierFree, true
 }
 
 func tierFromPrefix(key string) Tier {
-	if strings.HasPrefix(key, "lsc_pro_") {
+	switch {
+	case strings.HasPrefix(key, "lsc_ent_"):
+		return TierEnterprise
+	case strings.HasPrefix(key, "lsc_pro_"):
 		return TierPro
 	}
 	return TierFree
 }
 
-// RequirePro checks for Pro tier.
+// RequirePro checks for Pro tier (Enterprise satisfies it too).
 func RequirePro() error {
 	if Current() >= TierPro {
 		return nil
@@ -183,10 +190,11 @@ func RequirePro() error {
 
   This feature requires Litescope Pro.
 
-  Get your license: https://litescope-site.pages.dev/#pricing
+  Get your license: https://croc100.github.io/Litescope/#pricing
   Then activate:   export LITESCOPE_LICENSE=<your-key>
 
-  Pro ($89/year): drift monitor, fleet ops, unlimited connections`,
+  Pro ($89/year): migrate apply, drift monitor, fleet ops, unlimited connections
+  Need teams, a web dashboard, SSO or self-host? See Enterprise — croc100100@gmail.com`,
 		ErrUpgradeRequired)
 }
 

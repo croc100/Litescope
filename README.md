@@ -13,6 +13,9 @@
 SQLite is everywhere now — Turso, Cloudflare D1, the edge, every mobile app. The operations tooling never caught up. Litescope is the missing toolchain: **diff, validate, migrate, and monitor — one database or an entire fleet.**
 
 ```bash
+# One database — full checkup in one command
+litescope doctor app.db
+
 # One database
 litescope diff before.db after.db
 litescope monitor watch turso://TOKEN@ORG/prod --baseline baseline.json --interval 1h
@@ -26,6 +29,37 @@ litescope fleet migrate migration.sql --canary 5
 ---
 
 ## Commands
+
+### `doctor` — One-shot checkup (free)
+
+Point it at a database and get a single verdict. Combines integrity, operational
+health, performance advice, and schema-design lint — no setup, no baseline required.
+
+```bash
+litescope doctor app.db
+litescope doctor app.db --deep            # exhaustive integrity_check
+litescope doctor app.db --format json     # for CI / dashboards
+```
+
+```
+  ⚠  NEEDS ATTENTION  app.db
+
+  Health · ok
+  integrity       ok
+  size            12.0KB
+  wal             0B
+  fragmentation   0.0%
+
+  Advisor · 1 finding(s)
+  ⚠  foreign key on (user_id) has no index — every join scans the whole table  orders
+       CREATE INDEX idx_orders_user_id ON "orders"(user_id);
+```
+
+Exits **1** when the database needs attention (health warning/critical or any
+performance warning) — drop it straight into CI as a quality gate. Triage an
+entire Turso/D1 fleet at once with `litescope fleet health` (Pro).
+
+---
 
 ### `diff` — Human-readable schema and data diff
 
@@ -52,6 +86,24 @@ Data diff
   users         +12 rows  -3 rows
   audit_logs    +248 rows
 ```
+
+---
+
+### `lint` — Schema design anti-patterns (free)
+
+Catch the structural mistakes that ship by default — especially in AI-generated
+schemas. Looks only at schema shape (never data or queries), so it's fast and
+CI-safe.
+
+```bash
+litescope lint app.db
+litescope lint app.db --format json
+litescope lint app.db --strict        # exit 1 on info findings too
+```
+
+Rules: `no-primary-key`, `untyped-column`, `not-strict`, `autoincrement-overhead`,
+`non-integer-pk`. Exits **1** on warnings (`--strict` also fails on info). For
+index/performance problems use `advise`; for everything at once use `doctor`.
 
 ---
 
@@ -307,21 +359,28 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 
 ## Pricing
 
-| | Free | Pro ($9/mo) | Cloud ($49/mo) |
-|---|---|---|---|
-| diff, schema, validate, check | ✓ | ✓ | ✓ |
-| migrate (generate SQL) | ✓ | ✓ | ✓ |
-| monitor snapshot / check | ✓ | ✓ | ✓ |
-| migrate apply (backup + rollback) | — | ✓ | ✓ |
-| monitor watch (continuous) | — | ✓ | ✓ |
-| Webhook alerts (Slack, Discord) | — | ✓ | ✓ |
-| **fleet** — manage 100s of DBs at once | — | — | ✓ |
-| fleet discover / snapshot / check | — | — | ✓ |
-| fleet migrate (staged rollout) | — | — | ✓ |
-| monitor history (drift timeline) | — | — | ✓ |
-| Team access + audit trail | — | — | ✓ |
+Three tiers, one funnel. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-Set your license key:
+| | **Free** | **Pro** — $89/yr | **Enterprise** |
+|---|---|---|---|
+| | Individual dev | Individual operator | Teams & large companies |
+| doctor · diff · schema · validate · lint | ✓ | ✓ | ✓ |
+| check (single file) · health · advise · mcp | ✓ | ✓ | ✓ |
+| migrate (generate SQL) | ✓ | ✓ | ✓ |
+| monitor snapshot / check (CI) | ✓ | ✓ | ✓ |
+| GUI explorer | 1 connection | unlimited | unlimited |
+| migrate apply (backup + rollback) | — | ✓ | ✓ |
+| check (batch / --against / report) | — | ✓ | ✓ |
+| monitor watch + webhook alerts | — | ✓ | ✓ |
+| **fleet** — discover / check / migrate / converge / recover | — | ✓ | ✓ |
+| policy gates · team RBAC (local) | — | ✓ | ✓ |
+| **Web dashboard** — fleet aggregation & history | — | — | ✓ |
+| Alerting (Slack / PagerDuty / on-call) | — | — | ✓ |
+| SSO · org multi-user · org RBAC | — | — | ✓ |
+| **Self-host** (on-prem / your cloud) | — | — | ✓ |
+| SLA + priority support | — | — | ✓ |
+
+**Pro** — set your license key:
 
 ```bash
 export LITESCOPE_LICENSE=lsc_pro_xxxxxxxxxxxxxxxx
@@ -329,11 +388,19 @@ export LITESCOPE_LICENSE=lsc_pro_xxxxxxxxxxxxxxxx
 echo "lsc_pro_xxxxxxxxxxxxxxxx" > ~/.litescope/license
 ```
 
-Get a key at **[croc100.github.io/Litescope](https://croc100.github.io/Litescope/#pricing)**.
+Get a Pro key at **[croc100.github.io/Litescope](https://croc100.github.io/Litescope/#pricing)**.
+
+**Enterprise** — a hosted web dashboard for monitoring your entire SQLite fleet
+(Turso + Cloudflare D1 + local) from one screen, with SSO, team access, and
+self-host options for your own servers or cloud. The CLI becomes the agent. We
+collect health & schema metadata only — never your data.
+**Contact sales: [croc100100@gmail.com](mailto:croc100100@gmail.com?subject=Litescope%20Enterprise)**
 
 ---
 
 ## License
 
-[Elastic License 2.0](LICENSE) — free for individuals and internal use.
-Commercial distribution or embedding in a SaaS product requires a separate agreement.
+The **Free** CLI/GUI is open source. **Pro** and **Enterprise** are proprietary:
+Pro unlocks with a paid license key — the *same binary* runs Free without one, so
+there is no separate download. The **Enterprise** web dashboard is a separate,
+closed-source product. See [LICENSE](LICENSE).

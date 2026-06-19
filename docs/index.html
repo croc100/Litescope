@@ -301,10 +301,10 @@ h2 {
 
 /* ── Pricing ── */
 .pricing-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-  max-width: 720px; margin: 52px auto 0;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;
+  max-width: 1040px; margin: 52px auto 0;
 }
-@media (max-width: 680px) { .pricing-grid { grid-template-columns: 1fr; max-width: 400px; } }
+@media (max-width: 960px) { .pricing-grid { grid-template-columns: 1fr; max-width: 400px; } }
 .plan {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -666,15 +666,15 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 <section id="pricing">
   <div class="wrap center">
     <div class="eyebrow">Pricing</div>
-    <h2>Free to explore.<br/>Pro to operate.</h2>
-    <p class="section-sub">Browse and diff for free. Everything that touches production requires Pro.</p>
+    <h2>Explore free. Operate with Pro.<br/>Scale with Enterprise.</h2>
+    <p class="section-sub">Free is open source. Pro unlocks the full toolchain with a license key; Enterprise adds a web dashboard, SSO and self-host for teams.</p>
   </div>
   <div class="wrap">
     <div class="pricing-grid">
       <div class="plan">
         <div class="plan-tier">Free</div>
         <div class="plan-price">$0</div>
-        <div class="plan-desc">Get familiar with your SQLite databases. No credit card.</div>
+        <div class="plan-desc">Get familiar with your SQLite databases. Open source, no credit card.</div>
         <ul class="plan-features">
           <li><span class="check">✓</span>Explorer — browse tables &amp; query rows</li>
           <li><span class="check">✓</span>diff — schema comparison</li>
@@ -689,50 +689,86 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <div class="plan-badge">Most popular</div>
         <div class="plan-tier" style="color:var(--teal)">Pro</div>
         <div class="plan-price">$89<span class="period"> /year</span></div>
-        <div class="plan-desc">The full SQLite operations toolchain for production teams.</div>
+        <div class="plan-desc">The full SQLite operations toolchain for the individual operator.</div>
         <ul class="plan-features">
           <li><span class="check">✓</span>Everything in Free</li>
           <li><span class="check">✓</span>migrate — blast-radius analysis + safe apply</li>
           <li><span class="check">✓</span>check — backup integrity verification</li>
           <li><span class="check">✓</span>monitor — continuous drift + webhook alerts</li>
           <li><span class="check">✓</span>fleet — fingerprint, converge, health &amp; recover</li>
+          <li><span class="check">✓</span>policy gates + team RBAC (local)</li>
           <li><span class="check">✓</span>Unlimited named connections (GUI)</li>
         </ul>
         <a class="btn btn-primary" href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro — $89/yr</a>
       </div>
+      <div class="plan">
+        <div class="plan-tier" style="color:var(--head)">Enterprise</div>
+        <div class="plan-price">Let's talk</div>
+        <div class="plan-desc">Your whole SQLite fleet on one screen — for teams &amp; large companies.</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span>Everything in Pro</li>
+          <li><span class="check">✓</span>Web dashboard — fleet health &amp; schema history</li>
+          <li><span class="check">✓</span>Alerting — Slack, PagerDuty, on-call</li>
+          <li><span class="check">✓</span>SSO + org multi-user + RBAC</li>
+          <li><span class="check">✓</span>Self-host — on-prem or your own cloud</li>
+          <li><span class="check">✓</span>Metadata only — never your data</li>
+          <li><span class="check">✓</span>SLA + priority support</li>
+        </ul>
+        <a class="btn btn-ghost" href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" rel="noopener">Contact sales →</a>
+      </div>
+    </div>
+
+    <div class="center" style="margin-top:40px;max-width:680px;margin-left:auto;margin-right:auto;">
+      <div class="eyebrow">Enterprise · Web dashboard</div>
+      <p class="section-sub" style="margin-top:10px">
+        Running SQLite on Turso, Cloudflare D1 and local files? The CLI you already
+        use becomes the agent — <code>litescope push</code> streams health and schema
+        metadata (never your data) to a dashboard that shows your entire fleet,
+        thousands of instances, on one screen. Drift history, fault triage, and
+        alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or
+        fully self-hosted on your own servers.
+      </p>
     </div>
 
     <div class="compare-wrap">
       <table class="compare">
         <thead>
           <tr>
-            <th style="width:52%">Feature</th>
+            <th style="width:46%">Feature</th>
             <th>Free</th>
             <th class="col-pro">Pro — $89/yr</th>
+            <th>Enterprise</th>
           </tr>
         </thead>
         <tbody>
-          <tr class="section-row"><td colspan="3">Explore</td></tr>
-          <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="3">Operate</td></tr>
-          <tr><td>migrate — blast-radius analysis &amp; safe apply</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="3">Monitor</td></tr>
-          <tr><td>monitor watch — continuous drift detection</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="3">Fleet — Turso &amp; Cloudflare D1</td></tr>
-          <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint — schema clustering</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet health — parallel fault triage</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="3">GUI</td></tr>
-          <tr><td>Named connections</td><td><span class="val">1</span></td><td><span class="val">Unlimited</span></td></tr>
-          <tr><td>All Pro panels (Migrate, Check, Monitor, Fleet)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Explore</td></tr>
+          <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Operate</td></tr>
+          <tr><td>migrate — blast-radius analysis &amp; safe apply</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Monitor</td></tr>
+          <tr><td>monitor watch — continuous drift detection</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Fleet — Turso &amp; Cloudflare D1</td></tr>
+          <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint — schema clustering</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet health — parallel fault triage</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>policy gates + team RBAC (local)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Enterprise — web &amp; teams</td></tr>
+          <tr><td>Web dashboard — fleet aggregation &amp; history</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Alerting — Slack / PagerDuty / on-call</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>SSO + org multi-user + org RBAC</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Self-host — on-prem or your own cloud</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>SLA + priority support</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">GUI</td></tr>
+          <tr><td>Named connections</td><td><span class="val">1</span></td><td><span class="val">Unlimited</span></td><td><span class="val">Unlimited</span></td></tr>
+          <tr><td>All Pro panels (Migrate, Check, Monitor, Fleet)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -774,12 +810,13 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <a href="/docs">Docs</a>
         <a href="#pricing">Pricing</a>
         <a href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro</a>
+        <a href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" rel="noopener">Enterprise</a>
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
         <a href="/refund">Refund</a>
       </div>
     </div>
-    <p class="foot-note">Litescope is closed source — binaries are free for individuals and internal use. Pro license required for commercial monitoring and fleet features. Payments &amp; refunds handled by Lemon Squeezy, our Merchant of Record. © 2026 Crode.</p>
+    <p class="foot-note">The Free CLI/GUI is open source. Pro unlocks production &amp; fleet features with a paid license key — the same binary, no separate download. Enterprise (web dashboard, SSO, self-host) is a separate closed-source product — <a href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" style="color:inherit;text-decoration:underline">contact sales</a>. Payments &amp; refunds handled by Lemon Squeezy, our Merchant of Record. © 2026 Crode.</p>
   </div>
 </footer>
 
