@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -244,6 +247,150 @@ func isReadVerb(q string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// ExportResult reports how an export went.
+type ExportResult struct {
+	Path string `json:"path"`
+	Rows int64  `json:"rows"`
+}
+
+// ExportSQL runs a read-only query and streams every row to destPath as CSV or
+// JSON (format "csv" | "json"). Unlike RunSQL it is not capped — the full result
+// is written. The source database is opened read-only.
+func (a *App) ExportSQL(dbPath, query, destPath, format string) (*ExportResult, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, fmt.Errorf("empty query")
+	}
+	if !isReadVerb(q) {
+		return nil, fmt.Errorf("only read queries (SELECT/WITH/...) can be exported")
+	}
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+
+	f, err := os.Create(destPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var count int64
+	switch strings.ToLower(format) {
+	case "json":
+		if _, err := f.WriteString("[\n"); err != nil {
+			return nil, err
+		}
+		enc := json.NewEncoder(f)
+		for rows.Next() {
+			m, err := scanRowMap(rows, cols)
+			if err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				if _, err := f.WriteString(",\n"); err != nil {
+					return nil, err
+				}
+			}
+			if err := enc.Encode(m); err != nil {
+				return nil, err
+			}
+			count++
+		}
+		if _, err := f.WriteString("]\n"); err != nil {
+			return nil, err
+		}
+	default: // csv
+		w := csv.NewWriter(f)
+		if err := w.Write(cols); err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			vals, err := scanRowStrings(rows, cols)
+			if err != nil {
+				return nil, err
+			}
+			if err := w.Write(vals); err != nil {
+				return nil, err
+			}
+			count++
+		}
+		w.Flush()
+		if err := w.Error(); err != nil {
+			return nil, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &ExportResult{Path: destPath, Rows: count}, nil
+}
+
+// scanRowMap scans the current row into a column→value map (for JSON export).
+func scanRowMap(rows *sql.Rows, cols []string) (map[string]interface{}, error) {
+	vals := make([]interface{}, len(cols))
+	ptrs := make([]interface{}, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+	m := make(map[string]interface{}, len(cols))
+	for i, c := range cols {
+		if b, ok := vals[i].([]byte); ok {
+			m[c] = string(b)
+		} else {
+			m[c] = vals[i]
+		}
+	}
+	return m, nil
+}
+
+// scanRowStrings scans the current row into string cells (for CSV export).
+func scanRowStrings(rows *sql.Rows, cols []string) ([]string, error) {
+	vals := make([]interface{}, len(cols))
+	ptrs := make([]interface{}, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+	out := make([]string, len(cols))
+	for i := range vals {
+		out[i] = cellToString(vals[i])
+	}
+	return out, nil
+}
+
+func cellToString(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case []byte:
+		return string(t)
+	case string:
+		return t
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case float64:
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	case bool:
+		return strconv.FormatBool(t)
+	default:
+		return fmt.Sprintf("%v", t)
 	}
 }
 

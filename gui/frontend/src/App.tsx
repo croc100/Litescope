@@ -12,7 +12,7 @@ import {
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
-  RunSQL
+  RunSQL, ExportSQL
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
@@ -1019,13 +1019,43 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
                 </div>
                 <div className="flex-1 overflow-auto">
                   {tab === 'schema' && <TableInspector table={selTable} />}
-                  {tab === 'data' && <TableDataView path={path} table={selectedTable!} />}
+                  {tab === 'data' && <TableDataView path={path} table={selectedTable!} status={status} />}
                 </div>
               </>
             )}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// exportData runs `query` against `dbPath` and writes the full result to a
+// user-chosen file. Used by both the SQL console and the Explorer data view.
+async function exportData(
+  format: 'csv' | 'json', dbPath: string, query: string, base: string,
+  status: (t: string, k: 'ok' | 'warn' | 'err' | 'idle') => void,
+) {
+  const dest = await SaveFile(`${base}.${format}`)
+  if (!dest) return
+  try {
+    const r = await ExportSQL(dbPath, query, dest, format)
+    status(`Exported ${r.rows} rows → ${dest.split('/').pop()}`, 'ok')
+  } catch (e: any) { status('Export failed: ' + String(e), 'err') }
+}
+
+function ExportButtons({ dbPath, query, base, status }: {
+  dbPath: string; query: string; base: string
+  status: (t: string, k: 'ok' | 'warn' | 'err' | 'idle') => void
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <FileJson size={11} className="text-[#6e7681]" />
+      <button onClick={() => exportData('csv', dbPath, query, base, status)}
+        className="text-[11px] text-[#6e7681] hover:text-[#4ec9b0]" title="Export all rows to CSV">CSV</button>
+      <span className="text-[#30363d]">·</span>
+      <button onClick={() => exportData('json', dbPath, query, base, status)}
+        className="text-[11px] text-[#6e7681] hover:text-[#4ec9b0]" title="Export all rows to JSON">JSON</button>
     </div>
   )
 }
@@ -1110,6 +1140,10 @@ function QueryView({ recent, addRecent, removeRecent, status, injectRef }: ViewP
               <div className="shrink-0 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] flex items-center gap-3">
                 {result.isQuery && <span>{result.rows?.length ?? 0}{result.truncated ? `+ (capped at 5000)` : ''} rows</span>}
                 <span>{result.durationMs}ms</span>
+                {result.isQuery && result.rows?.length > 0 && <>
+                  <div className="flex-1" />
+                  <ExportButtons dbPath={path} query={sql} base="query-export" status={status} />
+                </>}
               </div>
             </div>
           )}
@@ -1158,7 +1192,7 @@ function TableInspector({ table }: { table: any }) {
   )
 }
 
-function TableDataView({ path, table }: { path: string; table: string }) {
+function TableDataView({ path, table, status }: { path: string; table: string; status: (t: string, k: 'ok'|'warn'|'err'|'idle') => void }) {
   const PAGE = 100
   const [rows, setRows] = useState<any>(null)
   const [page, setPage] = useState(0)
@@ -1189,13 +1223,15 @@ function TableDataView({ path, table }: { path: string; table: string }) {
           ))}</tbody>
         </table>
       </div>
-      {totalPages > 1 && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] shrink-0">
+        {totalPages > 1 ? <>
           <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronLeft size={13} /></button>
           <span>Page {page + 1} / {totalPages} · {rows.Total} rows</span>
           <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronRight size={13} /></button>
-        </div>
-      )}
+        </> : <span>{rows.Total} rows</span>}
+        <div className="flex-1" />
+        <ExportButtons dbPath={path} query={`SELECT * FROM "${table}"`} base={table} status={status} />
+      </div>
     </div>
   )
 }

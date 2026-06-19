@@ -10,6 +10,8 @@ export function Check(arg1:string,arg2:string,arg3:boolean):Promise<check.Result
 
 export function Diff(arg1:string,arg2:string):Promise<diff.Result>;
 
+export function ExportSQL(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.ExportResult>;
+
 export function FleetCheck(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetCheckResult>>;
 
 export function FleetConverge(arg1:Array<main.FleetDBEntry>,arg2:boolean,arg3:boolean):Promise<main.FleetConvergeResult>;

@@ -206,6 +206,20 @@ export namespace main {
 	        this.New = source["New"];
 	    }
 	}
+	export class ExportResult {
+	    path: string;
+	    rows: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rows = source["rows"];
+	    }
+	}
 	export class FleetCheckResult {
 	    database: string;
 	    state: string;

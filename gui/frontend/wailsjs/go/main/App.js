@@ -10,6 +10,10 @@ export function Diff(arg1, arg2) {
   return window['go']['main']['App']['Diff'](arg1, arg2);
 }
 
+export function ExportSQL(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ExportSQL'](arg1, arg2, arg3, arg4);
+}
+
 export function FleetCheck(arg1) {
   return window['go']['main']['App']['FleetCheck'](arg1);
 }

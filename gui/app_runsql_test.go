@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -81,4 +83,52 @@ func toInt(v interface{}) int64 {
 		return int64(n)
 	}
 	return -1
+}
+
+func TestExportSQL_CSV(t *testing.T) {
+	a := &App{}
+	p := makeDB(t, 3)
+	dest := filepath.Join(t.TempDir(), "out.csv")
+	r, err := a.ExportSQL(p, "SELECT id, k FROM events ORDER BY id", dest, "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Rows != 3 {
+		t.Fatalf("want 3 rows, got %d", r.Rows)
+	}
+	b, _ := os.ReadFile(dest)
+	got := string(b)
+	if want := "id,k\n1,v\n2,v\n3,v\n"; got != want {
+		t.Fatalf("csv mismatch:\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestExportSQL_JSON(t *testing.T) {
+	a := &App{}
+	p := makeDB(t, 2)
+	dest := filepath.Join(t.TempDir(), "out.json")
+	r, err := a.ExportSQL(p, "SELECT id FROM events ORDER BY id", dest, "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Rows != 2 {
+		t.Fatalf("want 2 rows, got %d", r.Rows)
+	}
+	b, _ := os.ReadFile(dest)
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(b, &arr); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, b)
+	}
+	if len(arr) != 2 {
+		t.Fatalf("want 2 objects, got %d", len(arr))
+	}
+}
+
+func TestExportSQL_RejectsWrite(t *testing.T) {
+	a := &App{}
+	p := makeDB(t, 1)
+	dest := filepath.Join(t.TempDir(), "x.csv")
+	if _, err := a.ExportSQL(p, "DELETE FROM events", dest, "csv"); err == nil {
+		t.Fatal("expected non-read query to be rejected")
+	}
 }
