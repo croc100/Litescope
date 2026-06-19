@@ -10,6 +10,22 @@ export function Check(arg1:string,arg2:string,arg3:boolean):Promise<check.Result
 
 export function Diff(arg1:string,arg2:string):Promise<diff.Result>;
 
+export function FleetCheck(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetCheckResult>>;
+
+export function FleetConverge(arg1:Array<main.FleetDBEntry>,arg2:boolean,arg3:boolean):Promise<main.FleetConvergeResult>;
+
+export function FleetDiscover(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<main.FleetDBEntry>>;
+
+export function FleetFingerprint(arg1:Array<main.FleetDBEntry>):Promise<main.FleetFingerprintResult>;
+
+export function FleetHealth(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<main.FleetHealthResult>>;
+
+export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<main.FleetRecoverResult>>;
+
+export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetSnapshotResult>>;
+
+export function FleetTopology(arg1:Array<main.FleetDBEntry>):Promise<main.FleetTopologyResult>;
+
 export function MigrateApply(arg1:string,arg2:string,arg3:boolean):Promise<main.MigrateApplyResult>;
 
 export function MigrateGenerate(arg1:string,arg2:string):Promise<main.MigratePreview>;
@@ -20,27 +36,11 @@ export function MonitorLoadHistory(arg1:string):Promise<Array<monitor.HistoryEnt
 
 export function MonitorSnapshot(arg1:string,arg2:string):Promise<main.SnapshotInfo>;
 
+export function MonitorWatchIsRunning():Promise<boolean>;
+
 export function MonitorWatchStart(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function MonitorWatchStop():Promise<void>;
-
-export function MonitorWatchIsRunning():Promise<boolean>;
-
-export function FleetDiscover(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<main.FleetDBEntry>>;
-
-export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetSnapshotResult>>;
-
-export function FleetCheck(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetCheckResult>>;
-
-export function FleetFingerprint(arg1:Array<main.FleetDBEntry>):Promise<any>;
-
-export function FleetConverge(arg1:Array<main.FleetDBEntry>,arg2:boolean,arg3:boolean):Promise<any>;
-
-export function FleetHealth(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<any>>;
-
-export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<any>>;
-
-export function FleetTopology(arg1:Array<main.FleetDBEntry>):Promise<any>;
 
 export function OpenFile():Promise<string>;
 

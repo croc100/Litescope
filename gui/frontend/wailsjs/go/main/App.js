@@ -10,6 +10,38 @@ export function Diff(arg1, arg2) {
   return window['go']['main']['App']['Diff'](arg1, arg2);
 }
 
+export function FleetCheck(arg1) {
+  return window['go']['main']['App']['FleetCheck'](arg1);
+}
+
+export function FleetConverge(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FleetConverge'](arg1, arg2, arg3);
+}
+
+export function FleetDiscover(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['FleetDiscover'](arg1, arg2, arg3, arg4);
+}
+
+export function FleetFingerprint(arg1) {
+  return window['go']['main']['App']['FleetFingerprint'](arg1);
+}
+
+export function FleetHealth(arg1, arg2) {
+  return window['go']['main']['App']['FleetHealth'](arg1, arg2);
+}
+
+export function FleetRecover(arg1, arg2) {
+  return window['go']['main']['App']['FleetRecover'](arg1, arg2);
+}
+
+export function FleetSnapshot(arg1) {
+  return window['go']['main']['App']['FleetSnapshot'](arg1);
+}
+
+export function FleetTopology(arg1) {
+  return window['go']['main']['App']['FleetTopology'](arg1);
+}
+
 export function MigrateApply(arg1, arg2, arg3) {
   return window['go']['main']['App']['MigrateApply'](arg1, arg2, arg3);
 }
@@ -30,48 +62,16 @@ export function MonitorSnapshot(arg1, arg2) {
   return window['go']['main']['App']['MonitorSnapshot'](arg1, arg2);
 }
 
+export function MonitorWatchIsRunning() {
+  return window['go']['main']['App']['MonitorWatchIsRunning']();
+}
+
 export function MonitorWatchStart(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['MonitorWatchStart'](arg1, arg2, arg3, arg4);
 }
 
 export function MonitorWatchStop() {
   return window['go']['main']['App']['MonitorWatchStop']();
-}
-
-export function MonitorWatchIsRunning() {
-  return window['go']['main']['App']['MonitorWatchIsRunning']();
-}
-
-export function FleetDiscover(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['FleetDiscover'](arg1, arg2, arg3, arg4);
-}
-
-export function FleetSnapshot(arg1) {
-  return window['go']['main']['App']['FleetSnapshot'](arg1);
-}
-
-export function FleetCheck(arg1) {
-  return window['go']['main']['App']['FleetCheck'](arg1);
-}
-
-export function FleetFingerprint(arg1) {
-  return window['go']['main']['App']['FleetFingerprint'](arg1);
-}
-
-export function FleetConverge(arg1, arg2, arg3) {
-  return window['go']['main']['App']['FleetConverge'](arg1, arg2, arg3);
-}
-
-export function FleetHealth(arg1, arg2) {
-  return window['go']['main']['App']['FleetHealth'](arg1, arg2);
-}
-
-export function FleetRecover(arg1, arg2) {
-  return window['go']['main']['App']['FleetRecover'](arg1, arg2);
-}
-
-export function FleetTopology(arg1) {
-  return window['go']['main']['App']['FleetTopology'](arg1);
 }
 
 export function OpenFile() {
