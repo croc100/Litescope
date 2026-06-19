@@ -90,6 +90,10 @@ export function QueryTable(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['QueryTable'](arg1, arg2, arg3, arg4);
 }
 
+export function RunSQL(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunSQL'](arg1, arg2, arg3);
+}
+
 export function SaveFile(arg1) {
   return window['go']['main']['App']['SaveFile'](arg1);
 }

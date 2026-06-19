@@ -498,6 +498,28 @@ export namespace main {
 	        this.Warnings = source["Warnings"];
 	    }
 	}
+	export class SQLResult {
+	    columns: string[];
+	    rows: any[][];
+	    rowsAffected: number;
+	    isQuery: boolean;
+	    truncated: boolean;
+	    durationMs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SQLResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = source["columns"];
+	        this.rows = source["rows"];
+	        this.rowsAffected = source["rowsAffected"];
+	        this.isQuery = source["isQuery"];
+	        this.truncated = source["truncated"];
+	        this.durationMs = source["durationMs"];
+	    }
+	}
 	export class SnapshotInfo {
 	    Source: string;
 	    CapturedAt: string;

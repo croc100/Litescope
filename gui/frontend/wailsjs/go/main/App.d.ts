@@ -50,6 +50,8 @@ export function OpenFleetConfig():Promise<string>;
 
 export function QueryTable(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.TableRows>;
 
+export function RunSQL(arg1:string,arg2:string,arg3:boolean):Promise<main.SQLResult>;
+
 export function SaveFile(arg1:string):Promise<string>;
 
 export function Schema(arg1:string):Promise<schema.Schema>;

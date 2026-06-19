@@ -132,6 +132,121 @@ func (a *App) QueryTable(path, table string, limit, offset int) (*TableRows, err
 	return result, rows.Err()
 }
 
+// SQLResult is the outcome of a RunSQL call: a result set for queries, or an
+// affected-row count for writes.
+type SQLResult struct {
+	Columns      []string        `json:"columns"`
+	Rows         [][]interface{} `json:"rows"`
+	RowsAffected int64           `json:"rowsAffected"`
+	IsQuery      bool            `json:"isQuery"`
+	Truncated    bool            `json:"truncated"`
+	DurationMs   int64           `json:"durationMs"`
+}
+
+// sqlMaxRows caps how many rows a single query returns to the UI.
+const sqlMaxRows = 5000
+
+// RunSQL executes an arbitrary SQL statement. When write is false the database
+// is opened read-only AND query_only is enforced, so any mutation fails at the
+// engine level — we never rely on parsing the SQL to decide what's safe.
+func (a *App) RunSQL(path, query string, write bool) (*SQLResult, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, fmt.Errorf("empty query")
+	}
+
+	dsn := path
+	if !write {
+		// file: URI with mode=ro opens the OS file read-only.
+		dsn = "file:" + path + "?mode=ro"
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if !write {
+		// Belt-and-suspenders: query_only rejects writes even via ATTACH.
+		if _, err := db.Exec("PRAGMA query_only=ON"); err != nil {
+			return nil, err
+		}
+	}
+
+	start := time.Now()
+	isQuery := isReadVerb(q)
+	res := &SQLResult{IsQuery: isQuery}
+
+	if isQuery {
+		rows, err := db.Query(q)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		cols, _ := rows.Columns()
+		res.Columns = cols
+		for rows.Next() {
+			if len(res.Rows) >= sqlMaxRows {
+				res.Truncated = true
+				break
+			}
+			vals := make([]interface{}, len(cols))
+			ptrs := make([]interface{}, len(cols))
+			for i := range vals {
+				ptrs[i] = &vals[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				continue
+			}
+			row := make([]interface{}, len(cols))
+			for i, v := range vals {
+				if b, ok := v.([]byte); ok {
+					row[i] = string(b)
+				} else {
+					row[i] = v
+				}
+			}
+			res.Rows = append(res.Rows, row)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	} else {
+		r, err := db.Exec(q)
+		if err != nil {
+			return nil, err
+		}
+		res.RowsAffected, _ = r.RowsAffected()
+	}
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res, nil
+}
+
+// isReadVerb reports whether a statement is a read (returns rows) vs a write.
+func isReadVerb(q string) bool {
+	// strip leading SQL line comments / whitespace
+	for {
+		q = strings.TrimSpace(q)
+		if strings.HasPrefix(q, "--") {
+			if i := strings.IndexByte(q, '\n'); i >= 0 {
+				q = q[i+1:]
+				continue
+			}
+		}
+		break
+	}
+	up := strings.ToUpper(q)
+	switch {
+	case strings.HasPrefix(up, "SELECT"),
+		strings.HasPrefix(up, "WITH"),
+		strings.HasPrefix(up, "EXPLAIN"),
+		strings.HasPrefix(up, "PRAGMA"),
+		strings.HasPrefix(up, "VALUES"):
+		return true
+	default:
+		return false
+	}
+}
+
 type DiffedRow struct {
 	Status string                 `json:"Status"`
 	PK     interface{}            `json:"PK"`

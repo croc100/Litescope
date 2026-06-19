@@ -4,20 +4,21 @@ import {
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
   AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
-  Settings, Key, ExternalLink
+  Settings, Key, ExternalLink, Terminal, Lock, Unlock
 } from 'lucide-react'
 import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
-  FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology
+  FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
+  RunSQL
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tool = 'diff' | 'explorer' | 'check' | 'migrate' | 'monitor' | 'fleet' | 'settings'
+type Tool = 'diff' | 'explorer' | 'query' | 'check' | 'migrate' | 'monitor' | 'fleet' | 'settings'
 
 type ConnType = 'local' | 'turso' | 'd1'
 
@@ -410,6 +411,7 @@ export default function App() {
         <main className="flex-1 flex flex-col overflow-hidden min-w-0">
           {tool === 'diff'     && <DiffView    {...viewProps} injectRef={injectRef} />}
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
+          {tool === 'query'    && <QueryView    {...viewProps} injectRef={injectRef} />}
           {tool === 'check'    && <ProGate feature="Backup Check" {...proGateProps}><CheckView   {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'migrate'  && <ProGate feature="Migration Studio" {...proGateProps}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'monitor'  && <ProGate feature="Drift Monitor" {...proGateProps}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
@@ -434,6 +436,7 @@ export default function App() {
 const TOOLS: { id: Tool; icon: React.ReactNode; label: string }[] = [
   { id: 'diff',     icon: <GitCompare size={20} strokeWidth={1.5} />,  label: 'Diff' },
   { id: 'explorer', icon: <Table2 size={20} strokeWidth={1.5} />,      label: 'Explorer' },
+  { id: 'query',    icon: <Terminal size={20} strokeWidth={1.5} />,    label: 'Query' },
   { id: 'check',    icon: <ShieldCheck size={20} strokeWidth={1.5} />, label: 'Check' },
   { id: 'migrate',  icon: <GitMerge size={20} strokeWidth={1.5} />,    label: 'Migrate' },
   { id: 'monitor',  icon: <Activity size={20} strokeWidth={1.5} />,    label: 'Monitor' },
@@ -566,7 +569,7 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
 // ── Status Bar ────────────────────────────────────────────────────────────────
 
 const toolLabels: Record<Tool, string> = {
-  diff: 'Schema Diff', explorer: 'DB Explorer', check: 'Integrity Check',
+  diff: 'Schema Diff', explorer: 'DB Explorer', query: 'SQL Query', check: 'Integrity Check',
   migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet', settings: 'Settings',
 }
 
@@ -1021,6 +1024,95 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
               </>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QueryView({ recent, addRecent, removeRecent, status, injectRef }: ViewProps) {
+  const [path, setPath] = useState('')
+  const [sql, setSql] = useState('')
+  const [write, setWrite] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => { if (injectRef) injectRef.current = (p: string) => { setPath(p); addRecent(p) } }, [injectRef, addRecent])
+
+  async function run() {
+    if (!path || !sql.trim() || loading) return
+    setLoading(true); setError(''); setResult(null)
+    try {
+      const r = await RunSQL(path, sql, write)
+      setResult(r)
+      if (r.isQuery) status(`${r.rows?.length ?? 0}${r.truncated ? '+' : ''} rows · ${r.durationMs}ms`, 'ok')
+      else status(`${r.rowsAffected} row(s) affected · ${r.durationMs}ms`, 'ok')
+    } catch (e: any) { setError(String(e)); status('Query failed', 'err') }
+    finally { setLoading(false) }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run() }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<Terminal size={14} />} title="SQL Query"
+        meta={<span className="text-[10px] text-[#6e7681]">⌘↵ to run</span>} />
+      <Toolbar>
+        <DbPicker label="Database" path={path} onPick={async () => { const p = await OpenFile(); if (p) { setPath(p); addRecent(p) } }}
+          recent={recent} onRecent={(p) => { setPath(p); addRecent(p) }} removeRecent={removeRecent} />
+        <div className="flex-1" />
+        <button onClick={() => setWrite(w => !w)} title={write ? 'Writes enabled — DML/DDL will modify the database' : 'Read-only — only SELECT/EXPLAIN run; writes are blocked at the engine'}
+          className={`flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-sm border transition-colors
+            ${write ? 'border-[#f85149] text-[#f85149] bg-[#f85149]/10' : 'border-[#30363d] text-[#4ec9b0] bg-[#4ec9b0]/10'}`}>
+          {write ? <Unlock size={11} /> : <Lock size={11} />}{write ? 'Read/Write' : 'Read-only'}
+        </button>
+      </Toolbar>
+      {!path && <EmptyState icon={<Terminal size={48} />} text="Pick a database to query" sub="Run SQL with ⌘↵ · read-only by default" />}
+      {path && (
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="shrink-0 border-b border-[#30363d] bg-[#0d1117]">
+            <textarea value={sql} onChange={e => setSql(e.target.value)} onKeyDown={onKeyDown}
+              spellCheck={false} placeholder="SELECT * FROM ... ;"
+              className="w-full h-[120px] resize-y bg-[#0d1117] text-[#e6edf3] text-[13px] font-mono px-4 py-3 outline-none placeholder:text-[#484f58]" />
+            <div className="flex items-center gap-2 px-3 py-2 border-t border-[#30363d] bg-[#161b22]">
+              <Btn onClick={run} disabled={!sql.trim() || loading}>
+                {loading ? <Spinner /> : <Play size={11} />}Run
+              </Btn>
+              {write && <span className="text-[10px] text-[#f85149] flex items-center gap-1"><AlertTriangle size={10} />Write mode — statements modify the database</span>}
+            </div>
+          </div>
+          {error && <ErrPanel message={error} />}
+          {result && !error && (
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {result.isQuery ? (
+                result.rows?.length ? (
+                  <div className="overflow-auto flex-1">
+                    <table className="text-[12px] font-mono w-full">
+                      <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
+                        {(result.columns ?? []).map((c: string) => <th key={c} className="text-left px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>)}
+                      </tr></thead>
+                      <tbody>{result.rows.map((row: any[], i: number) => (
+                        <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#1c2128]">
+                          {row.map((cell, j) => <td key={j} className="px-3 py-1 text-[#e6edf3] max-w-[280px] truncate whitespace-nowrap">
+                            {cell === null ? <span className="text-[#484f58] italic">NULL</span> : String(cell)}
+                          </td>)}
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                ) : <div className="px-4 py-3 text-[12px] text-[#484f58]">Query returned no rows</div>
+              ) : (
+                <div className="px-4 py-3 text-[12px] text-[#4ec9b0] flex items-center gap-2"><CheckCircle2 size={13} />{result.rowsAffected} row(s) affected</div>
+              )}
+              <div className="shrink-0 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] flex items-center gap-3">
+                {result.isQuery && <span>{result.rows?.length ?? 0}{result.truncated ? `+ (capped at 5000)` : ''} rows</span>}
+                <span>{result.durationMs}ms</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
