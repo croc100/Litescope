@@ -21,6 +21,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdLicense())
 	root.AddCommand(cmdLog())
 	root.AddCommand(cmdPolicy())
+	root.AddCommand(cmdTeam())
 
 	return root
 }

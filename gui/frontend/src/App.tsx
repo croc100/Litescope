@@ -1270,6 +1270,7 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
   // a write-protection policy can make this database read-only — reflect it in the UI
   useEffect(() => {
     Policy().then((p: any) => {
+      if (p?.teamBlock) return setPolicyBlock(p.teamBlock)
       if (!p?.active) return setPolicyBlock('')
       if (p.readOnly) return setPolicyBlock('read-only policy in effect')
       const hit = (p.protected ?? []).find((pat: string) => pat && path.includes(pat))

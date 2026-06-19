@@ -16,7 +16,6 @@ import (
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
 	"github.com/croc100/litescope/internal/license"
-	"github.com/croc100/litescope/internal/policy"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -94,11 +93,9 @@ is reported as needing manual recovery.`,
 			}
 
 			if !dryRun {
-				if pol, _ := policy.Load(); pol != nil {
-					if perr := pol.Allow(cfg.Name); perr != nil {
-						audit.Record(audit.Entry{Action: "fleet.recover", Target: cfg.Name, Outcome: "blocked", Detail: perr.Error()})
-						return perr
-					}
+				if perr := guardWrite(cfg.Name); perr != nil {
+					audit.Record(audit.Entry{Action: "fleet.recover", Target: cfg.Name, Outcome: "blocked", Detail: perr.Error()})
+					return perr
 				}
 			}
 
@@ -577,11 +574,9 @@ Convergence that drops a column or table is destructive and refused unless
 			}
 
 			if !dryRun {
-				if pol, _ := policy.Load(); pol != nil {
-					if perr := pol.Allow(cfg.Name); perr != nil {
-						audit.Record(audit.Entry{Action: "fleet.converge", Target: cfg.Name, Outcome: "blocked", Detail: perr.Error()})
-						return perr
-					}
+				if perr := guardWrite(cfg.Name); perr != nil {
+					audit.Record(audit.Entry{Action: "fleet.converge", Target: cfg.Name, Outcome: "blocked", Detail: perr.Error()})
+					return perr
 				}
 			}
 

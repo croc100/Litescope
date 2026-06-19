@@ -10,7 +10,6 @@ import (
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/migrate"
-	"github.com/croc100/litescope/internal/policy"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -410,12 +409,10 @@ Examples:
 				styleDim.Render("·"), mode, dbPath, len(stmts))
 
 			if !dryRun {
-				if pol, _ := policy.Load(); pol != nil {
-					if perr := pol.Allow(dbPath); perr != nil {
-						audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
-							Summary: fmt.Sprintf("%d statements", len(stmts)), Outcome: "blocked", Detail: perr.Error()})
-						return perr
-					}
+				if perr := guardWrite(dbPath); perr != nil {
+					audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
+						Summary: fmt.Sprintf("%d statements", len(stmts)), Outcome: "blocked", Detail: perr.Error()})
+					return perr
 				}
 			}
 

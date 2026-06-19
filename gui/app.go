@@ -23,6 +23,7 @@ import (
 	"github.com/croc100/litescope/internal/monitor"
 	"github.com/croc100/litescope/internal/policy"
 	"github.com/croc100/litescope/internal/schema"
+	"github.com/croc100/litescope/internal/team"
 	_ "modernc.org/sqlite"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -268,31 +269,48 @@ func (a *App) AuditLog(limit int, target, action string) ([]audit.Entry, error) 
 	return audit.Read(limit, target, action)
 }
 
-// policyAllow loads the active policy and checks whether writing to target is
-// permitted. A missing/empty policy allows everything.
+// policyAllow gates a write against both governance layers: the target-scoped
+// policy and the operator-scoped team roles. A missing/empty config on either
+// side allows everything.
 func policyAllow(target string) error {
 	pol, err := policy.Load()
 	if err != nil {
 		return err
 	}
-	return pol.Allow(target)
+	if err := pol.Allow(target); err != nil {
+		return err
+	}
+	return team.Allow()
 }
 
-// PolicyStatus describes the active policy for the GUI (e.g. a banner).
+// PolicyStatus describes the active governance for the GUI (e.g. a banner).
 type PolicyStatus struct {
 	Active    bool     `json:"active"`
 	ReadOnly  bool     `json:"readOnly"`
 	Protected []string `json:"protected"`
 	Source    string   `json:"source"`
+	// TeamBlock is set when the current operator's team role forbids writes,
+	// regardless of target — the message explains why.
+	TeamBlock string `json:"teamBlock"`
+	Operator  string `json:"operator"`
 }
 
-// Policy returns the active policy so the GUI can warn before edits.
+// Policy returns the active policy + team status so the GUI can warn before edits.
 func (a *App) Policy() PolicyStatus {
-	pol, err := policy.Load()
-	if err != nil || pol == nil {
-		return PolicyStatus{}
+	st := PolicyStatus{Operator: audit.Operator()}
+	if pol, err := policy.Load(); err == nil && pol != nil {
+		st.Active = !pol.Empty()
+		st.ReadOnly = pol.ReadOnly
+		st.Protected = pol.Protected
+		st.Source = pol.Source()
 	}
-	return PolicyStatus{Active: !pol.Empty(), ReadOnly: pol.ReadOnly, Protected: pol.Protected, Source: pol.Source()}
+	if tc, err := team.Load(); err == nil {
+		if ok, reason := tc.CanWrite(audit.Operator()); !ok {
+			st.TeamBlock = reason
+			st.Active = true
+		}
+	}
+	return st
 }
 
 // outcomeOf / detailOf turn an error into audit fields.

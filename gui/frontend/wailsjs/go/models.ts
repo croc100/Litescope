@@ -565,6 +565,8 @@ export namespace main {
 	    readOnly: boolean;
 	    protected: string[];
 	    source: string;
+	    teamBlock: string;
+	    operator: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PolicyStatus(source);
@@ -576,6 +578,8 @@ export namespace main {
 	        this.readOnly = source["readOnly"];
 	        this.protected = source["protected"];
 	        this.source = source["source"];
+	        this.teamBlock = source["teamBlock"];
+	        this.operator = source["operator"];
 	    }
 	}
 	export class SQLResult {

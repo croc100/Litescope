@@ -4,8 +4,23 @@ import (
 	"fmt"
 
 	"github.com/croc100/litescope/internal/policy"
+	"github.com/croc100/litescope/internal/team"
 	"github.com/spf13/cobra"
 )
+
+// guardWrite checks both governance layers before a mutating operation: the
+// target-scoped policy and the operator-scoped team roles. Returns the blocking
+// error, or nil when allowed.
+func guardWrite(target string) error {
+	pol, err := policy.Load()
+	if err != nil {
+		return err
+	}
+	if err := pol.Allow(target); err != nil {
+		return err
+	}
+	return team.Allow()
+}
 
 func cmdPolicy() *cobra.Command {
 	return &cobra.Command{
