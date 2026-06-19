@@ -59,6 +59,8 @@ export function OpenFile():Promise<string>;
 
 export function OpenFleetConfig():Promise<string>;
 
+export function Policy():Promise<main.PolicyStatus>;
+
 export function RunSQL(arg1:string,arg2:string,arg3:boolean):Promise<main.SQLResult>;
 
 export function SaveFile(arg1:string):Promise<string>;

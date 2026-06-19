@@ -21,6 +21,7 @@ import (
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/monitor"
+	"github.com/croc100/litescope/internal/policy"
 	"github.com/croc100/litescope/internal/schema"
 	_ "modernc.org/sqlite"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -197,6 +198,10 @@ func tableHasRowID(db *sql.DB, quotedTable string) bool {
 // UpdateCell sets one column of one row (identified by rowid). value is written
 // as text; SQLite applies the column's affinity. isNull writes SQL NULL instead.
 func (a *App) UpdateCell(path, table string, rowid int64, column, value string, isNull bool) error {
+	if perr := policyAllow(path); perr != nil {
+		audit.Record(audit.Entry{Action: "row.update", Target: path, Summary: table, Outcome: "blocked", Detail: perr.Error()})
+		return perr
+	}
 	if err := assertColumn(path, table, column); err != nil {
 		return err
 	}
@@ -218,6 +223,10 @@ func (a *App) UpdateCell(path, table string, rowid int64, column, value string, 
 
 // DeleteRow removes the row with the given rowid.
 func (a *App) DeleteRow(path, table string, rowid int64) error {
+	if perr := policyAllow(path); perr != nil {
+		audit.Record(audit.Entry{Action: "row.delete", Target: path, Summary: table, Outcome: "blocked", Detail: perr.Error()})
+		return perr
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return err
@@ -233,6 +242,10 @@ func (a *App) DeleteRow(path, table string, rowid int64) error {
 // rowid, so the UI can let the user fill it in. Fails if a NOT NULL column has
 // no default (the error is surfaced to the user).
 func (a *App) InsertRow(path, table string) (int64, error) {
+	if perr := policyAllow(path); perr != nil {
+		audit.Record(audit.Entry{Action: "row.insert", Target: path, Summary: table, Outcome: "blocked", Detail: perr.Error()})
+		return 0, perr
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return 0, err
@@ -253,6 +266,33 @@ func (a *App) InsertRow(path, table string) (int64, error) {
 // AuditLog returns recent audit entries (newest first) for the GUI Log panel.
 func (a *App) AuditLog(limit int, target, action string) ([]audit.Entry, error) {
 	return audit.Read(limit, target, action)
+}
+
+// policyAllow loads the active policy and checks whether writing to target is
+// permitted. A missing/empty policy allows everything.
+func policyAllow(target string) error {
+	pol, err := policy.Load()
+	if err != nil {
+		return err
+	}
+	return pol.Allow(target)
+}
+
+// PolicyStatus describes the active policy for the GUI (e.g. a banner).
+type PolicyStatus struct {
+	Active    bool     `json:"active"`
+	ReadOnly  bool     `json:"readOnly"`
+	Protected []string `json:"protected"`
+	Source    string   `json:"source"`
+}
+
+// Policy returns the active policy so the GUI can warn before edits.
+func (a *App) Policy() PolicyStatus {
+	pol, err := policy.Load()
+	if err != nil || pol == nil {
+		return PolicyStatus{}
+	}
+	return PolicyStatus{Active: !pol.Empty(), ReadOnly: pol.ReadOnly, Protected: pol.Protected, Source: pol.Source()}
 }
 
 // outcomeOf / detailOf turn an error into audit fields.
@@ -359,6 +399,12 @@ func (a *App) RunSQL(path, query string, write bool) (*SQLResult, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, fmt.Errorf("empty query")
+	}
+	if write {
+		if perr := policyAllow(path); perr != nil {
+			audit.Record(audit.Entry{Action: "sql.write", Target: path, Summary: auditSummary(q), Outcome: "blocked", Detail: perr.Error()})
+			return nil, perr
+		}
 	}
 
 	dsn := path

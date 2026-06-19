@@ -106,6 +106,10 @@ export function OpenFleetConfig() {
   return window['go']['main']['App']['OpenFleetConfig']();
 }
 
+export function Policy() {
+  return window['go']['main']['App']['Policy']();
+}
+
 export function RunSQL(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunSQL'](arg1, arg2, arg3);
 }

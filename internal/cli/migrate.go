@@ -10,6 +10,7 @@ import (
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/migrate"
+	"github.com/croc100/litescope/internal/policy"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -407,6 +408,16 @@ Examples:
 			}
 			fmt.Printf("\n  %s  %s → %s (%d statements)\n",
 				styleDim.Render("·"), mode, dbPath, len(stmts))
+
+			if !dryRun {
+				if pol, _ := policy.Load(); pol != nil {
+					if perr := pol.Allow(dbPath); perr != nil {
+						audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
+							Summary: fmt.Sprintf("%d statements", len(stmts)), Outcome: "blocked", Detail: perr.Error()})
+						return perr
+					}
+				}
+			}
 
 			res, err := migrate.Apply(dbPath, string(sqlText), migrate.ApplyOptions{
 				DryRun:    dryRun,

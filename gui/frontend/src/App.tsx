@@ -12,7 +12,7 @@ import {
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
-  RunSQL, ExportSQL, AuditLog
+  RunSQL, ExportSQL, AuditLog, Policy
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
@@ -1265,6 +1265,17 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
   const [reloadKey, setReloadKey] = useState(0)
   const [editing, setEditing] = useState<{ row: number; col: number } | null>(null)
   const [editVal, setEditVal] = useState('')
+  const [policyBlock, setPolicyBlock] = useState('')
+
+  // a write-protection policy can make this database read-only — reflect it in the UI
+  useEffect(() => {
+    Policy().then((p: any) => {
+      if (!p?.active) return setPolicyBlock('')
+      if (p.readOnly) return setPolicyBlock('read-only policy in effect')
+      const hit = (p.protected ?? []).find((pat: string) => pat && path.includes(pat))
+      setPolicyBlock(hit ? `protected by policy (matches "${hit}")` : '')
+    }).catch(() => setPolicyBlock(''))
+  }, [path])
 
   // reset view state when the table changes
   useEffect(() => { setPage(0); setRows(null); setOrderBy(''); setDesc(false); setSearch(''); setDebounced(''); setEdit(false); setEditing(null) }, [path, table])
@@ -1321,9 +1332,10 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all columns…"
           className="flex-1 bg-transparent text-[12px] text-[#e6edf3] outline-none placeholder:text-[#484f58]" />
         {search && <button onClick={() => setSearch('')} className="text-[#6e7681] hover:text-[#e6edf3]"><X size={12} /></button>}
+        {policyBlock && <span className="flex items-center gap-1 text-[10px] text-[#e2c97e]" title={policyBlock}><Lock size={10} />{policyBlock}</span>}
         <button onClick={() => { setEdit(e => !e); setEditing(null) }}
-          title={rows && !rows.HasRowID ? 'This table has no rowid (WITHOUT ROWID) — editing unavailable' : 'Toggle inline editing'}
-          disabled={rows && !rows.HasRowID}
+          title={policyBlock ? policyBlock : rows && !rows.HasRowID ? 'This table has no rowid (WITHOUT ROWID) — editing unavailable' : 'Toggle inline editing'}
+          disabled={!!policyBlock || (rows && !rows.HasRowID)}
           className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-sm border transition-colors disabled:opacity-40
             ${edit ? 'border-[#f85149] text-[#f85149] bg-[#f85149]/10' : 'border-[#30363d] text-[#6e7681] hover:text-[#e6edf3]'}`}>
           <Pencil size={11} />{edit ? 'Editing' : 'Edit'}

@@ -560,6 +560,24 @@ export namespace main {
 	        this.Warnings = source["Warnings"];
 	    }
 	}
+	export class PolicyStatus {
+	    active: boolean;
+	    readOnly: boolean;
+	    protected: string[];
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PolicyStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.readOnly = source["readOnly"];
+	        this.protected = source["protected"];
+	        this.source = source["source"];
+	    }
+	}
 	export class SQLResult {
 	    columns: string[];
 	    rows: any[][];
