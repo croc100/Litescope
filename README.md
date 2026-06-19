@@ -115,6 +115,36 @@ litescope schema turso://TOKEN@ORG/prod
 litescope schema d1://TOKEN@ACCOUNT_ID/DB_ID
 ```
 
+Add `--erd` (or `-f mermaid`) to emit a [Mermaid](https://mermaid.js.org/) ER
+diagram you can paste straight into a README or PR — foreign keys become
+relationships, with PK/FK markers on every column:
+
+```bash
+litescope schema app.db --erd
+```
+
+```mermaid
+erDiagram
+    authors {
+        INTEGER id PK
+        TEXT name
+    }
+    books {
+        INTEGER id PK
+        TEXT title
+        INTEGER author_id FK
+    }
+    reviews {
+        INTEGER id PK
+        INTEGER book_id FK
+        INTEGER stars
+    }
+    books }o--|| authors : "author_id"
+    reviews }o--|| books : "book_id"
+```
+
+Other formats: `-f terminal` (default), `-f json`.
+
 ---
 
 ### `validate` — Lock migrations to a spec (free)
