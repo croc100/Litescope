@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/croc100/litescope/internal/audit"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/migrate"
@@ -413,11 +414,24 @@ Examples:
 				BackupDir: backupDir,
 			})
 			if err != nil {
+				if !dryRun {
+					detail := err.Error()
+					if res != nil && res.Restored {
+						detail += " (restored from backup)"
+					}
+					audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
+						Summary: fmt.Sprintf("%d statements", len(stmts)), Outcome: "error", Detail: detail})
+				}
 				if res != nil && res.Restored {
 					fmt.Fprintf(os.Stderr, "\n  %s  Database restored from backup: %s\n",
 						styleWarn.Render("!"), res.BackupPath)
 				}
 				return err
+			}
+
+			if !dryRun {
+				audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
+					Summary: fmt.Sprintf("%d statements applied", res.Executed), Detail: res.BackupPath})
 			}
 
 			if res.BackupPath != "" {

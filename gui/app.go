@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/croc100/litescope/internal/audit"
 	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
@@ -210,6 +211,8 @@ func (a *App) UpdateCell(path, table string, rowid int64, column, value string, 
 		arg = value
 	}
 	_, err = db.Exec(q, arg, rowid)
+	audit.Record(audit.Entry{Action: "row.update", Target: path,
+		Summary: fmt.Sprintf("%s.%s rowid=%d", table, column, rowid), Outcome: outcomeOf(err), Detail: detailOf(err)})
 	return err
 }
 
@@ -221,6 +224,8 @@ func (a *App) DeleteRow(path, table string, rowid int64) error {
 	}
 	defer db.Close()
 	_, err = db.Exec("DELETE FROM "+quoteIdent(table)+" WHERE rowid = ?", rowid)
+	audit.Record(audit.Entry{Action: "row.delete", Target: path,
+		Summary: fmt.Sprintf("%s rowid=%d", table, rowid), Outcome: outcomeOf(err), Detail: detailOf(err)})
 	return err
 }
 
@@ -235,9 +240,34 @@ func (a *App) InsertRow(path, table string) (int64, error) {
 	defer db.Close()
 	r, err := db.Exec("INSERT INTO " + quoteIdent(table) + " DEFAULT VALUES")
 	if err != nil {
+		audit.Record(audit.Entry{Action: "row.insert", Target: path,
+			Summary: table, Outcome: "error", Detail: err.Error()})
 		return 0, err
 	}
-	return r.LastInsertId()
+	rid, _ := r.LastInsertId()
+	audit.Record(audit.Entry{Action: "row.insert", Target: path,
+		Summary: fmt.Sprintf("%s rowid=%d", table, rid)})
+	return rid, nil
+}
+
+// AuditLog returns recent audit entries (newest first) for the GUI Log panel.
+func (a *App) AuditLog(limit int, target, action string) ([]audit.Entry, error) {
+	return audit.Read(limit, target, action)
+}
+
+// outcomeOf / detailOf turn an error into audit fields.
+func outcomeOf(err error) string {
+	if err != nil {
+		return "error"
+	}
+	return "ok"
+}
+
+func detailOf(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // assertColumn verifies column belongs to table — guards the UpdateCell SET
@@ -389,12 +419,25 @@ func (a *App) RunSQL(path, query string, write bool) (*SQLResult, error) {
 	} else {
 		r, err := db.Exec(q)
 		if err != nil {
+			audit.Record(audit.Entry{Action: "sql.write", Target: path,
+				Summary: auditSummary(q), Outcome: "error", Detail: err.Error()})
 			return nil, err
 		}
 		res.RowsAffected, _ = r.RowsAffected()
+		audit.Record(audit.Entry{Action: "sql.write", Target: path,
+			Summary: fmt.Sprintf("%s — %d row(s)", auditSummary(q), res.RowsAffected)})
 	}
 	res.DurationMs = time.Since(start).Milliseconds()
 	return res, nil
+}
+
+// auditSummary trims a SQL statement to a single, log-friendly line.
+func auditSummary(q string) string {
+	q = strings.Join(strings.Fields(q), " ")
+	if len(q) > 80 {
+		q = q[:80] + "…"
+	}
+	return q
 }
 
 // isReadVerb reports whether a statement is a read (returns rows) vs a write.

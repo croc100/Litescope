@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/croc100/litescope/internal/audit"
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
@@ -123,7 +124,16 @@ is reported as needing manual recovery.`,
 				}
 			}
 
-			_, _, failed, _ := report.Counts()
+			restored, quarantined, failed, _ := report.Counts()
+			if !dryRun {
+				outcome := "ok"
+				if failed > 0 {
+					outcome = "error"
+				}
+				audit.Record(audit.Entry{Action: "fleet.recover", Target: cfg.Name,
+					Summary:  fmt.Sprintf("%d restored, %d quarantined, %d failed", restored, quarantined, failed),
+					Outcome:  outcome})
+			}
 			if failed > 0 {
 				os.Exit(1)
 			}
@@ -564,7 +574,16 @@ Convergence that drops a column or table is destructive and refused unless
 			})
 			printRolloutReport(cfg, report)
 
-			if _, failed, _ := report.Counts(); failed > 0 {
+			applied, failed, _ := report.Counts()
+			if !dryRun {
+				outcome := "ok"
+				if failed > 0 {
+					outcome = "error"
+				}
+				audit.Record(audit.Entry{Action: "fleet.converge", Target: cfg.Name,
+					Summary: fmt.Sprintf("%d converged, %d failed", applied, failed), Outcome: outcome})
+			}
+			if failed > 0 {
 				os.Exit(1)
 			}
 			return nil

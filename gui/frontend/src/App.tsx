@@ -4,7 +4,7 @@ import {
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
   AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
-  Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown, Trash2
+  Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown, Trash2, History
 } from 'lucide-react'
 import {
   Diff, OpenFile, SaveFile, Schema, BrowseTable, UpdateCell, DeleteRow, InsertRow, TableDiffRows,
@@ -12,13 +12,13 @@ import {
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
-  RunSQL, ExportSQL
+  RunSQL, ExportSQL, AuditLog
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tool = 'diff' | 'explorer' | 'query' | 'check' | 'migrate' | 'monitor' | 'fleet' | 'settings'
+type Tool = 'diff' | 'explorer' | 'query' | 'check' | 'migrate' | 'monitor' | 'fleet' | 'log' | 'settings'
 
 type ConnType = 'local' | 'turso' | 'd1'
 
@@ -416,6 +416,7 @@ export default function App() {
           {tool === 'migrate'  && <ProGate feature="Migration Studio" {...proGateProps}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'monitor'  && <ProGate feature="Drift Monitor" {...proGateProps}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
           {tool === 'fleet'    && <ProGate feature="Fleet Operations" {...proGateProps}><FleetView    {...viewProps} /></ProGate>}
+          {tool === 'log'      && <LogView {...viewProps} />}
           {tool === 'settings' && <SettingsView />}
         </main>
       </div>
@@ -441,6 +442,7 @@ const TOOLS: { id: Tool; icon: React.ReactNode; label: string }[] = [
   { id: 'migrate',  icon: <GitMerge size={20} strokeWidth={1.5} />,    label: 'Migrate' },
   { id: 'monitor',  icon: <Activity size={20} strokeWidth={1.5} />,    label: 'Monitor' },
   { id: 'fleet',    icon: <Layers size={20} strokeWidth={1.5} />,      label: 'Fleet' },
+  { id: 'log',      icon: <History size={20} strokeWidth={1.5} />,     label: 'Audit Log' },
 ]
 
 function ActivityBar({ tool, setTool, sidebarOpen, toggleSidebar }: {
@@ -570,7 +572,7 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
 
 const toolLabels: Record<Tool, string> = {
   diff: 'Schema Diff', explorer: 'DB Explorer', query: 'SQL Query', check: 'Integrity Check',
-  migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet', settings: 'Settings',
+  migrate: 'Migration Studio', monitor: 'Drift Monitor', fleet: 'Fleet', log: 'Audit Log', settings: 'Settings',
 }
 
 function StatusBar({ msg, tool }: { msg: { text: string; kind: string }; tool: Tool }) {
@@ -1026,6 +1028,64 @@ function ExplorerView({ recent, addRecent, removeRecent, status, injectRef }: Vi
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function LogView({ status }: ViewProps) {
+  const [entries, setEntries] = useState<any[]>([])
+  const [filter, setFilter] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    AuditLog(500, '', '').then((e: any) => setEntries(e ?? [])).catch(() => setEntries([])).finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const actions = ['migrate.apply', 'fleet.converge', 'fleet.recover', 'sql.write', 'row.update', 'row.insert', 'row.delete']
+  const shown = entries.filter(e => !filter || e.action === filter)
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader icon={<History size={14} />} title="Audit Log"
+        meta={<span className="text-[10px] text-[#6e7681]">local · who changed what, when</span>} />
+      <Toolbar>
+        <span className="text-[11px] text-[#6e7681]">Action</span>
+        <select value={filter} onChange={e => setFilter(e.target.value)}
+          className="bg-[#161b22] text-[#e6edf3] text-[12px] px-2 py-1 rounded-sm border border-[#30363d] outline-none">
+          <option value="">all</option>
+          {actions.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <div className="flex-1" />
+        <Btn variant="ghost" small onClick={load}>{loading ? <Spinner /> : <RefreshCw size={11} />}Refresh</Btn>
+      </Toolbar>
+      <div className="flex-1 overflow-auto">
+        {shown.length === 0 ? <EmptyState icon={<History size={48} />} text="No operations recorded yet" sub="Migrations, fleet ops, and writes appear here" />
+         : <table className="text-[12px] w-full">
+          <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
+            <th className="text-left px-3 py-1.5 w-6"></th>
+            <th className="text-left px-3 py-1.5 whitespace-nowrap">Time</th>
+            <th className="text-left px-3 py-1.5">Action</th>
+            <th className="text-left px-3 py-1.5">Operator</th>
+            <th className="text-left px-3 py-1.5">Target</th>
+            <th className="text-left px-3 py-1.5">Summary</th>
+          </tr></thead>
+          <tbody>{shown.map((e, i) => (
+            <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#1c2128] align-top">
+              <td className="px-3 py-1.5">{e.outcome === 'ok' ? <CheckCircle2 size={12} className="text-[#3fb950]" /> : <AlertCircle size={12} className="text-[#f85149]" />}</td>
+              <td className="px-3 py-1.5 text-[#6e7681] font-mono whitespace-nowrap">{new Date(e.time).toLocaleString()}</td>
+              <td className="px-3 py-1.5 font-mono text-[#9cdcfe] whitespace-nowrap">{e.action}</td>
+              <td className="px-3 py-1.5 text-[#e6edf3] whitespace-nowrap">{e.operator}</td>
+              <td className="px-3 py-1.5 text-[#6e7681] font-mono max-w-[200px] truncate" title={e.target}>{e.target?.split('/').pop()}</td>
+              <td className="px-3 py-1.5 text-[#e6edf3]">{e.summary}
+                {e.outcome !== 'ok' && e.detail && <div className="text-[11px] text-[#f85149] font-mono mt-0.5">{e.detail}</div>}
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>}
+      </div>
+      <div className="shrink-0 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681]">{shown.length} entr{shown.length === 1 ? 'y' : 'ies'}</div>
     </div>
   )
 }
