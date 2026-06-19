@@ -94,45 +94,121 @@ type TableRows struct {
 	Total   int64           `json:"Total"`
 }
 
-func (a *App) QueryTable(path, table string, limit, offset int) (*TableRows, error) {
-	db, err := sql.Open("sqlite", path)
+// quoteIdent wraps a SQLite identifier in double quotes, escaping any embedded
+// quotes — the safe way to interpolate a column/table name we control.
+func quoteIdent(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+// BrowseTable is QueryTable plus server-side sort, search, and a filtered count.
+// orderBy must be one of the table's real columns (otherwise it's ignored, so a
+// bad/crafted value can't inject SQL). search matches any column via LIKE and is
+// always passed as a bound parameter. Total reflects the active filter.
+func (a *App) BrowseTable(path, table string, limit, offset int, orderBy string, desc bool, search string) (*TableRows, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 
-	var total int64
-	db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", table)).Scan(&total)
+	// Real column names — used to validate orderBy and to build the search filter.
+	cols, err := tableColumns(db, table)
+	if err != nil {
+		return nil, err
+	}
+	valid := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		valid[c] = true
+	}
 
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %q LIMIT %d OFFSET %d", table, limit, offset))
+	where := ""
+	var args []interface{}
+	if s := strings.TrimSpace(search); s != "" {
+		parts := make([]string, 0, len(cols))
+		for _, c := range cols {
+			parts = append(parts, "CAST("+quoteIdent(c)+" AS TEXT) LIKE ? ESCAPE '\\'")
+			args = append(args, "%"+likeEscape(s)+"%")
+		}
+		if len(parts) > 0 {
+			where = " WHERE " + strings.Join(parts, " OR ")
+		}
+	}
+
+	qt := quoteIdent(table)
+	result := &TableRows{Columns: cols}
+	db.QueryRow("SELECT COUNT(*) FROM "+qt+where, args...).Scan(&result.Total)
+
+	order := ""
+	if valid[orderBy] {
+		dir := "ASC"
+		if desc {
+			dir = "DESC"
+		}
+		order = " ORDER BY " + quoteIdent(orderBy) + " " + dir
+	}
+
+	dataArgs := append(append([]interface{}{}, args...), limit, offset)
+	rows, err := db.Query("SELECT * FROM "+qt+where+order+" LIMIT ? OFFSET ?", dataArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	cols, _ := rows.Columns()
-	result := &TableRows{Columns: cols, Total: total}
-
 	for rows.Next() {
-		vals := make([]interface{}, len(cols))
-		ptrs := make([]interface{}, len(cols))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
+		row, err := scanRowSlice(rows, len(cols))
+		if err != nil {
 			continue
-		}
-		row := make([]interface{}, len(cols))
-		for i, v := range vals {
-			if b, ok := v.([]byte); ok {
-				row[i] = string(b)
-			} else {
-				row[i] = v
-			}
 		}
 		result.Rows = append(result.Rows, row)
 	}
 	return result, rows.Err()
+}
+
+// tableColumns returns the column names of a table in declared order.
+func tableColumns(db *sql.DB, table string) ([]string, error) {
+	rows, err := db.Query("SELECT name FROM pragma_table_info(?)", table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cols []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		cols = append(cols, n)
+	}
+	if len(cols) == 0 {
+		return nil, fmt.Errorf("table %q has no columns or does not exist", table)
+	}
+	return cols, rows.Err()
+}
+
+// likeEscape escapes LIKE wildcards so a user's literal % or _ matches itself.
+func likeEscape(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
+// scanRowSlice scans the current row into a []interface{} with []byte→string.
+func scanRowSlice(rows *sql.Rows, n int) ([]interface{}, error) {
+	vals := make([]interface{}, n)
+	ptrs := make([]interface{}, n)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+	row := make([]interface{}, n)
+	for i, v := range vals {
+		if b, ok := v.([]byte); ok {
+			row[i] = string(b)
+		} else {
+			row[i] = v
+		}
+	}
+	return row, nil
 }
 
 // SQLResult is the outcome of a RunSQL call: a result set for queries, or an

@@ -132,3 +132,51 @@ func TestExportSQL_RejectsWrite(t *testing.T) {
 		t.Fatal("expected non-read query to be rejected")
 	}
 }
+
+func makeNamedDB(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "n.db")
+	db, _ := sql.Open("sqlite", p)
+	defer db.Close()
+	db.Exec("CREATE TABLE u(id INTEGER PRIMARY KEY, name TEXT)")
+	db.Exec("INSERT INTO u(name) VALUES('alice'),('bob'),('carol'),('dave')")
+	return p
+}
+
+func TestBrowseTable_Sort(t *testing.T) {
+	a := &App{}
+	p := makeNamedDB(t)
+	r, err := a.BrowseTable(p, "u", 100, 0, "name", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Total != 4 || r.Rows[0][1] != "dave" {
+		t.Fatalf("sort desc failed: total=%d first=%v", r.Total, r.Rows[0][1])
+	}
+}
+
+func TestBrowseTable_Search(t *testing.T) {
+	a := &App{}
+	p := makeNamedDB(t)
+	r, err := a.BrowseTable(p, "u", 100, 0, "", false, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// alice, carol, dave contain 'a'
+	if r.Total != 3 {
+		t.Fatalf("search 'a' want 3, got %d", r.Total)
+	}
+}
+
+func TestBrowseTable_BadOrderByIgnored(t *testing.T) {
+	a := &App{}
+	p := makeNamedDB(t)
+	// crafted orderBy must be ignored, not injected
+	r, err := a.BrowseTable(p, "u", 100, 0, "name; DROP TABLE u", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Total != 4 {
+		t.Fatalf("expected 4 rows intact, got %d", r.Total)
+	}
+}

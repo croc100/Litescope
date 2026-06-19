@@ -4,10 +4,10 @@ import {
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
   AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
-  Settings, Key, ExternalLink, Terminal, Lock, Unlock
+  Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown
 } from 'lucide-react'
 import {
-  Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
+  Diff, OpenFile, SaveFile, Schema, BrowseTable, TableDiffRows,
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
@@ -1197,22 +1197,55 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
   const [rows, setRows] = useState<any>(null)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
-  useEffect(() => { setPage(0); setRows(null) }, [path, table])
+  const [orderBy, setOrderBy] = useState('')
+  const [desc, setDesc] = useState(false)
+  const [search, setSearch] = useState('')
+  const [debounced, setDebounced] = useState('')
+
+  // reset view state when the table changes
+  useEffect(() => { setPage(0); setRows(null); setOrderBy(''); setDesc(false); setSearch(''); setDebounced('') }, [path, table])
+  // debounce the search box so we don't query on every keystroke
+  useEffect(() => { const id = setTimeout(() => { setDebounced(search); setPage(0) }, 250); return () => clearTimeout(id) }, [search])
+
   useEffect(() => {
     setLoading(true)
-    QueryTable(path, table, PAGE, page * PAGE).then(setRows).catch(() => setRows(null)).finally(() => setLoading(false))
-  }, [path, table, page])
+    BrowseTable(path, table, PAGE, page * PAGE, orderBy, desc, debounced)
+      .then(setRows).catch(() => setRows(null)).finally(() => setLoading(false))
+  }, [path, table, page, orderBy, desc, debounced])
 
-  if (loading) return <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#6e7681]"><Spinner />Loading…</div>
-  if (!rows) return <div className="px-4 py-3 text-[12px] text-[#484f58]">Failed to load</div>
-  if (!rows.Rows?.length) return <div className="px-4 py-3 text-[12px] text-[#484f58]">Table is empty</div>
-  const totalPages = Math.ceil((rows.Total ?? 0) / PAGE)
+  function toggleSort(col: string) {
+    if (orderBy === col) { if (!desc) setDesc(true); else { setOrderBy(''); setDesc(false) } }
+    else { setOrderBy(col); setDesc(false) }
+    setPage(0)
+  }
+
+  const totalPages = Math.ceil((rows?.Total ?? 0) / PAGE)
+  const filterQuery = `SELECT * FROM "${table}"` // export respects nothing fancy; full table
+
   return (
     <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-[#30363d] bg-[#161b22] shrink-0">
+        <Search size={12} className="text-[#6e7681]" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all columns…"
+          className="flex-1 bg-transparent text-[12px] text-[#e6edf3] outline-none placeholder:text-[#484f58]" />
+        {search && <button onClick={() => setSearch('')} className="text-[#6e7681] hover:text-[#e6edf3]"><X size={12} /></button>}
+      </div>
+      {loading && !rows ? <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#6e7681]"><Spinner />Loading…</div>
+       : !rows ? <div className="px-4 py-3 text-[12px] text-[#484f58]">Failed to load</div>
+       : (
+      <>
       <div className="overflow-auto flex-1">
+        {!rows.Rows?.length ? <div className="px-4 py-3 text-[12px] text-[#484f58]">{debounced ? 'No rows match the search' : 'Table is empty'}</div> : (
         <table className="text-[12px] font-mono w-full">
           <thead><tr className="bg-[#161b22] border-b border-[#30363d] text-[#6e7681] text-[11px] sticky top-0">
-            {(rows.Columns ?? []).map((c: string) => <th key={c} className="text-left px-3 py-1.5 font-medium whitespace-nowrap">{c}</th>)}
+            {(rows.Columns ?? []).map((c: string) => (
+              <th key={c} onClick={() => toggleSort(c)}
+                className="text-left px-3 py-1.5 font-medium whitespace-nowrap cursor-pointer select-none hover:text-[#e6edf3]">
+                <span className="inline-flex items-center gap-1">{c}
+                  {orderBy === c && (desc ? <ArrowDown size={11} className="text-[#4ec9b0]" /> : <ArrowUp size={11} className="text-[#4ec9b0]" />)}
+                </span>
+              </th>
+            ))}
           </tr></thead>
           <tbody>{(rows.Rows ?? []).map((row: any[], i: number) => (
             <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#1c2128]">
@@ -1222,16 +1255,19 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
             </tr>
           ))}</tbody>
         </table>
+        )}
       </div>
       <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[#30363d] bg-[#161b22] text-[11px] text-[#6e7681] shrink-0">
         {totalPages > 1 ? <>
           <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronLeft size={13} /></button>
-          <span>Page {page + 1} / {totalPages} · {rows.Total} rows</span>
+          <span>Page {page + 1} / {totalPages} · {rows.Total} rows{debounced ? ' (filtered)' : ''}</span>
           <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronRight size={13} /></button>
-        </> : <span>{rows.Total} rows</span>}
+        </> : <span>{rows.Total} rows{debounced ? ' (filtered)' : ''}</span>}
         <div className="flex-1" />
-        <ExportButtons dbPath={path} query={`SELECT * FROM "${table}"`} base={table} status={status} />
+        <ExportButtons dbPath={path} query={filterQuery} base={table} status={status} />
       </div>
+      </>
+      )}
     </div>
   )
 }
