@@ -37,8 +37,9 @@ health, performance advice, and schema-design lint — no setup, no baseline req
 
 ```bash
 litescope doctor app.db
-litescope doctor app.db --deep            # exhaustive integrity_check
-litescope doctor app.db --format json     # for CI / dashboards
+litescope doctor app.db --deep                       # exhaustive integrity_check
+litescope doctor app.db --format json                # for CI / dashboards
+litescope doctor app.db --format html -o report.html # shareable report
 ```
 
 ```
@@ -56,8 +57,9 @@ litescope doctor app.db --format json     # for CI / dashboards
 ```
 
 Exits **1** when the database needs attention (health warning/critical or any
-performance warning) — drop it straight into CI as a quality gate. Triage an
-entire Turso/D1 fleet at once with `litescope fleet health` (Pro).
+performance warning) — drop it straight into CI as a quality gate. `--format html`
+writes a standalone, self-contained report you can attach to a PR or email. Triage
+an entire Turso/D1 fleet at once with `litescope fleet health` (Pro).
 
 ---
 

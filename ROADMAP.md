@@ -141,7 +141,8 @@ gold-plating — it must serve the next gate (**Free adoption**). Four axes,
      a category Atlas/squawk own for PG/MySQL but SQLite lacked.
    - ✅ ERD output — `schema --erd` emitting Mermaid (shareable in GitHub READMEs).
    - ✅ `dump` / export — SQL dump (sqlite3 `.dump` parity: schema+data, blob/NULL/quote-safe, round-trip verified). `--schema-only`/`--data-only`/`--table`/`-o`.
-   - ⬜ HTML shareable reports for `doctor` / `diff`.
+   - ◐ HTML shareable reports — `doctor --format html` ✅ (standalone, self-contained,
+     auto-escaped, brand-themed). `diff` HTML next.
    - ⬜ `advise` accuracy — fewer false positives, clearer rationale.
    - Goal: maximize virality & shareability of the single-DB experience.
 2. **Pro depth** _(after Pro revenue is validated)_ — fleet ops, `migrate apply`,

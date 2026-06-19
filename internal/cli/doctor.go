@@ -9,6 +9,7 @@ import (
 	"github.com/croc100/litescope/internal/advisor"
 	"github.com/croc100/litescope/internal/health"
 	"github.com/croc100/litescope/internal/lint"
+	"github.com/croc100/litescope/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +29,7 @@ type doctorReport struct {
 func cmdDoctor() *cobra.Command {
 	var format string
 	var deep bool
+	var out string
 
 	cmd := &cobra.Command{
 		Use:   "doctor <database.db>",
@@ -42,6 +44,7 @@ doctor combines:
   litescope doctor app.db
   litescope doctor app.db --deep
   litescope doctor app.db --format json
+  litescope doctor app.db --format html -o report.html   # shareable report
 
 Exit code is 1 when the database needs attention (a health warning/critical
 state or any performance warning) — safe to drop into CI as a quality gate.
@@ -83,14 +86,36 @@ Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
 
 			rep := doctorReport{Path: path, Verdict: verdict, Health: h, Advisor: a, Lint: l, Warnings: warnings}
 
-			if format == "json" {
+			switch format {
+			case "json":
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				if err := enc.Encode(rep); err != nil {
 					return err
 				}
-			} else {
+			case "html":
+				w := cmd.OutOrStdout()
+				if out != "" {
+					f, err := os.Create(out)
+					if err != nil {
+						return err
+					}
+					defer f.Close()
+					w = f
+				}
+				if err := report.Doctor(w, report.DoctorData{
+					Path: rep.Path, Verdict: rep.Verdict, Health: rep.Health,
+					Advisor: rep.Advisor, Lint: rep.Lint, Warnings: rep.Warnings,
+				}); err != nil {
+					return err
+				}
+				if out != "" {
+					fmt.Fprintf(os.Stderr, "wrote %s\n", out)
+				}
+			case "terminal":
 				printDoctor(rep)
+			default:
+				return fmt.Errorf("unknown format %q (want terminal, json, or html)", format)
 			}
 
 			if verdict != "healthy" {
@@ -99,8 +124,9 @@ Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json, html")
 	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
+	cmd.Flags().StringVarP(&out, "out", "o", "", "write report to a file instead of stdout (html)")
 	return cmd
 }
 
