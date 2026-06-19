@@ -180,3 +180,61 @@ func TestBrowseTable_BadOrderByIgnored(t *testing.T) {
 		t.Fatalf("expected 4 rows intact, got %d", r.Total)
 	}
 }
+
+func TestEditRow_UpdateDeleteInsert(t *testing.T) {
+	a := &App{}
+	p := makeNamedDB(t) // u(id, name): alice, bob, carol, dave
+
+	// rowid comes back from BrowseTable
+	br, err := a.BrowseTable(p, "u", 100, 0, "id", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !br.HasRowID || len(br.RowIDs) != 4 {
+		t.Fatalf("expected 4 rowids, got %+v", br.RowIDs)
+	}
+
+	// update alice -> ALICE
+	if err := a.UpdateCell(p, "u", br.RowIDs[0], "name", "ALICE", false); err != nil {
+		t.Fatal(err)
+	}
+	// set bob's name to NULL
+	if err := a.UpdateCell(p, "u", br.RowIDs[1], "name", "", true); err != nil {
+		t.Fatal(err)
+	}
+	// delete carol
+	if err := a.DeleteRow(p, "u", br.RowIDs[2]); err != nil {
+		t.Fatal(err)
+	}
+	// insert a new row
+	rid, err := a.InsertRow(p, "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rid == 0 {
+		t.Fatal("expected non-zero new rowid")
+	}
+
+	// verify
+	br2, _ := a.BrowseTable(p, "u", 100, 0, "id", false, "")
+	if br2.Total != 4 { // 4 - 1 deleted + 1 inserted
+		t.Fatalf("expected 4 rows after edits, got %d", br2.Total)
+	}
+	got := map[string]bool{}
+	for _, row := range br2.Rows {
+		if row[1] != nil {
+			got[row[1].(string)] = true
+		}
+	}
+	if !got["ALICE"] || got["alice"] || got["carol"] {
+		t.Fatalf("unexpected names after edits: %v", got)
+	}
+}
+
+func TestUpdateCell_RejectsUnknownColumn(t *testing.T) {
+	a := &App{}
+	p := makeNamedDB(t)
+	if err := a.UpdateCell(p, "u", 1, "name=1; DROP TABLE u", "x", false); err == nil {
+		t.Fatal("expected unknown-column rejection")
+	}
+}

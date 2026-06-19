@@ -89,9 +89,11 @@ func (a *App) Schema(path string) (*schema.Schema, error) {
 }
 
 type TableRows struct {
-	Columns []string        `json:"Columns"`
-	Rows    [][]interface{} `json:"Rows"`
-	Total   int64           `json:"Total"`
+	Columns  []string        `json:"Columns"`
+	Rows     [][]interface{} `json:"Rows"`
+	Total    int64           `json:"Total"`
+	RowIDs   []int64         `json:"RowIDs"`   // rowid per row, aligned with Rows (when HasRowID)
+	HasRowID bool            `json:"HasRowID"` // false for WITHOUT ROWID tables — editing disabled
 }
 
 // quoteIdent wraps a SQLite identifier in double quotes, escaping any embedded
@@ -147,20 +149,115 @@ func (a *App) BrowseTable(path, table string, limit, offset int, orderBy string,
 		order = " ORDER BY " + quoteIdent(orderBy) + " " + dir
 	}
 
+	// Select rowid alongside the row so the UI can target edits/deletes. Tables
+	// declared WITHOUT ROWID have no rowid; for those we fall back to read-only.
+	result.HasRowID = tableHasRowID(db, qt)
+	sel := "SELECT * FROM "
+	if result.HasRowID {
+		sel = "SELECT rowid, * FROM "
+	}
 	dataArgs := append(append([]interface{}{}, args...), limit, offset)
-	rows, err := db.Query("SELECT * FROM "+qt+where+order+" LIMIT ? OFFSET ?", dataArgs...)
+	rows, err := db.Query(sel+qt+where+order+" LIMIT ? OFFSET ?", dataArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		row, err := scanRowSlice(rows, len(cols))
-		if err != nil {
-			continue
+		if result.HasRowID {
+			full, err := scanRowSlice(rows, len(cols)+1)
+			if err != nil {
+				continue
+			}
+			rid, _ := full[0].(int64)
+			result.RowIDs = append(result.RowIDs, rid)
+			result.Rows = append(result.Rows, full[1:])
+		} else {
+			row, err := scanRowSlice(rows, len(cols))
+			if err != nil {
+				continue
+			}
+			result.Rows = append(result.Rows, row)
 		}
-		result.Rows = append(result.Rows, row)
 	}
 	return result, rows.Err()
+}
+
+// tableHasRowID reports whether the table exposes a usable rowid (false for
+// WITHOUT ROWID tables).
+func tableHasRowID(db *sql.DB, quotedTable string) bool {
+	var x interface{}
+	err := db.QueryRow("SELECT rowid FROM " + quotedTable + " LIMIT 1").Scan(&x)
+	if err == sql.ErrNoRows {
+		return true // empty table, but rowid is supported
+	}
+	return err == nil
+}
+
+// UpdateCell sets one column of one row (identified by rowid). value is written
+// as text; SQLite applies the column's affinity. isNull writes SQL NULL instead.
+func (a *App) UpdateCell(path, table string, rowid int64, column, value string, isNull bool) error {
+	if err := assertColumn(path, table, column); err != nil {
+		return err
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	q := "UPDATE " + quoteIdent(table) + " SET " + quoteIdent(column) + " = ? WHERE rowid = ?"
+	var arg interface{}
+	if !isNull {
+		arg = value
+	}
+	_, err = db.Exec(q, arg, rowid)
+	return err
+}
+
+// DeleteRow removes the row with the given rowid.
+func (a *App) DeleteRow(path, table string, rowid int64) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec("DELETE FROM "+quoteIdent(table)+" WHERE rowid = ?", rowid)
+	return err
+}
+
+// InsertRow appends a new row using each column's defaults and returns its
+// rowid, so the UI can let the user fill it in. Fails if a NOT NULL column has
+// no default (the error is surfaced to the user).
+func (a *App) InsertRow(path, table string) (int64, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	r, err := db.Exec("INSERT INTO " + quoteIdent(table) + " DEFAULT VALUES")
+	if err != nil {
+		return 0, err
+	}
+	return r.LastInsertId()
+}
+
+// assertColumn verifies column belongs to table — guards the UpdateCell SET
+// identifier, which can't be a bound parameter.
+func assertColumn(path, table, column string) error {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	cols, err := tableColumns(db, table)
+	if err != nil {
+		return err
+	}
+	for _, c := range cols {
+		if c == column {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown column %q", column)
 }
 
 // tableColumns returns the column names of a table in declared order.

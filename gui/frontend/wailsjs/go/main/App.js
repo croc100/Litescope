@@ -10,6 +10,10 @@ export function Check(arg1, arg2, arg3) {
   return window['go']['main']['App']['Check'](arg1, arg2, arg3);
 }
 
+export function DeleteRow(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteRow'](arg1, arg2, arg3);
+}
+
 export function Diff(arg1, arg2) {
   return window['go']['main']['App']['Diff'](arg1, arg2);
 }
@@ -52,6 +56,10 @@ export function FleetSnapshot(arg1) {
 
 export function FleetTopology(arg1) {
   return window['go']['main']['App']['FleetTopology'](arg1);
+}
+
+export function InsertRow(arg1, arg2) {
+  return window['go']['main']['App']['InsertRow'](arg1, arg2);
 }
 
 export function MigrateApply(arg1, arg2, arg3) {
@@ -108,4 +116,8 @@ export function Schema(arg1) {
 
 export function TableDiffRows(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['TableDiffRows'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function UpdateCell(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UpdateCell'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

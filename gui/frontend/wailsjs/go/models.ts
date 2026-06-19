@@ -554,6 +554,8 @@ export namespace main {
 	    Columns: string[];
 	    Rows: any[][];
 	    Total: number;
+	    RowIDs: number[];
+	    HasRowID: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TableRows(source);
@@ -564,6 +566,8 @@ export namespace main {
 	        this.Columns = source["Columns"];
 	        this.Rows = source["Rows"];
 	        this.Total = source["Total"];
+	        this.RowIDs = source["RowIDs"];
+	        this.HasRowID = source["HasRowID"];
 	    }
 	}
 

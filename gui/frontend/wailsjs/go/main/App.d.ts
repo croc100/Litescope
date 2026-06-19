@@ -10,6 +10,8 @@ export function BrowseTable(arg1:string,arg2:string,arg3:number,arg4:number,arg5
 
 export function Check(arg1:string,arg2:string,arg3:boolean):Promise<check.Result>;
 
+export function DeleteRow(arg1:string,arg2:string,arg3:number):Promise<void>;
+
 export function Diff(arg1:string,arg2:string):Promise<diff.Result>;
 
 export function ExportSQL(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.ExportResult>;
@@ -31,6 +33,8 @@ export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise
 export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetSnapshotResult>>;
 
 export function FleetTopology(arg1:Array<main.FleetDBEntry>):Promise<main.FleetTopologyResult>;
+
+export function InsertRow(arg1:string,arg2:string):Promise<number>;
 
 export function MigrateApply(arg1:string,arg2:string,arg3:boolean):Promise<main.MigrateApplyResult>;
 
@@ -59,3 +63,5 @@ export function SaveFile(arg1:string):Promise<string>;
 export function Schema(arg1:string):Promise<schema.Schema>;
 
 export function TableDiffRows(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<Array<main.DiffedRow>>;
+
+export function UpdateCell(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string,arg6:boolean):Promise<void>;

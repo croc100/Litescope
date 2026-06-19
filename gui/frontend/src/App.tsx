@@ -4,10 +4,10 @@ import {
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
   AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
-  Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown
+  Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown, Trash2
 } from 'lucide-react'
 import {
-  Diff, OpenFile, SaveFile, Schema, BrowseTable, TableDiffRows,
+  Diff, OpenFile, SaveFile, Schema, BrowseTable, UpdateCell, DeleteRow, InsertRow, TableDiffRows,
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
@@ -1201,9 +1201,13 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
   const [desc, setDesc] = useState(false)
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
+  const [edit, setEdit] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [editing, setEditing] = useState<{ row: number; col: number } | null>(null)
+  const [editVal, setEditVal] = useState('')
 
   // reset view state when the table changes
-  useEffect(() => { setPage(0); setRows(null); setOrderBy(''); setDesc(false); setSearch(''); setDebounced('') }, [path, table])
+  useEffect(() => { setPage(0); setRows(null); setOrderBy(''); setDesc(false); setSearch(''); setDebounced(''); setEdit(false); setEditing(null) }, [path, table])
   // debounce the search box so we don't query on every keystroke
   useEffect(() => { const id = setTimeout(() => { setDebounced(search); setPage(0) }, 250); return () => clearTimeout(id) }, [search])
 
@@ -1211,16 +1215,44 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
     setLoading(true)
     BrowseTable(path, table, PAGE, page * PAGE, orderBy, desc, debounced)
       .then(setRows).catch(() => setRows(null)).finally(() => setLoading(false))
-  }, [path, table, page, orderBy, desc, debounced])
+  }, [path, table, page, orderBy, desc, debounced, reloadKey])
+
+  const reload = () => setReloadKey(k => k + 1)
 
   function toggleSort(col: string) {
+    if (editing) return
     if (orderBy === col) { if (!desc) setDesc(true); else { setOrderBy(''); setDesc(false) } }
     else { setOrderBy(col); setDesc(false) }
     setPage(0)
   }
 
+  async function saveCell() {
+    if (!editing) return
+    const { row, col } = editing
+    const rowid = rows.RowIDs?.[row]
+    const column = rows.Columns[col]
+    const orig = rows.Rows[row][col]
+    setEditing(null)
+    if (orig === editVal || (orig === null && editVal === '')) return // no change
+    try {
+      await UpdateCell(path, table, rowid, column, editVal, false)
+      status(`Updated ${column}`, 'ok'); reload()
+    } catch (e: any) { status('Update failed: ' + String(e), 'err') }
+  }
+
+  async function delRow(row: number) {
+    const rowid = rows.RowIDs?.[row]
+    try { await DeleteRow(path, table, rowid); status('Row deleted', 'ok'); reload() }
+    catch (e: any) { status('Delete failed: ' + String(e), 'err') }
+  }
+
+  async function addRow() {
+    try { await InsertRow(path, table); status('Row added', 'ok'); reload() }
+    catch (e: any) { status('Insert failed: ' + String(e), 'err') }
+  }
+
   const totalPages = Math.ceil((rows?.Total ?? 0) / PAGE)
-  const filterQuery = `SELECT * FROM "${table}"` // export respects nothing fancy; full table
+  const editable = edit && rows?.HasRowID
 
   return (
     <div className="flex flex-col h-full">
@@ -1229,6 +1261,13 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all columns…"
           className="flex-1 bg-transparent text-[12px] text-[#e6edf3] outline-none placeholder:text-[#484f58]" />
         {search && <button onClick={() => setSearch('')} className="text-[#6e7681] hover:text-[#e6edf3]"><X size={12} /></button>}
+        <button onClick={() => { setEdit(e => !e); setEditing(null) }}
+          title={rows && !rows.HasRowID ? 'This table has no rowid (WITHOUT ROWID) — editing unavailable' : 'Toggle inline editing'}
+          disabled={rows && !rows.HasRowID}
+          className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-sm border transition-colors disabled:opacity-40
+            ${edit ? 'border-[#f85149] text-[#f85149] bg-[#f85149]/10' : 'border-[#30363d] text-[#6e7681] hover:text-[#e6edf3]'}`}>
+          <Pencil size={11} />{edit ? 'Editing' : 'Edit'}
+        </button>
       </div>
       {loading && !rows ? <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-[#6e7681]"><Spinner />Loading…</div>
        : !rows ? <div className="px-4 py-3 text-[12px] text-[#484f58]">Failed to load</div>
@@ -1246,12 +1285,27 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
                 </span>
               </th>
             ))}
+            {editable && <th className="w-8" />}
           </tr></thead>
           <tbody>{(rows.Rows ?? []).map((row: any[], i: number) => (
             <tr key={i} className="border-b border-[#2d2d2d] hover:bg-[#1c2128]">
-              {row.map((cell, j) => <td key={j} className="px-3 py-1 text-[#e6edf3] max-w-[200px] truncate whitespace-nowrap">
-                {cell === null ? <span className="text-[#484f58] italic">NULL</span> : String(cell)}
-              </td>)}
+              {row.map((cell, j) => {
+                const isEditing = editing?.row === i && editing?.col === j
+                return (
+                  <td key={j} onDoubleClick={() => { if (editable) { setEditing({ row: i, col: j }); setEditVal(cell === null ? '' : String(cell)) } }}
+                    className={`px-3 py-1 text-[#e6edf3] max-w-[200px] truncate whitespace-nowrap ${editable ? 'cursor-text' : ''}`}>
+                    {isEditing ? (
+                      <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveCell(); if (e.key === 'Escape') setEditing(null) }}
+                        onBlur={saveCell}
+                        className="w-full bg-[#0d1117] border border-[#00d4aa] rounded-sm px-1 -mx-1 text-[#e6edf3] outline-none" />
+                    ) : cell === null ? <span className="text-[#484f58] italic">NULL</span> : String(cell)}
+                  </td>
+                )
+              })}
+              {editable && <td className="px-2 text-center">
+                <button onClick={() => delRow(i)} title="Delete row" className="text-[#6e7681] hover:text-[#f85149]"><Trash2 size={12} /></button>
+              </td>}
             </tr>
           ))}</tbody>
         </table>
@@ -1263,8 +1317,10 @@ function TableDataView({ path, table, status }: { path: string; table: string; s
           <span>Page {page + 1} / {totalPages} · {rows.Total} rows{debounced ? ' (filtered)' : ''}</span>
           <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="disabled:opacity-30 hover:text-[#e6edf3]"><ChevronRight size={13} /></button>
         </> : <span>{rows.Total} rows{debounced ? ' (filtered)' : ''}</span>}
+        {editable && <button onClick={addRow} className="flex items-center gap-1 text-[#4ec9b0] hover:text-[#6fe9cd]"><Plus size={12} />Add row</button>}
+        {edit && <span className="text-[10px] text-[#f85149]">double-click a cell to edit</span>}
         <div className="flex-1" />
-        <ExportButtons dbPath={path} query={filterQuery} base={table} status={status} />
+        <ExportButtons dbPath={path} query={`SELECT * FROM "${table}"`} base={table} status={status} />
       </div>
       </>
       )}
