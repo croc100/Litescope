@@ -13,6 +13,10 @@ vscode/webview-ui/node_modules/
 vscode/dist/
 vscode/webview-ui/dist/
 
+# Wails / GUI build artifacts
+gui/gui
+gui/build/bin/
+
 # OS
 .DS_Store
 Thumbs.db
