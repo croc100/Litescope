@@ -30,6 +30,10 @@ export function FleetHealth(arg1, arg2) {
   return window['go']['main']['App']['FleetHealth'](arg1, arg2);
 }
 
+export function FleetLoadConfig(arg1) {
+  return window['go']['main']['App']['FleetLoadConfig'](arg1);
+}
+
 export function FleetRecover(arg1, arg2) {
   return window['go']['main']['App']['FleetRecover'](arg1, arg2);
 }
@@ -76,6 +80,10 @@ export function MonitorWatchStop() {
 
 export function OpenFile() {
   return window['go']['main']['App']['OpenFile']();
+}
+
+export function OpenFleetConfig() {
+  return window['go']['main']['App']['OpenFleetConfig']();
 }
 
 export function QueryTable(arg1, arg2, arg3, arg4) {

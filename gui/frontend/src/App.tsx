@@ -10,7 +10,7 @@ import {
   Diff, OpenFile, SaveFile, Schema, QueryTable, TableDiffRows,
   Check, MigrateGenerate, MigrateApply, MonitorSnapshot, MonitorCheck, MonitorLoadHistory,
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
-  FleetDiscover, FleetSnapshot, FleetCheck,
+  FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
@@ -1670,6 +1670,19 @@ function FleetView({ status }: ViewProps) {
     finally { setLoading(false) }
   }
 
+  async function loadLocalFleet() {
+    const path = await OpenFleetConfig()
+    if (!path) return
+    setLoading(true); setError(''); setDatabases([])
+    try {
+      const dbs = await FleetLoadConfig(path)
+      setDatabases(dbs ?? [])
+      setTab('discover')
+      status(`Loaded ${dbs?.length ?? 0} databases from fleet config`, 'ok')
+    } catch (e: any) { setError(String(e)); status('Load failed', 'err') }
+    finally { setLoading(false) }
+  }
+
   async function snapshotAll() {
     if (!databases.length) return
     setLoading(true); setError(''); setSnapResults([])
@@ -1805,6 +1818,9 @@ function FleetView({ status }: ViewProps) {
         <div className="flex gap-2 pt-1">
           <Btn onClick={discover} disabled={!org || !token || loading}>
             {loading ? <Spinner /> : <RefreshCw size={11} />}Discover
+          </Btn>
+          <Btn variant="ghost" onClick={loadLocalFleet} disabled={loading} small>
+            <FolderOpen size={11} />Load fleet.yaml
           </Btn>
           {databases.length > 0 && <>
             <Btn variant="ghost" onClick={snapshotAll} disabled={loading} small>

@@ -20,6 +20,8 @@ export function FleetFingerprint(arg1:Array<main.FleetDBEntry>):Promise<main.Fle
 
 export function FleetHealth(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<main.FleetHealthResult>>;
 
+export function FleetLoadConfig(arg1:string):Promise<Array<main.FleetDBEntry>>;
+
 export function FleetRecover(arg1:Array<main.FleetDBEntry>,arg2:boolean):Promise<Array<main.FleetRecoverResult>>;
 
 export function FleetSnapshot(arg1:Array<main.FleetDBEntry>):Promise<Array<main.FleetSnapshotResult>>;
@@ -43,6 +45,8 @@ export function MonitorWatchStart(arg1:string,arg2:string,arg3:number,arg4:strin
 export function MonitorWatchStop():Promise<void>;
 
 export function OpenFile():Promise<string>;
+
+export function OpenFleetConfig():Promise<string>;
 
 export function QueryTable(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.TableRows>;
 

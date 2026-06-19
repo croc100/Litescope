@@ -60,6 +60,19 @@ func (a *App) SaveFile(defaultName string) string {
 	return path
 }
 
+// OpenFleetConfig prompts for a litescope.fleet.yaml file and returns its path.
+func (a *App) OpenFleetConfig() string {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Fleet config", Pattern: "*.yaml;*.yml"},
+		},
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
 // ── Diff ──────────────────────────────────────────────────────────────────────
 
 func (a *App) Diff(oldPath, newPath string) (*diff.Result, error) {
@@ -424,6 +437,34 @@ func (a *App) FleetDiscover(provider, orgOrAccount, platformToken, dbToken strin
 		out[i] = FleetDBEntry{Name: d.Name, DSN: d.DSN, Tags: d.Tags}
 	}
 	return out, nil
+}
+
+// FleetLoadConfig loads a local fleet config (litescope.fleet.yaml) and returns
+// its active (non-quarantined) databases. Relative local-file DSNs are resolved
+// against the config's directory so the fleet works regardless of the app's
+// working directory; remote DSNs (turso://, d1://) are passed through unchanged.
+func (a *App) FleetLoadConfig(path string) ([]FleetDBEntry, error) {
+	cfg, err := fleet.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(path)
+	active := cfg.Active()
+	out := make([]FleetDBEntry, len(active))
+	for i, d := range active {
+		dsn := d.DSN
+		if isRemoteDSN(dsn) {
+			// remote — leave as-is
+		} else if !filepath.IsAbs(dsn) {
+			dsn = filepath.Join(dir, dsn)
+		}
+		out[i] = FleetDBEntry{Name: d.Name, DSN: dsn, Tags: d.Tags}
+	}
+	return out, nil
+}
+
+func isRemoteDSN(dsn string) bool {
+	return strings.HasPrefix(dsn, "turso://") || strings.HasPrefix(dsn, "d1://")
 }
 
 func (a *App) FleetSnapshot(entries []FleetDBEntry) []FleetSnapshotResult {
