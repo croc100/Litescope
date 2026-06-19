@@ -48,10 +48,18 @@ type Index struct {
 	SQL    string
 }
 
+// ForeignKey describes a single-column relationship from this table to another.
+type ForeignKey struct {
+	From  string // column in this table
+	Table string // referenced table
+	To    string // referenced column
+}
+
 type Table struct {
-	Name    string
-	Columns []Column
-	Indexes []Index
+	Name        string
+	Columns     []Column
+	Indexes     []Index
+	ForeignKeys []ForeignKey
 }
 
 type Schema struct {
@@ -141,7 +149,27 @@ func loadTable(db *sql.DB, name string) (Table, error) {
 		t.Indexes = append(t.Indexes, idx)
 	}
 
-	return t, idxRows.Err()
+	if err := idxRows.Err(); err != nil {
+		return t, err
+	}
+
+	fkRows, err := db.Query(fmt.Sprintf("PRAGMA foreign_key_list(%q)", name))
+	if err != nil {
+		return t, err
+	}
+	defer fkRows.Close()
+
+	for fkRows.Next() {
+		var id, seq int
+		var onUpdate, onDelete, match string
+		var fk ForeignKey
+		if err := fkRows.Scan(&id, &seq, &fk.Table, &fk.From, &fk.To, &onUpdate, &onDelete, &match); err != nil {
+			return t, err
+		}
+		t.ForeignKeys = append(t.ForeignKeys, fk)
+	}
+
+	return t, fkRows.Err()
 }
 
 func (s *Schema) TableMap() map[string]Table {
@@ -150,6 +178,69 @@ func (s *Schema) TableMap() map[string]Table {
 		m[t.Name] = t
 	}
 	return m
+}
+
+// Mermaid renders the schema as a Mermaid erDiagram, suitable for pasting into
+// a README or any Mermaid-aware renderer. Foreign keys become relationships.
+func (s *Schema) Mermaid() string {
+	var b strings.Builder
+	b.WriteString("erDiagram\n")
+
+	for _, t := range s.Tables {
+		// Columns referenced by a foreign key, for the FK marker.
+		fkCols := make(map[string]bool, len(t.ForeignKeys))
+		for _, fk := range t.ForeignKeys {
+			fkCols[fk.From] = true
+		}
+
+		fmt.Fprintf(&b, "    %s {\n", mermaidName(t.Name))
+		for _, c := range t.Columns {
+			typ := c.Type
+			if typ == "" {
+				typ = "any"
+			}
+			var keys []string
+			if c.PK > 0 {
+				keys = append(keys, "PK")
+			}
+			if fkCols[c.Name] {
+				keys = append(keys, "FK")
+			}
+			line := fmt.Sprintf("        %s %s", mermaidName(typ), mermaidName(c.Name))
+			if len(keys) > 0 {
+				line += " " + strings.Join(keys, ",")
+			}
+			b.WriteString(line + "\n")
+		}
+		b.WriteString("    }\n")
+	}
+
+	for _, t := range s.Tables {
+		for _, fk := range t.ForeignKeys {
+			// child }o--|| parent : "fk_col"
+			fmt.Fprintf(&b, "    %s }o--|| %s : %q\n",
+				mermaidName(t.Name), mermaidName(fk.Table), fk.From)
+		}
+	}
+
+	return b.String()
+}
+
+// mermaidName sanitizes an identifier so it is a valid Mermaid token: Mermaid
+// entity and attribute names must be alphanumeric or underscore.
+func mermaidName(s string) string {
+	if s == "" {
+		return "_"
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
 
 func (s *Schema) String() string {
