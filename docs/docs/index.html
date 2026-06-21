@@ -121,9 +121,14 @@
     </nav>
     <div class="sidebar-section">CLI Reference</div>
     <nav>
+      <a href="#doctor">doctor</a>
       <a href="#diff">diff</a>
+      <a href="#schema">schema</a>
+      <a href="#dump">dump</a>
       <a href="#health">health</a>
       <a href="#advise">advise</a>
+      <a href="#lint">lint</a>
+      <a href="#validate">validate</a>
       <a href="#check">check</a>
       <a href="#migrate">migrate</a>
       <a href="#monitor">monitor</a>
@@ -148,7 +153,7 @@
 
     <div class="doc-section">
       <h1>Litescope Docs</h1>
-      <p>SQLite production operations — diff, validate, migrate, monitor, and fleet management from one binary.</p>
+      <p>SQLite production operations — from doctor, diff, and schema to migrate, monitor, and fleet management, all from one binary.</p>
     </div>
 
     <!-- Install -->
@@ -196,6 +201,30 @@ echo "lsc_pro_your_key_here" > ~/.litescope/license</code></pre>
       </div>
     </div>
 
+    <!-- doctor -->
+    <div class="doc-section" id="doctor">
+      <h2>doctor <span class="tier tier-free">free</span></h2>
+      <p>Run every single-database check at once and get a single verdict. <code>doctor</code> combines <a href="#health">health</a> (corruption, WAL bloat, fragmentation), <a href="#advise">advise</a> (missing FK indexes, redundant indexes, full table scans), and <a href="#lint">lint</a> (schema design anti-patterns). The "point it at a database and go <em>oh</em>" command — and it exits <code>1</code> when the database needs attention, so it drops straight into CI as a quality gate.</p>
+      <pre><code>litescope doctor &lt;database.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--deep</td><td>false</td><td>Use the exhaustive <code>integrity_check</code> instead of <code>quick_check</code></td></tr>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code>, <code>html</code></td></tr>
+          <tr><td>--out, -o</td><td>stdout</td><td>Write the report to a file (use with <code>--format html</code>)</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># One-shot checkup
+litescope doctor app.db
+
+# Deep integrity check
+litescope doctor app.db --deep
+
+# Shareable, self-contained HTML report
+litescope doctor app.db --format html -o report.html</code></pre>
+    </div>
+
     <!-- diff -->
     <div class="doc-section" id="diff">
       <h2>diff <span class="tier tier-free">free</span></h2>
@@ -221,6 +250,54 @@ litescope diff old.db new.db --data
 
 # Save HTML report
 litescope diff old.db new.db --format html -o report.html</code></pre>
+    </div>
+
+    <!-- schema -->
+    <div class="doc-section" id="schema">
+      <h2>schema <span class="tier tier-free">free</span></h2>
+      <p>Dump the schema of a single database — local, Turso, or D1. Beyond the human-readable and JSON views, <code>--erd</code> emits a <a href="https://mermaid.js.org/syntax/entityRelationshipDiagram.html" target="_blank" rel="noopener">Mermaid</a> entity-relationship diagram you can paste straight into a GitHub README, where it renders automatically.</p>
+      <pre><code>litescope schema &lt;source&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--format, -f</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code>, <code>mermaid</code></td></tr>
+          <tr><td>--erd</td><td>false</td><td>Shorthand for <code>-f mermaid</code> — output a Mermaid ER diagram</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Inspect a local database
+litescope schema app.db
+
+# Inspect a remote Turso database
+litescope schema turso://TOKEN@ORG/DBNAME
+
+# Mermaid ERD for a README
+litescope schema app.db --erd</code></pre>
+    </div>
+
+    <!-- dump -->
+    <div class="doc-section" id="dump">
+      <h2>dump <span class="tier tier-free">free</span></h2>
+      <p>Write a database out as a standalone <code>.sql</code> file — schema plus data — that recreates it when replayed into <code>sqlite3</code> or <code>litescope migrate</code>. Equivalent to the <code>sqlite3</code> shell's <code>.dump</code>, with the same ordering and quoting; blob/NULL/quote-safe and round-trip verified. Works on local files (remote sources expose schema only).</p>
+      <pre><code>litescope dump &lt;database.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--out, -o</td><td>stdout</td><td>Write to a file instead of stdout</td></tr>
+          <tr><td>--schema-only</td><td>false</td><td>Dump DDL only (no <code>INSERT</code>s)</td></tr>
+          <tr><td>--data-only</td><td>false</td><td>Dump data only (no <code>CREATE</code> statements)</td></tr>
+          <tr><td>--table</td><td>—</td><td>Dump only this table and its data</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Full dump to a file
+litescope dump app.db -o backup.sql
+
+# Schema only (DDL)
+litescope dump app.db --schema-only
+
+# A single table and its rows
+litescope dump app.db --table users</code></pre>
     </div>
 
     <!-- health -->
@@ -274,6 +351,63 @@ litescope advise app.db --query "SELECT * FROM orders WHERE user_id = ?"</code><
       <div class="callout">
         Each finding includes a runnable fix, e.g. <code>CREATE INDEX idx_orders_user_id ON orders(user_id);</code>
       </div>
+    </div>
+
+    <!-- lint -->
+    <div class="doc-section" id="lint">
+      <h2>lint <span class="tier tier-free">free</span></h2>
+      <p>Check a schema for the structural mistakes that ship by default — especially in hand-written or AI-generated schemas. <code>lint</code> looks only at the schema shape (never data or queries), so it is fast and safe in CI. By default it exits <code>1</code> on warnings; <code>--strict</code> also fails on info findings. For index/performance problems use <a href="#advise">advise</a>; for both plus health, <a href="#doctor">doctor</a>.</p>
+      <pre><code>litescope lint &lt;database.db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Rule</th><th>What it catches</th></tr></thead>
+        <tbody>
+          <tr><td>no-primary-key</td><td>A table with no PRIMARY KEY (no stable row identity)</td></tr>
+          <tr><td>untyped-column</td><td>A column with no declared type (BLOB affinity)</td></tr>
+          <tr><td>not-strict</td><td>A non-STRICT table (types are advisory, silently coerced)</td></tr>
+          <tr><td>autoincrement-overhead</td><td>AUTOINCREMENT where plain INTEGER PRIMARY KEY would do</td></tr>
+          <tr><td>non-integer-pk</td><td>A single-column PK that does not alias the rowid</td></tr>
+        </tbody>
+      </table>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+          <tr><td>--strict</td><td>false</td><td>Exit <code>1</code> on info findings as well as warnings</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Lint a schema
+litescope lint app.db
+
+# Fail CI on info findings too
+litescope lint app.db --strict</code></pre>
+    </div>
+
+    <!-- validate -->
+    <div class="doc-section" id="validate">
+      <h2>validate <span class="tier tier-free">free</span></h2>
+      <p>Lock a migration to a spec and enforce it in CI: <code>validate</code> compares the actual changes a migration made against an expected set, so an unplanned change fails the build. Generate the expectation file once from a known-good migration with <code>validate init</code>, then check every run with <code>validate run</code>.</p>
+      <table class="flag-table">
+        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>validate init &lt;before.db&gt; &lt;after.db&gt;</code></td><td>Generate an expectation file from the actual diff (run once after a manual migration); writes <code>migration.yaml</code> by default (<code>-o</code> to override)</td></tr>
+          <tr><td><code>validate run</code></td><td>Compare actual migration changes against the expected spec</td></tr>
+        </tbody>
+      </table>
+      <table class="flag-table">
+        <thead><tr><th>Flag (run)</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--expect, -e</td><td>—</td><td>Path to the expectation YAML/JSON file (required)</td></tr>
+          <tr><td>--format, -f</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+          <tr><td>--strict</td><td>true</td><td>Fail on any unexpected change</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Capture the expected changes once
+litescope validate init before.db after.db -o expected.yaml
+
+# Enforce in CI
+litescope validate run -e expected.yaml</code></pre>
     </div>
 
     <!-- check -->

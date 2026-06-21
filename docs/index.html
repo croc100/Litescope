@@ -498,22 +498,22 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   <div class="wrap">
     <div class="features">
       <div class="card">
+        <span class="card-icon">🩺</span>
+        <div class="cmd-name">doctor <span class="tier-tag tier-free">free</span></div>
+        <h3>One command, one verdict</h3>
+        <p>Point it at a database and get a single checkup — integrity, health, index advice, and schema lint — with a shareable, self-contained HTML report.</p>
+      </div>
+      <div class="card">
         <span class="card-icon">🔍</span>
         <div class="cmd-name">diff <span class="tier-tag tier-free">free</span></div>
         <h3>See what changed</h3>
         <p>Human-readable schema and data diff between any two databases. JSON, Markdown, and HTML output for CI and PR comments.</p>
       </div>
       <div class="card">
-        <span class="card-icon">🗂️</span>
-        <div class="cmd-name">explorer <span class="tier-tag tier-free">free</span></div>
-        <h3>Browse your data</h3>
-        <p>Visual table explorer with row-level queries. Get oriented fast without writing SQL.</p>
-      </div>
-      <div class="card">
-        <span class="card-icon">🩺</span>
-        <div class="cmd-name">health <span class="tier-tag tier-free">free</span></div>
-        <h3>Spot faults early</h3>
-        <p>One command flags corruption, WAL bloat from a starved checkpoint, and fragmentation — the faults that silently break production SQLite.</p>
+        <span class="card-icon">🧹</span>
+        <div class="cmd-name">lint <span class="tier-tag tier-free">free</span></div>
+        <h3>Catch schema smells</h3>
+        <p>Flags SQLite design anti-patterns — no primary key, untyped columns, non-STRICT tables, AUTOINCREMENT, non-integer PKs — in CI, before they ship.</p>
       </div>
       <div class="card">
         <span class="card-icon">📈</span>
@@ -522,34 +522,64 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>Catch the performance bugs AI-generated schemas ship: foreign keys with no index, redundant indexes, and full table scans. Get runnable CREATE INDEX fixes.</p>
       </div>
       <div class="card">
-        <span class="card-icon">🛡️</span>
-        <div class="cmd-name">check <span class="tier-tag tier-pro">pro</span></div>
-        <h3>Trust your backups</h3>
-        <p>PRAGMA integrity check plus schema and row-count comparison against a reference. Catch a bad backup before you need it.</p>
+        <span class="card-icon">🗺️</span>
+        <div class="cmd-name">schema <span class="tier-tag tier-free">free</span></div>
+        <h3>Inspect &amp; diagram</h3>
+        <p>Inspect tables, columns, and indexes on local, Turso, or D1 — or emit a Mermaid ERD with <code>--erd</code> to paste straight into a GitHub README.</p>
       </div>
       <div class="card">
-        <span class="card-icon">⚡</span>
-        <div class="cmd-name">migrate <span class="tier-tag tier-pro">pro</span></div>
-        <h3>See the blast radius first</h3>
-        <p>Versioned migrations (new / status / up) on a tracking table, or ad-hoc diffs. Every migration is classified Safe / Risky / Destructive with an estimated write-lock time, then applied with auto-backup, single transaction, FK verification, and rollback.</p>
+        <span class="card-icon">📦</span>
+        <div class="cmd-name">dump <span class="tier-tag tier-free">free</span></div>
+        <h3>Portable SQL export</h3>
+        <p>Export schema + data to portable SQL with <code>sqlite3 .dump</code> parity — blob/NULL/quote-safe and round-trip verified. Schema-only or per-table too.</p>
       </div>
       <div class="card">
-        <span class="card-icon">📡</span>
-        <div class="cmd-name">monitor <span class="tier-tag tier-pro">pro</span></div>
-        <h3>Catch drift continuously</h3>
-        <p>Baseline a known-good schema, then watch for unplanned changes with webhook alerts to Slack and Discord.</p>
+        <span class="card-icon">🩻</span>
+        <div class="cmd-name">health <span class="tier-tag tier-free">free</span></div>
+        <h3>Spot faults early</h3>
+        <p>One command flags corruption, WAL bloat from a starved checkpoint, and fragmentation — the faults that silently break production SQLite.</p>
       </div>
       <div class="card">
-        <span class="card-icon">🌐</span>
-        <div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div>
-        <h3>Operate hundreds at once</h3>
-        <p>The full lifecycle across a Turso org or D1 account, in parallel: fingerprint schemas, health-check for faults, converge drift to canonical, and recover corrupt databases from backup.</p>
+        <span class="card-icon">🔒</span>
+        <div class="cmd-name">validate <span class="tier-tag tier-free">free</span></div>
+        <h3>Lock your schema in CI</h3>
+        <p>Snapshot a known-good schema and fail the build when an unplanned change sneaks in. Migration locking for your pipeline.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🗂️</span>
+        <div class="cmd-name">explorer <span class="tier-tag tier-free">free</span></div>
+        <h3>Browse your data</h3>
+        <p>Visual table explorer with row-level queries and a SQL console. Get oriented fast without leaving the app.</p>
       </div>
       <div class="card">
         <span class="card-icon">🤖</span>
         <div class="cmd-name">mcp <span class="tier-tag tier-free">free</span></div>
         <h3>Let your AI drive it</h3>
         <p>An MCP server so Claude or any agent can call Litescope as read-only tools — and inspect the database it just built. Diagnose freely; a human commits the fix.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">⚡</span>
+        <div class="cmd-name">migrate <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
+        <h3>See the blast radius first</h3>
+        <p><b>Free:</b> turn a diff into runnable SQL with every operation classified Safe / Risky / Destructive and an estimated write-lock time. <b>Pro:</b> versioned workflows (new / status / up) and safe <code>apply</code> with auto-backup, single transaction, FK verification, and rollback.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">📡</span>
+        <div class="cmd-name">monitor <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
+        <h3>Catch drift over time</h3>
+        <p><b>Free:</b> baseline a known-good schema and check for drift on demand (cron/CI). <b>Pro:</b> <code>watch</code> continuously with webhook alerts to Slack and Discord.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🛡️</span>
+        <div class="cmd-name">check <span class="tier-tag tier-pro">pro</span></div>
+        <h3>Trust your backups</h3>
+        <p>Batch PRAGMA integrity checks plus schema and row-count comparison against a reference. Catch a bad backup before you need it.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🌐</span>
+        <div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div>
+        <h3>Operate hundreds at once</h3>
+        <p>The full lifecycle across a Turso org or D1 account, in parallel: fingerprint schemas, health-check for faults, converge drift to canonical, and recover corrupt databases from backup.</p>
       </div>
     </div>
   </div>
@@ -676,12 +706,13 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <div class="plan-price">$0</div>
         <div class="plan-desc">Get familiar with your SQLite databases. Open source, no credit card.</div>
         <ul class="plan-features">
-          <li><span class="check">✓</span>Explorer — browse tables &amp; query rows</li>
-          <li><span class="check">✓</span>diff — schema comparison</li>
-          <li><span class="check">✓</span>health — single-DB fault check</li>
-          <li><span class="check">✓</span>advise — index &amp; query recommendations</li>
+          <li><span class="check">✓</span>doctor — one-shot checkup + HTML report</li>
+          <li><span class="check">✓</span>diff, schema &amp; ERD, dump — explore &amp; export</li>
+          <li><span class="check">✓</span>lint — schema anti-pattern linter (CI)</li>
+          <li><span class="check">✓</span>health &amp; advise — faults + index tips</li>
+          <li><span class="check">✓</span>validate — migration locking for CI</li>
           <li><span class="check">✓</span>mcp — AI agent integration</li>
-          <li><span class="check">✓</span>1 named connection (GUI)</li>
+          <li><span class="check">✓</span>Explorer + 1 named connection (GUI)</li>
         </ul>
         <a class="btn btn-ghost" href="#install">Install free</a>
       </div>
@@ -741,14 +772,23 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           </tr>
         </thead>
         <tbody>
-          <tr class="section-row"><td colspan="4">Explore</td></tr>
+          <tr class="section-row"><td colspan="4">Explore, inspect &amp; validate</td></tr>
+          <tr><td>doctor — one-shot checkup + HTML report</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>schema — inspect + Mermaid ERD</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>dump — portable SQL export</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>lint — schema anti-pattern linter (CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>advise — index &amp; query recommendations</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>validate — migration locking for CI</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>migrate — diff → SQL + blast-radius report</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Operate</td></tr>
-          <tr><td>migrate — blast-radius analysis &amp; safe apply</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>migrate apply — safe apply, backup &amp; rollback</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Versioned migrations (new / status / up)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Monitor</td></tr>
+          <tr><td>monitor snapshot / check — drift baseline (cron/CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>monitor watch — continuous drift detection</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
