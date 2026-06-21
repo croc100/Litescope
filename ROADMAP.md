@@ -21,7 +21,7 @@ until the previous one shows the signal it is meant to prove.
 |---|---|---|---|
 | Audience | Individual developer | Serious individual operator | Large company / team |
 | Source | **Open source** | **Closed** (paid license key) | **Closed** |
-| Price | $0 | $89 / year (Lemon Squeezy) | **Contact sales** (email) |
+| Price | $0 | $99 / year (Lemon Squeezy) | **Contact sales** (email) |
 | Proves | Adoption / word of mouth | Willingness to pay | Real recurring revenue |
 | Delivery | CLI + GUI binary | Same binary, key unlocks | Web SaaS + self-host app |
 
@@ -36,7 +36,7 @@ individual developer, the person most able to recompile away a license gate. We
 publish Free source for virality; Pro source stays private. (Accepted limit: the
 public binary already contains Pro machine code gated at runtime, so a determined
 user can binary-patch the gate — true protection for client-side Pro is impossible;
-real lock-in lives server-side in Enterprise. The $89 tier relies on convenience +
+real lock-in lives server-side in Enterprise. The $99 tier relies on convenience +
 goodwill, which is fine.)
 
 **Why Ex is closed and contact-only:** the enterprise buyer wants SSO, self-host,
@@ -53,23 +53,26 @@ one genuinely proprietary asset and stays closed.
 - `schema` — inspect a single database (local / Turso / D1), Mermaid ERD output
 - `dump` — export a local database as portable SQL (schema + data)
 - `validate` — lock migrations to a spec, enforce in CI
-- `check` — single-file backup integrity (PRAGMA + one reference)
+- `check` — single-file backup integrity, incl. one `--against` reference comparison
 - `migrate` (generate) — turn a diff into runnable SQL
 - `monitor snapshot` / `monitor check` — baseline + drift check (cron/CI)
+- `monitor watch` — continuous local watch of a single database (no webhook, no remote)
 - `health` — single-DB fault check
+- `fleet fingerprint` / `fleet health` — read-only preview, up to 3 databases
 - `advise` — index & query recommendations
 - `mcp` — AI agent integration
 - GUI: explorer, 1 named connection
 - Local audit log (read) — trust/transparency hook
 
 **Principle: nothing that drives adoption is paywalled.** Anything a developer
-needs to *try and trust* the tool on one database is free.
+needs to *try and trust* the tool — on one database, or a peek at a small fleet —
+is free.
 
 ### Pro — operate & automate (the single operator's power tools)
 - `migrate apply` — `--dry-run`, automatic backup, transactional apply + rollback, `--verify`
-- `check` (advanced) — batch (>1 file), `--against`, `--save-report`
-- `monitor watch` — continuous drift + webhook alerts (Slack/Discord)
-- `fleet *` — discover / snapshot / check / fingerprint / health / converge / recover / migrate (staged canary)
+- `check` (advanced) — batch (>1 file), `--save-report`
+- `monitor watch` (advanced) — webhook alerts (Slack/Discord) and remote targets (Turso/D1)
+- `fleet *` — full fleet (>3 DBs) and all actions: discover / snapshot / check / converge / recover / migrate (staged canary), plus `fingerprint`/`health` beyond the 3-DB Free preview and any watch/recover/alert
 - `policy` — write-protection / automated gates
 - `team` — role-based access control (local)
 - GUI: unlimited named connections, all Pro panels
@@ -115,11 +118,11 @@ customer environment.
 ## Sequencing (do not skip gates)
 
 1. **Now — repackage:** unify code/README/website on the 3-tier model; fix the
-   stale $89-only website; add web-SaaS messaging; Ex = "Contact sales".
+   stale single-tier website; add web-SaaS messaging; Ex = "Contact sales".
 2. **Free adoption signal:** publish OSS, measure installs / stars / inbound.
    *Gate: is anyone using it?*
 3. **Pro willingness-to-pay:** Lemon Squeezy live (KYC) → first sales.
-   *Gate: will an individual pay $89?*
+   *Gate: will an individual pay $99?*
 4. **Ex demand signal:** "Contact sales" inbound + dashboard waitlist.
    *Gate: does a team want the web/SSO/self-host product?*
 5. **Build Ex** only after step 4 shows real inbound. Web SaaS is a separate,
@@ -146,7 +149,7 @@ gold-plating — it must serve the next gate (**Free adoption**). Four axes,
    - ⬜ `advise` accuracy — fewer false positives, clearer rationale.
    - Goal: maximize virality & shareability of the single-DB experience.
 2. **Pro depth** _(after Pro revenue is validated)_ — fleet ops, `migrate apply`,
-   `monitor watch` completeness; proves the $89 value. Don't over-invest pre-revenue.
+   `monitor watch` completeness; proves the $99 value. Don't over-invest pre-revenue.
 3. **Stability & trust hardening** _(before OSS launch)_ — edge cases, error
    messages, test coverage, docs. "It doesn't break" is table stakes for virality.
 4. **`litescope push` (Ex groundwork)** _(latest — respect the sequence)_ — turns

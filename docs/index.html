@@ -786,16 +786,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <tr class="section-row"><td colspan="4">Operate</td></tr>
           <tr><td>migrate apply — safe apply, backup &amp; rollback</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Versioned migrations (new / status / up)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>check — backup integrity &amp; schema verify</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>check — backup integrity + 1 reference</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>check — batch (&gt;1 file) + save-report</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Monitor</td></tr>
           <tr><td>monitor snapshot / check — drift baseline (cron/CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>monitor watch — continuous drift detection</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>monitor watch — single local DB</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>monitor watch — remote targets (Turso/D1)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Fleet — Turso &amp; Cloudflare D1</td></tr>
           <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint — schema clustering</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet health — parallel fault triage</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint / health — read-only preview (≤3 DBs)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint / health — full fleet (4+ DBs)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>

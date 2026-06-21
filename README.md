@@ -202,7 +202,12 @@ litescope check backup.db --reference production.db
 
 # Also compare row counts
 litescope check backup.db --reference production.db --data
+
+# Batch-verify many backups at once + save a report (Pro)
+litescope check backups/*.db --reference production.db --save-report report.json
 ```
+
+A single backup checked against one reference is **free**. Batch verification (more than one file) and `--save-report` are **Pro**.
 
 ---
 
@@ -245,7 +250,10 @@ litescope monitor snapshot production.db --output baseline.json
 litescope monitor check production.db --baseline baseline.json
 litescope monitor check turso://TOKEN@ORG/prod --baseline baseline.json --format json
 
-# 3. Continuous watch with alerts (Pro)
+# 3. Continuous watch of one local database (free)
+litescope monitor watch production.db --baseline baseline.json --interval 1h
+
+# 4. Watch with webhook alerts and/or remote targets (Pro)
 litescope monitor watch turso://TOKEN@ORG/prod \
   --baseline baseline.json \
   --interval 1h \
@@ -254,12 +262,20 @@ litescope monitor watch turso://TOKEN@ORG/prod \
 
 `monitor check` exits **0** (no drift) or **1** (drift detected) — drop it directly into CI.
 
+Watching a single **local** database is **free**. Webhook alerts (Slack/Discord) and **remote** targets (Turso/D1) are **Pro**.
+
 ---
 
-### `fleet` — Manage many databases at once (Cloud)
+### `fleet` — Manage many databases at once (Pro)
 
 One database is `monitor`. A hundred databases is `fleet`. Built for teams running
 SQLite at scale on Turso groups and Cloudflare D1.
+
+> **Free preview:** the read-only commands `litescope fleet fingerprint` and
+> `litescope fleet health` run on up to **3 databases** with no license — enough to
+> see what fleet diagnostics look like. The full fleet (4+ DBs) and all actions
+> (discover / snapshot / check / converge / recover / migrate, plus watch & alerts)
+> are **Pro**.
 
 ```bash
 # 1. Discover every database in a Turso org (or D1 account) → writes a fleet config
@@ -410,18 +426,20 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 
 Three tiers, one funnel. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-| | **Free** | **Pro** — $89/yr | **Enterprise** |
+| | **Free** | **Pro** — $99/yr | **Enterprise** |
 |---|---|---|---|
 | | Individual dev | Individual operator | Teams & large companies |
 | doctor · diff · schema · dump · validate · lint | ✓ | ✓ | ✓ |
-| check (single file) · health · advise · mcp | ✓ | ✓ | ✓ |
+| check (single file + 1 reference) · health · advise · mcp | ✓ | ✓ | ✓ |
 | migrate (generate SQL) | ✓ | ✓ | ✓ |
 | monitor snapshot / check (CI) | ✓ | ✓ | ✓ |
+| monitor watch (single local DB) | ✓ | ✓ | ✓ |
+| fleet fingerprint / health (read-only, ≤3 DBs) | ✓ | ✓ | ✓ |
 | GUI explorer | 1 connection | unlimited | unlimited |
 | migrate apply (backup + rollback) | — | ✓ | ✓ |
-| check (batch / --against / report) | — | ✓ | ✓ |
-| monitor watch + webhook alerts | — | ✓ | ✓ |
-| **fleet** — discover / check / migrate / converge / recover | — | ✓ | ✓ |
+| check (batch / --save-report) | — | ✓ | ✓ |
+| monitor watch + webhook alerts + remote targets | — | ✓ | ✓ |
+| **fleet** (4+ DBs) — discover / check / migrate / converge / recover | — | ✓ | ✓ |
 | policy gates · team RBAC (local) | — | ✓ | ✓ |
 | **Web dashboard** — fleet aggregation & history | — | — | ✓ |
 | Alerting (Slack / PagerDuty / on-call) | — | — | ✓ |
