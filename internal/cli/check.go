@@ -36,8 +36,9 @@ Examples:
   litescope check backup.db --against prod.db --save-report checks.jsonl  [Pro]`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Pro gate: schema/data comparison or batch (>1 file) or save-report
-			needsPro := reference != "" || withData || len(args) > 1 || saveReport != ""
+			// Free can verify a single backup against one reference (the trial
+			// experience). Pro unlocks batch (>1 file) and saved report history.
+			needsPro := len(args) > 1 || saveReport != ""
 			if needsPro {
 				if err := license.RequirePro(); err != nil {
 					return err
@@ -84,8 +85,8 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVarP(&reference, "against", "a", "", "reference (production) DB to compare schema and row counts against [Pro]")
-	cmd.Flags().BoolVar(&withData, "data", false, "also compare row counts per table [Pro]")
+	cmd.Flags().StringVarP(&reference, "against", "a", "", "reference (production) DB to compare schema and row counts against")
+	cmd.Flags().BoolVar(&withData, "data", false, "also compare row counts per table")
 	cmd.Flags().StringVarP(&format, "format", "f", "terminal", "output format: terminal | json")
 	cmd.Flags().StringVar(&saveReport, "save-report", "", "append results to a JSONL report file [Pro]")
 	return cmd

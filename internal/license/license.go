@@ -181,6 +181,13 @@ func tierFromPrefix(key string) Tier {
 	return TierFree
 }
 
+// IsPro reports whether the current tier is Pro or above.
+func IsPro() bool { return Current() >= TierPro }
+
+// FreeFleetPreview is how many databases a Free user may diagnose (read-only)
+// in a single fleet command — enough to feel the value, capped to nudge upgrade.
+const FreeFleetPreview = 3
+
 // RequirePro checks for Pro tier (Enterprise satisfies it too).
 func RequirePro() error {
 	if Current() >= TierPro {
@@ -190,10 +197,10 @@ func RequirePro() error {
 
   This feature requires Litescope Pro.
 
-  Get your license: https://croc100.github.io/Litescope/#pricing
+  Get your license: https://litescope-site.pages.dev/#pricing
   Then activate:   export LITESCOPE_LICENSE=<your-key>
 
-  Pro ($89/year): migrate apply, drift monitor, fleet ops, unlimited connections
+  Pro ($99/year): automated migrate apply, drift alerts, full fleet ops, unlimited connections
   Need teams, a web dashboard, SSO or self-host? See Enterprise — croc100100@gmail.com`,
 		ErrUpgradeRequired)
 }

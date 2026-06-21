@@ -252,13 +252,19 @@ Exit code is 1 when any database is in a warning or critical state — drop it
 into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequirePro(); err != nil {
-				return err
+			// Free can run a one-shot, read-only health scan over a small
+			// preview of the fleet. Automation — continuous watch, webhook
+			// alerts, auto-recover — is Pro.
+			if !license.IsPro() && (watch || webhook != "" || autoRecover) {
+				if err := license.RequirePro(); err != nil {
+					return err
+				}
 			}
 			cfg, dbs, err := loadFleet(configPath, tag)
 			if err != nil {
 				return err
 			}
+			dbs = freePreviewFleet(dbs)
 
 			// One scan: inspect, render, alert, and optionally auto-recover.
 			runOnce := func() *fleet.HealthReport {
@@ -694,13 +700,13 @@ Exit code is 1 when more than one distinct schema is found or any database is
 unreachable — drop it into CI to enforce fleet uniformity.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := license.RequirePro(); err != nil {
-				return err
-			}
+			// Free gets a read-only preview of fleet fingerprinting; Pro lifts
+			// the database cap and unlocks the operational commands.
 			cfg, dbs, err := loadFleet(configPath, tag)
 			if err != nil {
 				return err
 			}
+			dbs = freePreviewFleet(dbs)
 
 			report := fleet.Fingerprint(dbs, concurrency)
 
@@ -1285,6 +1291,23 @@ func cmdFleetStatus() *cobra.Command {
 }
 
 // ── shared helpers ────────────────────────────────────────────────────────────
+
+// freePreviewFleet enforces the Free-tier fleet preview. Pro (and above) passes
+// through unchanged; Free is capped to license.FreeFleetPreview databases for
+// read-only diagnosis, with a notice nudging the upgrade. This is the "community
+// edition" trial — feel the fleet view, pay to operate the whole thing.
+func freePreviewFleet(dbs []fleet.Database) []fleet.Database {
+	if license.IsPro() || len(dbs) <= license.FreeFleetPreview {
+		return dbs
+	}
+	total := len(dbs)
+	dbs = dbs[:license.FreeFleetPreview]
+	fmt.Printf("\n  %s  Free preview: %d of %d databases (%d more with Pro)\n",
+		styleWarn.Render("◐"), license.FreeFleetPreview, total, total-license.FreeFleetPreview)
+	fmt.Printf("  %s  Full fleet + converge / recover / alerts → https://litescope-site.pages.dev/#pricing\n",
+		styleDim.Render("·"))
+	return dbs
+}
 
 func loadFleet(configPath, tag string) (*fleet.Config, []fleet.Database, error) {
 	if configPath == "" {

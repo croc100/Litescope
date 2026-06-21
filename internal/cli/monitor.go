@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/croc100/litescope/internal/monitor"
 	"github.com/spf13/cobra"
 )
+
+// isRemoteDSN reports whether a source points at a hosted provider (Turso/D1)
+// rather than a local file. Remote monitoring is a Pro capability.
+func isRemoteDSN(dsn string) bool {
+	return strings.HasPrefix(dsn, "turso://") || strings.HasPrefix(dsn, "d1://")
+}
 
 func cmdMonitor() *cobra.Command {
 	cmd := &cobra.Command{
@@ -194,12 +201,15 @@ Examples:
   Get license: https://litescope-site.pages.dev/#pricing`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// ── License gate ──────────────────────────────────────
-			if err := license.RequirePro(); err != nil {
-				return err
-			}
-
 			dsn := args[0]
+
+			// Free can watch a single local database for drift (the trial
+			// experience). Webhook alerts and remote (Turso/D1) sources are Pro.
+			if webhook != "" || isRemoteDSN(dsn) {
+				if err := license.RequirePro(); err != nil {
+					return err
+				}
+			}
 
 			snap, err := monitor.Load(baseline)
 			if err != nil {
