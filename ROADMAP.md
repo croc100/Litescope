@@ -57,6 +57,7 @@ genuinely proprietary asset and stays closed.
 - `diff` — schema & data comparison (all formats, HTML, CI/PR markdown)
 - `schema` — inspect a single database (local / Turso / D1), Mermaid ERD output
 - `import` — load a CSV / TSV / JSON file into a SQLite table with type inference (the data-in half: drag a spreadsheet, get a real database)
+- `export` — stream a table or read-only query out to CSV / TSV / JSON (the data-out half: completes the spreadsheet round-trip)
 - `dump` — export a local database as portable SQL (schema + data)
 - `validate` — lock migrations to a spec, enforce in CI
 - `check` — single-file backup integrity, incl. one `--against` reference comparison
@@ -65,7 +66,8 @@ genuinely proprietary asset and stays closed.
 - `monitor watch` — continuous local watch of a single database (no webhook, no remote)
 - `health` — single-DB fault check
 - `fleet fingerprint` / `fleet health` — read-only shock diagnosis, up to 10 databases
-- `serve` — **local, self-hosted web dashboard** (fleet topology + health + fingerprint); no cloud, no account, no telemetry
+- `serve` — **local, self-hosted web dashboard** (fleet topology + health + fingerprint); no cloud, no account, no telemetry; **drag-drop a CSV/TSV/JSON to add it as a database**
+- **zero-config onboarding** — bare `litescope <file>` just works: a database opens `doctor`, a spreadsheet (`.csv`/`.tsv`/`.json`) runs `import`
 - `metrics` — **Prometheus / OpenMetrics exporter** (fleet health + schema drift); one-shot or `--serve` /metrics scrape endpoint, drops into Grafana/Alertmanager. Read-only, up to 10 databases (full fleet with Pro)
 - `advise` — index & query recommendations
 - `mcp` — AI agent integration
