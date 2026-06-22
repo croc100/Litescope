@@ -13,6 +13,10 @@
 SQLite is everywhere now — Turso, Cloudflare D1, the edge, every mobile app. The operations tooling never caught up. Litescope is the missing toolchain: **diff, validate, migrate, and monitor — one database or an entire fleet.**
 
 ```bash
+# Zero-config onboarding — just point it at a file
+litescope app.db        # database? → full checkup (doctor)
+litescope sales.csv     # spreadsheet? → import into sales.db
+
 # One database — full checkup in one command
 litescope doctor app.db
 
@@ -162,6 +166,39 @@ litescope dump app.db -o backup.sql    # ... to a file
 litescope dump app.db --schema-only    # DDL only (CREATE statements)
 litescope dump app.db --data-only      # INSERTs only
 litescope dump app.db --table users    # one table and its data
+```
+
+---
+
+### `import` — Turn a CSV/TSV/JSON file into SQLite (free)
+
+Drop a spreadsheet or data export into a real, queryable SQLite database — types
+inferred, header detected, one command. The format is read from the extension
+(`.csv` / `.tsv` / `.json`) unless you override it with `--format`.
+
+```bash
+litescope import sales.csv                          # -> sales.db, table "sales"
+litescope import sales.csv --to shop.db --table orders
+litescope import data.tsv --delimiter ';'
+litescope import records.json --to app.db --replace # drop & recreate table
+litescope import more.csv --to shop.db --table orders --append
+```
+
+The destination database defaults to `<file>.db` and the table to the file's
+name; both are overridable. Use `--no-header` when a CSV/TSV has no header row.
+
+---
+
+### `export` — Stream a table or query out of SQLite (free)
+
+The data-out half: import a spreadsheet, fix it, export it back. Dumps an entire
+table — or any read-only query — to CSV, TSV, or JSON. The database is opened
+read-only; output goes to stdout unless `-o` is given.
+
+```bash
+litescope export shop.db --table orders > orders.csv
+litescope export shop.db --table orders --format json -o orders.json
+litescope export shop.db --query "SELECT city, COUNT(*) FROM users GROUP BY city"
 ```
 
 ---
@@ -368,6 +405,25 @@ Runs entirely on your machine or your own server: **no cloud, no account, no
 telemetry — free, including self-hosting.** Free shows a read-only preview of up
 to 10 databases; Pro lifts the cap to the full fleet. (The hosted, multi-user
 dashboard with SSO and time-series history is a separate Enterprise offering.)
+
+**Drag and drop** a `.csv`, `.tsv`, `.json`, or `.db` file onto the dashboard to
+add it to the fleet on the spot — data files are imported to `<name>.db`
+automatically.
+
+---
+
+### `metrics` — Prometheus / OpenMetrics exporter (free)
+
+Render fleet operational health and schema-drift state as Prometheus text
+exposition, so Litescope drops straight into Grafana / Alertmanager. Prints one
+snapshot by default; `--serve` runs a `/metrics` endpoint that re-inspects the
+fleet on every scrape (the standard exporter model).
+
+```bash
+litescope metrics > /var/lib/node_exporter/litescope.prom   # textfile collector
+litescope metrics --config litescope.fleet.yaml --tag region=eu
+litescope metrics --serve --addr 127.0.0.1:9105             # /metrics endpoint
+```
 
 ---
 
