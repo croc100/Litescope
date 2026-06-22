@@ -58,7 +58,8 @@ one genuinely proprietary asset and stays closed.
 - `monitor snapshot` / `monitor check` — baseline + drift check (cron/CI)
 - `monitor watch` — continuous local watch of a single database (no webhook, no remote)
 - `health` — single-DB fault check
-- `fleet fingerprint` / `fleet health` — read-only preview, up to 3 databases
+- `fleet fingerprint` / `fleet health` — read-only shock diagnosis, up to 10 databases
+- `serve` — **local, self-hosted web dashboard** (fleet topology + health + fingerprint); no cloud, no account, no telemetry
 - `advise` — index & query recommendations
 - `mcp` — AI agent integration
 - GUI: explorer, 1 named connection
@@ -72,7 +73,8 @@ is free.
 - `migrate apply` — `--dry-run`, automatic backup, transactional apply + rollback, `--verify`
 - `check` (advanced) — batch (>1 file), `--save-report`
 - `monitor watch` (advanced) — webhook alerts (Slack/Discord) and remote targets (Turso/D1)
-- `fleet *` — full fleet (>3 DBs) and all actions: discover / snapshot / check / converge / recover / migrate (staged canary), plus `fingerprint`/`health` beyond the 3-DB Free preview and any watch/recover/alert
+- `fleet *` — full fleet (>10 DBs) and all actions: discover / snapshot / check / converge / recover / migrate (staged canary), plus `fingerprint`/`health` beyond the 10-DB Free preview and any watch/recover/alert
+- `serve` — dashboard over the full fleet (Free shows the 10-DB preview; Pro lifts the cap)
 - `policy` — write-protection / automated gates
 - `team` — role-based access control (local)
 - GUI: unlimited named connections, all Pro panels
@@ -80,8 +82,10 @@ is free.
 **Principle: time-axis, automation, and many-DB-from-one-operator are Pro.**
 
 ### Enterprise (Ex) — teams, web & scale (closed, contact sales)
-- **Web SaaS dashboard** — fleet aggregation, time-series history (health trend,
-  schema drift over time), one screen for thousands of instances
+- **Hosted web dashboard** — the multi-user, cloud version of `serve`: fleet
+  aggregation across machines, time-series history (health trend, schema drift
+  over time), one screen for thousands of instances. (The single-operator local
+  dashboard is free — see `serve` above.)
 - **Alerting** — Slack / PagerDuty / on-call integration
 - **SSO + org multi-user + org-level RBAC** (WorkOS/Clerk)
 - **Self-host** — deploy the SaaS on the customer's own servers; detailed network

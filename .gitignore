@@ -17,6 +17,9 @@ vscode/webview-ui/dist/
 gui/gui
 gui/build/bin/
 
+# Local agent / tooling
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

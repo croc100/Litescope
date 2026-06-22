@@ -272,10 +272,10 @@ One database is `monitor`. A hundred databases is `fleet`. Built for teams runni
 SQLite at scale on Turso groups and Cloudflare D1.
 
 > **Free preview:** the read-only commands `litescope fleet fingerprint` and
-> `litescope fleet health` run on up to **3 databases** with no license — enough to
-> see what fleet diagnostics look like. The full fleet (4+ DBs) and all actions
-> (discover / snapshot / check / converge / recover / migrate, plus watch & alerts)
-> are **Pro**.
+> `litescope fleet health` run on up to **10 databases** with no license — enough to
+> see your own drift and what fleet diagnostics look like. The full fleet (11+ DBs)
+> and all the *fixing* actions (converge / recover / migrate, plus discover /
+> snapshot / check, watch & alerts) are **Pro**.
 
 ```bash
 # 1. Discover every database in a Turso org (or D1 account) → writes a fleet config
@@ -350,6 +350,24 @@ The rollout is **staged and fail-closed**: databases migrate one at a time, and 
 | Local files | Integrity check, `VACUUM INTO` backup, single transaction, FK verification, automatic rollback |
 | Turso | Transactional apply over the Hrana API (rolls back on failure) |
 | Cloudflare D1 | Sequential apply — D1 has no transaction rollback over HTTP |
+
+---
+
+### `serve` — Local web dashboard (free)
+
+Your whole fleet in a browser — topology map colored by health, worst-first
+faults, and a schema-drift fingerprint. One command, no build step.
+
+```bash
+litescope serve                                  # opens http://127.0.0.1:7575
+litescope serve --config litescope.fleet.yaml --addr 0.0.0.0:7575
+litescope serve --tag group:prod --deep
+```
+
+Runs entirely on your machine or your own server: **no cloud, no account, no
+telemetry — free, including self-hosting.** Free shows a read-only preview of up
+to 10 databases; Pro lifts the cap to the full fleet. (The hosted, multi-user
+dashboard with SSO and time-series history is a separate Enterprise offering.)
 
 ---
 
@@ -434,7 +452,7 @@ Three tiers, one funnel. See [ROADMAP.md](ROADMAP.md) for the full plan.
 | migrate (generate SQL) | ✓ | ✓ | ✓ |
 | monitor snapshot / check (CI) | ✓ | ✓ | ✓ |
 | monitor watch (single local DB) | ✓ | ✓ | ✓ |
-| fleet fingerprint / health (read-only, ≤3 DBs) | ✓ | ✓ | ✓ |
+| fleet fingerprint / health (read-only, ≤10 DBs) — shock diagnosis | ✓ | ✓ | ✓ |
 | GUI explorer | 1 connection | unlimited | unlimited |
 | migrate apply (backup + rollback) | — | ✓ | ✓ |
 | check (batch / --save-report) | — | ✓ | ✓ |

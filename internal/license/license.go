@@ -186,7 +186,7 @@ func IsPro() bool { return Current() >= TierPro }
 
 // FreeFleetPreview is how many databases a Free user may diagnose (read-only)
 // in a single fleet command — enough to feel the value, capped to nudge upgrade.
-const FreeFleetPreview = 3
+const FreeFleetPreview = 10
 
 // RequirePro checks for Pro tier (Enterprise satisfies it too).
 func RequirePro() error {

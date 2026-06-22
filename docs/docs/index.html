@@ -561,7 +561,7 @@ litescope monitor watch prod.db -b baseline.json \
     <div class="doc-section" id="fleet">
       <h2>fleet <span class="tier tier-pro">pro</span></h2>
       <p>Operate an entire Turso org or Cloudflare D1 account as one unit. <code>discover</code> writes a <code>litescope.fleet.yaml</code> config; every other subcommand reads it and runs in parallel. The lifecycle: <strong>diagnose</strong> (fingerprint, health), then <strong>treat</strong> (converge, recover).</p>
-      <p><strong>Free preview:</strong> the read-only <code>fleet fingerprint</code> and <code>fleet health</code> run on up to <strong>3 databases</strong> with no license. The full fleet (4+ DBs) and every action subcommand are Pro.</p>
+      <p><strong>Free preview:</strong> the read-only <code>fleet fingerprint</code> and <code>fleet health</code> run on up to <strong>10 databases</strong> with no license. The full fleet (11+ DBs) and every action subcommand are Pro.</p>
 
       <h3>discover</h3>
       <p>Query the provider API for every database and write the fleet config.</p>
@@ -581,7 +581,7 @@ litescope monitor watch prod.db -b baseline.json \
       <pre><code>litescope fleet snapshot
 litescope fleet check [--tag group:prod] [--format json]</code></pre>
 
-      <h3>fingerprint <span class="tier tier-free">free ≤3</span> <span class="tier tier-pro">pro</span></h3>
+      <h3>fingerprint <span class="tier tier-free">free ≤10</span> <span class="tier tier-pro">pro</span></h3>
       <p>Cluster the fleet by schema. The largest cluster is canonical; every other shows exactly how it drifted. Exits <code>1</code> when more than one schema is found.</p>
       <pre><code>litescope fleet fingerprint</code></pre>
 
@@ -591,7 +591,7 @@ litescope fleet check [--tag group:prod] [--format json]</code></pre>
 litescope fleet converge --canary 5       # fix the first 5, then stop
 litescope fleet converge --to canonical.db</code></pre>
 
-      <h3>health <span class="tier tier-free">free ≤3</span> <span class="tier tier-pro">pro</span></h3>
+      <h3>health <span class="tier tier-free">free ≤10</span> <span class="tier tier-pro">pro</span></h3>
       <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault. Run it on a schedule to get paged on fleet faults, or continuously with <code>--watch</code>.</p>
       <pre><code>litescope fleet health [--deep] [--tag region:eu]
 litescope fleet health --webhook $SLACK_URL          # one-shot alert (cron)

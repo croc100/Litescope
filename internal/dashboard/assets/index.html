@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Litescope — Fleet</title>
+<style>
+  :root {
+    --bg:#080b10; --surface:#111820; --surface-2:#161d27; --border:#1e2a38;
+    --text:#8b9ab1; --head:#e2eaf4; --dim:#4e6078;
+    --teal:#00d4aa; --gold:#e2c97e; --danger:#f87171; --ok:#4ade80;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5; -webkit-font-smoothing:antialiased; }
+  a { color:var(--teal); text-decoration:none; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 24px; }
+  header { border-bottom:1px solid var(--border); background:rgba(8,11,16,0.9); position:sticky; top:0; z-index:5; backdrop-filter:blur(10px); }
+  .head-inner { display:flex; align-items:center; justify-content:space-between; height:60px; }
+  .logo { display:flex; align-items:center; gap:9px; font-weight:700; color:var(--head); font-size:16px; }
+  .logo .mark { color:var(--teal); font-size:20px; }
+  .meta { font-size:12.5px; color:var(--dim); font-family:var(--mono); }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; border:1px solid rgba(0,212,170,0.3); color:var(--teal); background:rgba(0,212,170,0.08); }
+
+  section { padding:32px 0; }
+  .eyebrow { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin-bottom:6px; }
+  h2 { font-size:20px; font-weight:700; color:var(--head); letter-spacing:-0.01em; margin-bottom:4px; }
+  .sub { font-size:13.5px; color:var(--text); margin-bottom:20px; }
+
+  /* Summary cards */
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:8px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .stat .n { font-size:28px; font-weight:800; color:var(--head); letter-spacing:-0.02em; }
+  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; }
+  .stat.crit .n { color:var(--danger); } .stat.warn .n { color:var(--gold); } .stat.ok .n { color:var(--ok); }
+  @media (max-width:640px){ .summary{ grid-template-columns:repeat(2,1fr);} }
+
+  /* Topology grid */
+  .topo { display:grid; grid-template-columns:repeat(auto-fill,minmax(34px,1fr)); gap:6px; }
+  .cell { aspect-ratio:1; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); cursor:default; position:relative; transition:transform .1s; }
+  .cell:hover { transform:scale(1.18); z-index:2; border-color:var(--head); }
+  .cell.ok { background:rgba(74,222,128,0.22); border-color:rgba(74,222,128,0.4); }
+  .cell.warn { background:rgba(226,201,126,0.28); border-color:rgba(226,201,126,0.5); }
+  .cell.crit { background:rgba(248,113,113,0.32); border-color:rgba(248,113,113,0.6); }
+  .legend { display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--dim); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:11px; height:11px; border-radius:3px; }
+
+  /* Health list */
+  .row { display:flex; align-items:center; gap:14px; padding:11px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; background:var(--surface); }
+  .row .sev { width:7px; height:34px; border-radius:4px; flex-shrink:0; }
+  .row .name { font-family:var(--mono); font-size:13px; color:var(--head); min-width:160px; }
+  .row .issues { font-size:13px; color:var(--text); }
+  .row .ok-msg { font-size:13px; color:var(--ok); }
+  .pill { font-size:11px; font-family:var(--mono); color:var(--dim); margin-left:auto; white-space:nowrap; }
+
+  /* Fingerprint clusters */
+  .cluster { border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; background:var(--surface); }
+  .cluster .bar { height:10px; border-radius:5px; background:rgba(0,212,170,0.25); margin:8px 0; }
+  .cluster.drift .bar { background:rgba(226,201,126,0.4); }
+  .cluster .h { display:flex; align-items:center; gap:10px; font-size:13px; }
+  .cluster .id { font-family:var(--mono); color:var(--head); }
+  .cluster .tag { font-size:10px; font-weight:600; text-transform:uppercase; padding:1px 7px; border-radius:999px; }
+  .cluster .tag.canon { background:rgba(0,212,170,0.15); color:var(--teal); }
+  .cluster .tag.drift { background:rgba(226,201,126,0.15); color:var(--gold); }
+  .cluster .drift-line { font-size:12px; color:var(--text); font-family:var(--mono); margin-top:2px; }
+  .cluster .members { font-size:11.5px; color:var(--dim); margin-top:6px; }
+
+  .note { background:rgba(226,201,126,0.08); border:1px solid rgba(226,201,126,0.3); border-radius:10px; padding:12px 16px; font-size:13px; color:var(--gold); margin-bottom:20px; }
+  .empty { color:var(--dim); font-size:14px; padding:24px 0; text-align:center; }
+  .err { color:var(--danger); font-family:var(--mono); font-size:13px; padding:20px; border:1px solid rgba(248,113,113,0.4); border-radius:10px; background:rgba(248,113,113,0.06); }
+  .foot { padding:28px 0 48px; font-size:12px; color:var(--dim); text-align:center; }
+  .refresh { font-family:var(--sans); font-size:12.5px; font-weight:600; color:var(--head); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 14px; cursor:pointer; }
+  .refresh:hover { border-color:var(--teal); }
+  .filter { font-family:var(--sans); font-size:13px; color:var(--head); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; width:180px; outline:none; }
+  .filter:focus { border-color:var(--teal); }
+  .auto { font-size:12.5px; color:var(--dim); display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
+  .auto input { accent-color:var(--teal); }
+  .cell { cursor:pointer; }
+  @media (max-width:640px){ .filter{ width:120px; } .meta{ display:none; } }
+
+  /* Detail drawer */
+  .scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:20; opacity:0; pointer-events:none; transition:opacity .15s; }
+  .scrim.open { opacity:1; pointer-events:auto; }
+  .drawer { position:fixed; top:0; right:0; height:100%; width:380px; max-width:90vw; background:var(--surface); border-left:1px solid var(--border); z-index:21; transform:translateX(100%); transition:transform .18s; padding:24px; overflow-y:auto; }
+  .drawer.open { transform:translateX(0); }
+  .drawer h3 { font-family:var(--mono); font-size:16px; color:var(--head); margin-bottom:4px; word-break:break-all; }
+  .drawer .close { position:absolute; top:16px; right:18px; font-size:20px; color:var(--dim); cursor:pointer; background:none; border:none; }
+  .drawer .sevtag { display:inline-block; font-size:11px; font-weight:600; text-transform:uppercase; padding:2px 9px; border-radius:999px; margin-bottom:16px; }
+  .kv { display:flex; justify-content:space-between; font-size:13px; padding:7px 0; border-bottom:1px solid var(--border); }
+  .kv .k { color:var(--dim); } .kv .v { color:var(--head); font-family:var(--mono); }
+  .drawer .issue { font-size:13px; color:var(--text); padding:6px 0 6px 14px; position:relative; }
+  .drawer .issue::before { content:"•"; position:absolute; left:0; color:var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap head-inner">
+    <div class="logo"><span class="mark">◎</span> Litescope <span class="badge" id="tierBadge">fleet</span></div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <input id="filter" class="filter" type="search" placeholder="Filter databases…" autocomplete="off" />
+      <label class="auto"><input type="checkbox" id="autoBtn" /> Auto</label>
+      <span class="meta" id="meta">loading…</span>
+      <button class="refresh" id="refreshBtn">↻ Refresh</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+  <div class="empty">Loading fleet…</div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer"><button class="close" id="drawerClose">×</button><div id="drawerBody"></div></aside>
+
+<div class="foot">Litescope · local dashboard · no data leaves this machine</div>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const sevClass = (s) => s === "critical" ? "crit" : s === "warning" ? "warn" : "ok";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const bytes = (n) => {
+  if (n == null) return "";
+  const u = ["B","KB","MB","GB","TB"]; let i = 0; n = Number(n);
+  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)}${u[i]}`;
+};
+
+function counts(health) {
+  let ok = 0, warn = 0, crit = 0;
+  for (const r of (health?.results || [])) {
+    const s = r.report?.severity;
+    if (s === "critical") crit++; else if (s === "warning") warn++; else ok++;
+  }
+  return { ok, warn, crit };
+}
+
+let STATE = null;        // last loaded overview
+let FILTER = "";         // current database name filter
+let CLUSTER_OF = {};     // database name -> {id, is_canonical}
+let AUTO = null;         // auto-refresh interval handle
+
+function buildClusterMap(clusters) {
+  const m = {};
+  for (const cl of clusters) for (const name of (cl.members || [])) m[name] = { id: cl.id, canon: cl.is_canonical };
+  return m;
+}
+
+const matches = (name) => !FILTER || name.toLowerCase().includes(FILTER);
+
+function render() {
+  const ov = STATE;
+  if (!ov) return;
+  const c = counts(ov.health);
+  const allResults = (ov.health?.results || []);
+  const results = allResults.filter(r => matches(r.database));
+  const clusters = (ov.fingerprint?.clusters || []);
+  const maxCount = clusters.reduce((m, cl) => Math.max(m, cl.count), 1);
+
+  $("#meta").textContent = `${esc(ov.fleet_name || "fleet")} · ${ov.total} db · ${new Date(ov.generated_at).toLocaleTimeString()}`;
+
+  let html = "";
+
+  if (ov.preview) {
+    html += `<div class="note">Free preview — showing ${ov.preview_cap} of ${ov.full_total} databases. The full fleet unlocks with Pro.</div>`;
+  }
+
+  // Summary (always whole-fleet counts, not filtered)
+  html += `<section style="padding-top:28px"><div class="summary">
+    <div class="stat"><div class="n">${ov.total}</div><div class="l">databases</div></div>
+    <div class="stat ok"><div class="n">${c.ok}</div><div class="l">healthy</div></div>
+    <div class="stat warn"><div class="n">${c.warn}</div><div class="l">warning</div></div>
+    <div class="stat crit"><div class="n">${c.crit}</div><div class="l">critical</div></div>
+  </div></section>`;
+
+  // Topology map
+  html += `<section><div class="eyebrow">Topology${FILTER ? ` · filtered (${results.length})` : ""}</div><h2>Every tenant, one screen</h2>
+    <p class="sub">One cell per database, colored by health. Click for detail.</p><div class="topo">`;
+  for (const r of results) {
+    const s = r.report?.severity;
+    const issues = (r.report?.issues || []).join(" · ") || (s === "ok" ? "healthy" : "");
+    const title = `${r.database}\n${s}${issues ? " — " + issues : ""}`;
+    html += `<div class="cell ${sevClass(s)}" data-name="${esc(r.database)}" title="${esc(title)}"></div>`;
+  }
+  if (!results.length) html += `<div class="empty">No databases match "${esc(FILTER)}".</div>`;
+  html += `</div><div class="legend">
+    <span><i class="dot" style="background:rgba(74,222,128,0.5)"></i>healthy</span>
+    <span><i class="dot" style="background:rgba(226,201,126,0.6)"></i>warning</span>
+    <span><i class="dot" style="background:rgba(248,113,113,0.7)"></i>critical</span>
+  </div></section>`;
+
+  // Health, worst-first
+  html += `<section><div class="eyebrow">Health — worst first</div><h2>Faults that need you</h2>
+    <p class="sub">Corruption, WAL bloat from a starved checkpoint, fragmentation, and reachability.</p>`;
+  const faults = results.filter(r => r.report?.severity !== "ok");
+  const shown = faults.length ? faults : results.slice(0, 8);
+  if (!results.length) {
+    html += `<div class="empty">No databases match the filter.</div>`;
+  } else {
+    if (!faults.length) html += `<div class="note" style="color:var(--ok);border-color:rgba(74,222,128,0.3);background:rgba(74,222,128,0.07)">All databases healthy. Showing a sample below.</div>`;
+    for (const r of shown) {
+      const rep = r.report || {};
+      const sc = sevClass(rep.severity);
+      const sevColor = sc === "crit" ? "var(--danger)" : sc === "warn" ? "var(--gold)" : "var(--ok)";
+      const body = (rep.issues && rep.issues.length)
+        ? `<span class="issues">${esc(rep.issues.join(" · "))}</span>`
+        : `<span class="ok-msg">healthy</span>`;
+      const pill = rep.remote ? "remote" : `${bytes(rep.size_bytes)}${rep.wal_bytes ? " · wal " + bytes(rep.wal_bytes) : ""}`;
+      html += `<div class="row" data-name="${esc(r.database)}"><div class="sev" style="background:${sevColor}"></div>
+        <span class="name">${esc(r.database)}</span>${body}<span class="pill">${esc(pill)}</span></div>`;
+    }
+  }
+  html += `</section>`;
+
+  // Fingerprint clusters (whole fleet — aggregate view)
+  html += `<section><div class="eyebrow">Schema fingerprint</div><h2>How many schemas do you really run?</h2>
+    <p class="sub">Identical schemas cluster together. The largest is canonical; the rest show how they drifted.</p>`;
+  if (!clusters.length) {
+    html += `<div class="empty">No schema data.</div>`;
+  } else {
+    for (const cl of clusters) {
+      const pct = Math.max(6, Math.round(cl.count / maxCount * 100));
+      const drift = cl.is_canonical ? "" : "drift";
+      let driftLines = "";
+      for (const td of (cl.drift || [])) {
+        if (td.Added) driftLines += `<div class="drift-line">+ ${esc(td.Name)} (extra table)</div>`;
+        else if (td.Removed) driftLines += `<div class="drift-line">- ${esc(td.Name)} (missing table)</div>`;
+        else {
+          for (const c2 of (td.AddedColumns || [])) driftLines += `<div class="drift-line">+ ${esc(td.Name)}.${esc(c2.Name)}</div>`;
+          for (const c2 of (td.RemovedColumns || [])) driftLines += `<div class="drift-line">- ${esc(td.Name)}.${esc(c2.Name)}</div>`;
+        }
+      }
+      html += `<div class="cluster ${drift}">
+        <div class="h"><span class="id">${esc(cl.id)}</span>
+        <span class="tag ${cl.is_canonical ? "canon" : "drift"}">${cl.is_canonical ? "canonical" : "drift"}</span>
+        <span style="margin-left:auto;color:var(--head);font-weight:700">${cl.count}</span></div>
+        <div class="bar" style="width:${pct}%"></div>
+        ${driftLines}
+        <div class="members">${esc((cl.members || []).slice(0,12).join(", "))}${(cl.members||[]).length > 12 ? " …" : ""}</div>
+      </div>`;
+    }
+  }
+  html += `</section>`;
+
+  $("#app").innerHTML = html;
+}
+
+function openDrawer(name) {
+  const r = (STATE?.health?.results || []).find(x => x.database === name);
+  if (!r) return;
+  const rep = r.report || {};
+  const sc = sevClass(rep.severity);
+  const sevColor = sc === "crit" ? "var(--danger)" : sc === "warn" ? "var(--gold)" : "var(--ok)";
+  const sevBg = sc === "crit" ? "rgba(248,113,113,0.15)" : sc === "warn" ? "rgba(226,201,126,0.15)" : "rgba(74,222,128,0.15)";
+  const cl = CLUSTER_OF[name];
+  const kv = (k, v) => v == null || v === "" ? "" : `<div class="kv"><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`;
+  let body = `<h3>${esc(name)}</h3>
+    <span class="sevtag" style="color:${sevColor};background:${sevBg}">${esc(rep.severity || "unknown")}</span>`;
+  body += kv("DSN", r.dsn);
+  body += kv("Schema cluster", cl ? `${cl.id}${cl.canon ? " (canonical)" : " (drift)"}` : "—");
+  body += kv("Integrity", rep.remote ? "remote — n/a" : (rep.integrity_ok ? "ok" : "FAILED"));
+  if (!rep.remote) {
+    body += kv("Size", bytes(rep.size_bytes));
+    body += kv("WAL", bytes(rep.wal_bytes));
+    body += kv("Pages", rep.page_count);
+    body += kv("Freelist", rep.freelist_count);
+    body += kv("Journal", rep.journal_mode);
+  }
+  body += kv("Reachable", rep.reachable ? "yes" : "no");
+  if (rep.error) body += kv("Error", rep.error);
+  if (rep.issues && rep.issues.length) {
+    body += `<div style="margin-top:16px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em">Issues</div>`;
+    for (const i of rep.issues) body += `<div class="issue">${esc(i)}</div>`;
+  }
+  $("#drawerBody").innerHTML = body;
+  $("#drawer").classList.add("open");
+  $("#scrim").classList.add("open");
+}
+function closeDrawer() {
+  $("#drawer").classList.remove("open");
+  $("#scrim").classList.remove("open");
+}
+
+async function load() {
+  if (!STATE) $("#app").innerHTML = `<div class="empty">Loading fleet…</div>`;
+  try {
+    const res = await fetch("/api/overview");
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+    STATE = data;
+    CLUSTER_OF = buildClusterMap(data.fingerprint?.clusters || []);
+    render();
+  } catch (e) {
+    $("#app").innerHTML = `<section><div class="err">Failed to load fleet: ${esc(e.message)}</div></section>`;
+    $("#meta").textContent = "error";
+  }
+}
+
+// Events
+$("#refreshBtn").addEventListener("click", load);
+$("#drawerClose").addEventListener("click", closeDrawer);
+$("#scrim").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+$("#filter").addEventListener("input", (e) => { FILTER = e.target.value.trim().toLowerCase(); render(); });
+$("#app").addEventListener("click", (e) => {
+  const el = e.target.closest("[data-name]");
+  if (el) openDrawer(el.getAttribute("data-name"));
+});
+$("#autoBtn").addEventListener("change", (e) => {
+  if (e.target.checked) { AUTO = setInterval(load, 15000); }
+  else if (AUTO) { clearInterval(AUTO); AUTO = null; }
+});
+
+load();
+</script>
+</body>
+</html>

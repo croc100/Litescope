@@ -561,7 +561,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">⚡</span>
         <div class="cmd-name">migrate <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
         <h3>See the blast radius first</h3>
-        <p><b>Free:</b> turn a diff into runnable SQL with every operation classified Safe / Risky / Destructive and an estimated write-lock time. <b>Pro:</b> versioned workflows (new / status / up) and safe <code>apply</code> with auto-backup, single transaction, FK verification, and rollback.</p>
+        <p><b>Free:</b> diff → runnable SQL with every op classified Safe / Risky / Destructive, plus declarative <code>plan</code> and versioned authoring (<code>new</code> / <code>status</code>) — Atlas-grade, no license. <b>Pro:</b> safe <code>apply</code>/<code>up</code> with auto-backup, single transaction, FK verification, and rollback.</p>
       </div>
       <div class="card">
         <span class="card-icon">📡</span>
@@ -577,9 +577,15 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       </div>
       <div class="card">
         <span class="card-icon">🌐</span>
-        <div class="cmd-name">fleet <span class="tier-tag tier-pro">pro</span></div>
+        <div class="cmd-name">fleet <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
         <h3>Operate hundreds at once</h3>
-        <p>The full lifecycle across a Turso org or D1 account, in parallel: fingerprint schemas, health-check for faults, converge drift to canonical, and recover corrupt databases from backup.</p>
+        <p><b>Free:</b> read-only shock diagnosis — fingerprint + health on up to 10 databases. <b>Pro:</b> the full lifecycle across a Turso org or D1 account — converge drift to canonical, recover corrupt databases, staged canary rollouts.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">📊</span>
+        <div class="cmd-name">serve <span class="tier-tag tier-free">free</span></div>
+        <h3>Your fleet in a browser</h3>
+        <p>One command — <code>litescope serve</code> — opens a local web dashboard: topology map colored by health, worst-first faults, and a schema-drift fingerprint. Runs on your machine or your own server. No cloud, no account, no telemetry.</p>
       </div>
     </div>
   </div>
@@ -608,6 +614,37 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>Validate backups, generate safe migrations, and roll them out across your entire fleet with one command.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap center">
+    <div class="eyebrow">Why it bites</div>
+    <h2>One database is fine.<br/>A thousand is a different job.</h2>
+    <p class="section-sub">Turso and Cloudflare D1 made one-database-per-tenant the norm — hundreds or thousands of SQLite files, each its own production system. That's exactly where the old tools assume "one database" and fall apart. Three moments turn a quiet fleet into a 3 a.m. page.</p>
+  </div>
+  <div class="wrap">
+    <div class="features">
+      <div class="card">
+        <span class="card-icon">🧬</span>
+        <div class="cmd-name">Drift you can't even see</div>
+        <h3>"I thought I ran one schema."</h3>
+        <p>A per-tenant migration half-fails and your fleet quietly splits into many shapes — and you don't know it happened. The next migration is the one that breaks. <code>sqlite3</code> can't tell you this; <b>fleet fingerprint</b> shows exactly how many schemas you really run.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">💥</span>
+        <div class="cmd-name">Deploy across hundreds</div>
+        <h3>"How do I roll this out safely?"</h3>
+        <p>DDL locks the entire SQLite file. A migration across 500 tenants is 500 downtime rolls of the dice. <b>migrate apply</b> wraps each in backup → transaction → FK verify → auto-rollback; <b>fleet migrate --canary</b> proves it on a few before the rest.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🚨</span>
+        <div class="cmd-name">A tenant DB is corrupt, 3 a.m.</div>
+        <h3>"Which ones broke, and how bad?"</h3>
+        <p>The first command to run when the pager fires. <b>fleet health</b> triages every database worst-first, <b>fleet recover</b> restores from verified backups, and <b>blast-radius</b> flags the at-risk neighbors in the same group.</p>
+      </div>
+    </div>
+    <p class="section-sub center" style="margin-top:28px">Run the shock diagnosis on up to 10 databases free and see your own drift. Fixing the whole fleet is Pro.</p>
   </div>
 </section>
 
@@ -712,6 +749,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <li><span class="check">✓</span>health &amp; advise — faults + index tips</li>
           <li><span class="check">✓</span>validate — migration locking for CI</li>
           <li><span class="check">✓</span>mcp — AI agent integration</li>
+          <li><span class="check">✓</span><b>Local web dashboard</b> (litescope serve)</li>
+          <li><span class="check">✓</span>fleet shock diagnosis — read-only (≤10 DBs)</li>
           <li><span class="check">✓</span>Explorer + 1 named connection (GUI)</li>
         </ul>
         <a class="btn btn-ghost" href="#install">Install free</a>
@@ -738,7 +777,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <div class="plan-desc">Your whole SQLite fleet on one screen — for teams &amp; large companies.</div>
         <ul class="plan-features">
           <li><span class="check">✓</span>Everything in Pro</li>
-          <li><span class="check">✓</span>Web dashboard — fleet health &amp; schema history</li>
+          <li><span class="check">✓</span>Hosted dashboard — multi-user, time-series history</li>
           <li><span class="check">✓</span>Alerting — Slack, PagerDuty, on-call</li>
           <li><span class="check">✓</span>SSO + org multi-user + RBAC</li>
           <li><span class="check">✓</span>Self-host — on-prem or your own cloud</li>
@@ -796,14 +835,16 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Fleet — Turso &amp; Cloudflare D1</td></tr>
           <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint / health — read-only preview (≤3 DBs)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint / health — full fleet (4+ DBs)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint / health — read-only shock diagnosis (≤10 DBs)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>fleet fingerprint / health — full fleet (11+ DBs)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>policy gates + team RBAC (local)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Enterprise — web &amp; teams</td></tr>
-          <tr><td>Web dashboard — fleet aggregation &amp; history</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Web dashboard</td></tr>
+          <tr><td>Local dashboard — <code>litescope serve</code> (self-hosted)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Hosted dashboard — multi-user, time-series history</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+          <tr class="section-row"><td colspan="4">Enterprise — teams &amp; scale</td></tr>
           <tr><td>Alerting — Slack / PagerDuty / on-call</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>SSO + org multi-user + org RBAC</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Self-host — on-prem or your own cloud</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
