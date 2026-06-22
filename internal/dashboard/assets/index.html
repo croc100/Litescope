@@ -309,8 +309,14 @@ async function load() {
     CLUSTER_OF = buildClusterMap(data.fingerprint?.clusters || []);
     render();
   } catch (e) {
-    $("#app").innerHTML = `<section><div class="err">Failed to load fleet: ${esc(e.message)}</div></section>`;
-    $("#meta").textContent = "error";
+    // When the page is opened as a static file (no server, no base URL), fetch
+    // can't resolve "/api/...". Show a hint instead of a raw parse error.
+    const noServer = /parse url|failed to fetch|networkerror/i.test(e.message || "");
+    const msg = noServer
+      ? `This is a static preview — no dashboard server is running.<br>Start it with <code>litescope serve</code> to load your fleet.`
+      : `Failed to load fleet: ${esc(e.message)}`;
+    $("#app").innerHTML = `<section><div class="err">${msg}</div></section>`;
+    $("#meta").textContent = noServer ? "no server" : "error";
   }
 }
 
