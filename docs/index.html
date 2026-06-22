@@ -597,7 +597,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">📊</span>
         <div class="cmd-name">serve <span class="tier-tag tier-free">free</span></div>
         <h3>Your fleet in a browser</h3>
-        <p>One command — <code>litescope serve</code> — opens a local web dashboard: topology map colored by health, worst-first faults, and a schema-drift fingerprint. Runs on your machine or your own server. No cloud, no account, no telemetry.</p>
+        <p>One command — <code>litescope serve</code> — opens a local web dashboard: topology map colored by health, worst-first faults, and a schema-drift fingerprint. Plus a read-only data browser and SQL console — click a table to preview rows, or run any <code>SELECT</code>. Runs on your machine or your own server. No cloud, no account, no telemetry.</p>
       </div>
     </div>
   </div>
@@ -761,7 +761,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <li><span class="check">✓</span>health &amp; advise — faults + index tips</li>
           <li><span class="check">✓</span>validate — migration locking for CI</li>
           <li><span class="check">✓</span>mcp — AI agent integration</li>
-          <li><span class="check">✓</span><b>Local web dashboard</b> (litescope serve)</li>
+          <li><span class="check">✓</span><b>Local web dashboard</b> + data browser & SQL (litescope serve)</li>
           <li><span class="check">✓</span>fleet shock diagnosis — read-only (≤10 DBs)</li>
           <li><span class="check">✓</span>Explorer + 1 named connection (GUI)</li>
         </ul>
@@ -872,6 +872,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <tr><td>policy gates + team RBAC (local)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Web dashboard</td></tr>
           <tr><td>Local dashboard — <code>litescope serve</code> (self-hosted)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>Data browser + read-only web SQL console</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>Hosted dashboard — multi-user, time-series history</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
           <tr class="section-row"><td colspan="4">Enterprise — teams &amp; scale</td></tr>
           <tr><td>Alerting — Slack / PagerDuty / on-call</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>

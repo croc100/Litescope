@@ -395,6 +395,12 @@ The rollout is **staged and fail-closed**: databases migrate one at a time, and 
 Your whole fleet in a browser — topology map colored by health, worst-first
 faults, and a schema-drift fingerprint. One command, no build step.
 
+It also includes a **read-only data browser and SQL console**: pick any
+database, click a table to preview its rows, or run your own `SELECT`. Writes
+are rejected at the engine level (`mode=ro` + `PRAGMA query_only=ON`), so the
+console can never mutate your data — browse and query a whole fleet without
+leaving the page.
+
 ```bash
 litescope serve                                  # opens http://127.0.0.1:7575
 litescope serve --config litescope.fleet.yaml --addr 0.0.0.0:7575
@@ -509,6 +515,7 @@ Three tiers, one funnel. See the [public roadmap](https://github.com/croc100/lit
 | monitor snapshot / check (CI) | ✓ | ✓ | ✓ |
 | monitor watch (single local DB) | ✓ | ✓ | ✓ |
 | fleet fingerprint / health (read-only, ≤10 DBs) — shock diagnosis | ✓ | ✓ | ✓ |
+| **serve** — local web dashboard + read-only data browser & SQL console | ✓ | ✓ | ✓ |
 | GUI explorer | 1 connection | unlimited | unlimited |
 | migrate apply (backup + rollback) | — | ✓ | ✓ |
 | check (batch / --save-report) | — | ✓ | ✓ |
