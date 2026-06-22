@@ -534,6 +534,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>Export schema + data to portable SQL with <code>sqlite3 .dump</code> parity — blob/NULL/quote-safe and round-trip verified. Schema-only or per-table too.</p>
       </div>
       <div class="card">
+        <span class="card-icon">📥</span>
+        <div class="cmd-name">import <span class="tier-tag tier-free">free</span></div>
+        <h3>Spreadsheet to SQLite</h3>
+        <p>Turn a CSV, TSV, or JSON file into a real, typed SQLite database in one command — header-aware, type-inferred. Or just run <code>litescope yourfile.csv</code> and it imports itself. Fix it, then <code>export</code> it back out.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">📈</span>
+        <div class="cmd-name">metrics <span class="tier-tag tier-free">free</span></div>
+        <h3>Scrape it into Grafana</h3>
+        <p>Render fleet health and schema-drift as Prometheus / OpenMetrics text — one-shot for a textfile collector, or <code>--serve</code> a <code>/metrics</code> endpoint. Drops straight into Grafana and Alertmanager.</p>
+      </div>
+      <div class="card">
         <span class="card-icon">🩻</span>
         <div class="cmd-name">health <span class="tier-tag tier-free">free</span></div>
         <h3>Spot faults early</h3>
@@ -832,6 +844,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>schema — inspect + Mermaid ERD</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>dump — portable SQL export</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>import / export — CSV/TSV/JSON ↔ SQLite</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+          <tr><td>metrics — Prometheus / OpenMetrics exporter</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>lint — schema anti-pattern linter (CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>advise — index &amp; query recommendations</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
           <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
