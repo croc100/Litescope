@@ -44,10 +44,35 @@ type Provider func() (*Overview, error)
 // stays decoupled from the importer; when nil, drag-drop import is disabled.
 type ImportFn func(filename string, data io.Reader) (summary string, err error)
 
+// TableInfo describes one table available for browsing in a database.
+type TableInfo struct {
+	Name string `json:"name"`
+	Rows int64  `json:"rows"`
+}
+
+// QueryResult is the outcome of a read-only SQL query against one database.
+type QueryResult struct {
+	Columns    []string `json:"columns"`
+	Rows       [][]any  `json:"rows"`
+	Truncated  bool     `json:"truncated"`
+	DurationMs int64    `json:"duration_ms"`
+}
+
+// TablesFn lists the browsable tables of the named database. The CLI supplies it
+// so this package stays decoupled from DSN resolution; when nil, the data
+// browser is disabled.
+type TablesFn func(dbName string) ([]TableInfo, error)
+
+// QueryFn runs a read-only SQL query against the named database. Read-only
+// safety is enforced by the CLI at the engine level (mode=ro + query_only).
+type QueryFn func(dbName, sql string) (*QueryResult, error)
+
 // Server serves the embedded dashboard and its JSON API.
 type Server struct {
 	provider Provider
 	importFn ImportFn
+	tablesFn TablesFn
+	queryFn  QueryFn
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -57,6 +82,12 @@ func New(provider Provider) *Server {
 
 // SetImportHandler enables drag-drop import in the dashboard.
 func (s *Server) SetImportHandler(fn ImportFn) { s.importFn = fn }
+
+// SetDataBrowser enables the read-only data browser and SQL console.
+func (s *Server) SetDataBrowser(tables TablesFn, query QueryFn) {
+	s.tablesFn = tables
+	s.queryFn = query
+}
 
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
@@ -78,9 +109,53 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, ov)
 	})
 
-	// Advertises whether drag-drop import is available to the frontend.
+	// Advertises which optional features are available to the frontend.
 	mux.HandleFunc("/api/capabilities", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]bool{"import": s.importFn != nil})
+		writeJSON(w, http.StatusOK, map[string]bool{
+			"import": s.importFn != nil,
+			"data":   s.tablesFn != nil && s.queryFn != nil,
+		})
+	})
+
+	// Lists the browsable tables of a database (read-only).
+	mux.HandleFunc("/api/tables", func(w http.ResponseWriter, r *http.Request) {
+		if s.tablesFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "data browser is disabled"})
+			return
+		}
+		tables, err := s.tablesFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tables": tables})
+	})
+
+	// Runs a read-only SQL query against a database. Writes are rejected at the
+	// engine level by the CLI-supplied handler, never by parsing the SQL.
+	mux.HandleFunc("/api/query", func(w http.ResponseWriter, r *http.Request) {
+		if s.queryFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "data browser is disabled"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST a query"})
+			return
+		}
+		var req struct {
+			DB  string `json:"db"`
+			SQL string `json:"sql"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		res, err := s.queryFn(req.DB, req.SQL)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	mux.HandleFunc("/api/import", func(w http.ResponseWriter, r *http.Request) {

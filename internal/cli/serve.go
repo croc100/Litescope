@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -109,6 +110,32 @@ Examples:
 				}
 				return fmt.Sprintf("%s → table %s", filepath.Base(dsn), table), nil
 			})
+			// Read-only data browser + SQL console over the fleet's local databases.
+			resolveDSN := func(name string) (string, error) {
+				for _, db := range currentDBs() {
+					if db.Name == name {
+						return db.DSN, nil
+					}
+				}
+				return "", fmt.Errorf("unknown database %q", name)
+			}
+			srv.SetDataBrowser(
+				func(name string) ([]dashboard.TableInfo, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return listTables(dsn)
+				},
+				func(name, query string) (*dashboard.QueryResult, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return runReadOnlyQuery(dsn, query)
+				},
+			)
+
 			url := "http://" + addr
 
 			fmt.Printf("\n  %s  Litescope dashboard\n", styleOK.Render("◎"))
@@ -167,6 +194,125 @@ func importDropped(dir, filename string, data io.Reader) (name, dsn, table strin
 		return "", "", "", err
 	}
 	return name, dsn, res.Table, nil
+}
+
+// serveQueryMaxRows caps how many rows a dashboard query returns.
+const serveQueryMaxRows = 2000
+
+// localDSNPath returns the file path of a local SQLite DSN. Remote DSNs
+// (turso://, d1://) are not browsable from the free local dashboard.
+func localDSNPath(dsn string) (string, error) {
+	switch {
+	case strings.HasPrefix(dsn, "turso://"), strings.HasPrefix(dsn, "d1://"):
+		return "", fmt.Errorf("data browser supports local SQLite only (this database is remote)")
+	default:
+		return dsn, nil
+	}
+}
+
+// openReadOnly opens a local SQLite database read-only and enforces query_only
+// at the engine level — writes are rejected regardless of the SQL submitted.
+func openReadOnly(dsn string) (*sql.DB, error) {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec("PRAGMA query_only=ON"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+// listTables returns the user tables of a local database with row counts,
+// ordered by name.
+func listTables(dsn string) ([]dashboard.TableInfo, error) {
+	db, err := openReadOnly(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT name FROM sqlite_master
+		WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+
+	out := make([]dashboard.TableInfo, 0, len(names))
+	for _, n := range names {
+		var count int64
+		// Table names come from sqlite_master, not user input, but quote to be safe.
+		_ = db.QueryRow(`SELECT count(*) FROM "` + strings.ReplaceAll(n, `"`, `""`) + `"`).Scan(&count)
+		out = append(out, dashboard.TableInfo{Name: n, Rows: count})
+	}
+	return out, nil
+}
+
+// runReadOnlyQuery executes a SQL query against a local database opened
+// read-only. Mutations fail at the engine level (query_only=ON).
+func runReadOnlyQuery(dsn, query string) (*dashboard.QueryResult, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, fmt.Errorf("empty query")
+	}
+	db, err := openReadOnly(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	start := time.Now()
+	rows, err := db.Query(q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, _ := rows.Columns()
+	res := &dashboard.QueryResult{Columns: cols, Rows: [][]any{}}
+	for rows.Next() {
+		if len(res.Rows) >= serveQueryMaxRows {
+			res.Truncated = true
+			break
+		}
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			continue
+		}
+		row := make([]any, len(cols))
+		for i, v := range vals {
+			if b, ok := v.([]byte); ok {
+				row[i] = string(b)
+			} else {
+				row[i] = v
+			}
+		}
+		res.Rows = append(res.Rows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	res.DurationMs = time.Since(start).Milliseconds()
+	return res, nil
 }
 
 // openBrowser tries to open url in the default browser; failure is non-fatal.

@@ -106,6 +106,29 @@
   .toast.on { opacity:1; }
   .toast.err { border-color:var(--danger); }
   .toast.ok { border-color:var(--teal); }
+
+  /* Data browser */
+  .data-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .select { font-family:var(--mono); font-size:13px; color:var(--head); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:7px 12px; outline:none; }
+  .select:focus { border-color:var(--teal); }
+  .tablist { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .tchip { font-family:var(--mono); font-size:12px; color:var(--text); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 11px; cursor:pointer; transition:border-color .1s; }
+  .tchip:hover { border-color:var(--teal); color:var(--head); }
+  .tchip.active { border-color:var(--teal); color:var(--head); background:rgba(0,212,170,0.08); }
+  .tchip .ct { color:var(--dim); margin-left:6px; }
+  .sqlbox { width:100%; font-family:var(--mono); font-size:13px; color:var(--head); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; outline:none; resize:vertical; min-height:74px; line-height:1.55; }
+  .sqlbox:focus { border-color:var(--teal); }
+  .runrow { display:flex; align-items:center; gap:12px; margin-top:10px; }
+  .run { font-family:var(--sans); font-size:13px; font-weight:600; color:#04110d; background:var(--teal); border:none; border-radius:8px; padding:8px 18px; cursor:pointer; }
+  .run:hover { filter:brightness(1.08); }
+  .run:disabled { opacity:.5; cursor:default; }
+  .runinfo { font-size:12px; color:var(--dim); font-family:var(--mono); }
+  .resultwrap { margin-top:18px; overflow:auto; border:1px solid var(--border); border-radius:10px; max-height:60vh; }
+  table.result { border-collapse:collapse; width:100%; font-family:var(--mono); font-size:12.5px; }
+  table.result th { position:sticky; top:0; background:var(--surface-2); color:var(--head); text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; font-weight:600; }
+  table.result td { padding:7px 12px; border-bottom:1px solid var(--border); color:var(--text); white-space:nowrap; max-width:360px; overflow:hidden; text-overflow:ellipsis; }
+  table.result tr:hover td { background:var(--surface); }
+  td.null { color:var(--dim); font-style:italic; }
 </style>
 </head>
 <body>
@@ -124,6 +147,24 @@
 <main class="wrap" id="app">
   <div class="empty">Loading fleet…</div>
 </main>
+
+<div class="wrap" id="dataPanel" style="display:none">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Data — read-only</div><h2>Browse &amp; query your tables</h2>
+    <p class="sub">Pick a database, click a table to preview, or run any read-only SQL. Writes are rejected at the engine level.</p>
+    <div class="data-bar">
+      <select id="dbSelect" class="select"></select>
+      <span class="runinfo" id="dataHint"></span>
+    </div>
+    <div class="tablist" id="tableList"></div>
+    <textarea id="sqlBox" class="sqlbox" spellcheck="false" placeholder="SELECT * FROM …  (read-only)"></textarea>
+    <div class="runrow">
+      <button class="run" id="runBtn">Run ▸</button>
+      <span class="runinfo" id="runInfo">⌘/Ctrl + Enter to run</span>
+    </div>
+    <div id="queryResult"></div>
+  </section>
+</div>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer"><button class="close" id="drawerClose">×</button><div id="drawerBody"></div></aside>
@@ -308,6 +349,7 @@ async function load() {
     STATE = data;
     CLUSTER_OF = buildClusterMap(data.fingerprint?.clusters || []);
     render();
+    syncDataPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -375,7 +417,110 @@ window.addEventListener("drop", async (e) => {
   const files = [...(e.dataTransfer?.files || [])];
   for (const f of files) await importFile(f);
 });
-fetch("/api/capabilities").then(r => r.json()).then(c => { IMPORT_ENABLED = !!c.import; }).catch(() => {});
+// Data browser
+let DATA_ENABLED = false;
+let ACTIVE_TABLE = null;
+
+// Sync the database dropdown with the loaded fleet, preserving the selection.
+function syncDataPanel() {
+  if (!DATA_ENABLED || !STATE) return;
+  const sel = $("#dbSelect");
+  const names = (STATE.health?.results || []).map(r => ({ name: r.database, remote: !!r.report?.remote }));
+  const want = names.map(n => n.name).join("");
+  if (sel.dataset.sig !== want) {
+    const prev = sel.value;
+    sel.innerHTML = names.map(n =>
+      `<option value="${esc(n.name)}"${n.remote ? " disabled" : ""}>${esc(n.name)}${n.remote ? " (remote — n/a)" : ""}</option>`).join("");
+    sel.dataset.sig = want;
+    if (prev && names.some(n => n.name === prev && !n.remote)) sel.value = prev;
+    loadTables();
+  }
+}
+
+async function loadTables() {
+  const db = $("#dbSelect").value;
+  const list = $("#tableList");
+  ACTIVE_TABLE = null;
+  if (!db) { list.innerHTML = ""; return; }
+  list.innerHTML = `<span class="runinfo">loading tables…</span>`;
+  try {
+    const res = await fetch("/api/tables?db=" + encodeURIComponent(db));
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+    const tables = data.tables || [];
+    if (!tables.length) { list.innerHTML = `<span class="runinfo">no tables</span>`; return; }
+    list.innerHTML = tables.map(t =>
+      `<span class="tchip" data-table="${esc(t.name)}">${esc(t.name)}<span class="ct">${t.rows.toLocaleString()}</span></span>`).join("");
+  } catch (e) {
+    list.innerHTML = `<span class="runinfo" style="color:var(--danger)">${esc(e.message)}</span>`;
+  }
+}
+
+function renderResult(data) {
+  const wrap = $("#queryResult");
+  if (!data.columns || !data.columns.length) {
+    wrap.innerHTML = `<div class="runinfo" style="margin-top:14px">No columns returned.</div>`;
+    return;
+  }
+  let h = `<div class="resultwrap"><table class="result"><thead><tr>`;
+  for (const c of data.columns) h += `<th>${esc(c)}</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const row of (data.rows || [])) {
+    h += `<tr>`;
+    for (const v of row) h += v === null || v === undefined
+      ? `<td class="null">NULL</td>`
+      : `<td title="${esc(v)}">${esc(v)}</td>`;
+    h += `</tr>`;
+  }
+  h += `</tbody></table></div>`;
+  const n = (data.rows || []).length;
+  h += `<div class="runinfo" style="margin-top:10px">${n} row${n === 1 ? "" : "s"}${data.truncated ? " (truncated)" : ""} · ${data.duration_ms} ms</div>`;
+  wrap.innerHTML = h;
+}
+
+async function runQuery(sql) {
+  const db = $("#dbSelect").value;
+  if (!db) { toast("Select a database first", "err"); return; }
+  $("#runBtn").disabled = true;
+  $("#runInfo").textContent = "running…";
+  try {
+    const res = await fetch("/api/query", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ db, sql })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+    renderResult(data);
+    $("#runInfo").textContent = "⌘/Ctrl + Enter to run";
+  } catch (e) {
+    $("#queryResult").innerHTML = `<div class="err" style="margin-top:14px">${esc(e.message)}</div>`;
+    $("#runInfo").textContent = "⌘/Ctrl + Enter to run";
+  } finally {
+    $("#runBtn").disabled = false;
+  }
+}
+
+$("#dbSelect")?.addEventListener("change", loadTables);
+$("#tableList")?.addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-table]");
+  if (!chip) return;
+  const t = chip.getAttribute("data-table");
+  ACTIVE_TABLE = t;
+  for (const c of $("#tableList").children) c.classList.toggle("active", c.getAttribute("data-table") === t);
+  const sql = `SELECT * FROM "${t.replace(/"/g, '""')}" LIMIT 100;`;
+  $("#sqlBox").value = sql;
+  runQuery(sql);
+});
+$("#runBtn")?.addEventListener("click", () => runQuery($("#sqlBox").value));
+$("#sqlBox")?.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); runQuery($("#sqlBox").value); }
+});
+
+fetch("/api/capabilities").then(r => r.json()).then(c => {
+  IMPORT_ENABLED = !!c.import;
+  DATA_ENABLED = !!c.data;
+  if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); }
+}).catch(() => {});
 
 load();
 </script>
