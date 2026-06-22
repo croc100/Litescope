@@ -16,6 +16,7 @@ var (
 func main() {
 	root := cli.Root()
 	root.Version = version + " (" + commit[:min(7, len(commit))] + ") " + date
+	root.SetArgs(cli.ResolveArgs(root, os.Args[1:]))
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

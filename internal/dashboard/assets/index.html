@@ -92,6 +92,20 @@
   .kv .k { color:var(--dim); } .kv .v { color:var(--head); font-family:var(--mono); }
   .drawer .issue { font-size:13px; color:var(--text); padding:6px 0 6px 14px; position:relative; }
   .drawer .issue::before { content:"•"; position:absolute; left:0; color:var(--danger); }
+  .dropmask { position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.55); backdrop-filter:blur(2px); }
+  .dropmask.on { display:flex; }
+  .dropmask .box { border:2px dashed var(--teal); border-radius:16px; padding:48px 72px; text-align:center;
+    background:var(--surface); color:var(--head); font-family:var(--sans); }
+  .dropmask .box .big { font-size:42px; margin-bottom:10px; }
+  .dropmask .box .sub { color:var(--dim); font-size:13px; margin-top:6px; }
+  .toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:210;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 18px;
+    font-family:var(--sans); font-size:13px; color:var(--head); box-shadow:0 8px 28px rgba(0,0,0,.4);
+    opacity:0; pointer-events:none; transition:opacity .2s; max-width:80vw; }
+  .toast.on { opacity:1; }
+  .toast.err { border-color:var(--danger); }
+  .toast.ok { border-color:var(--teal); }
 </style>
 </head>
 <body>
@@ -113,6 +127,9 @@
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer"><button class="close" id="drawerClose">×</button><div id="drawerBody"></div></aside>
+
+<div class="dropmask" id="dropmask"><div class="box"><div class="big">⬇︎</div><div>Drop a CSV, TSV or JSON file</div><div class="sub">It becomes a new database in your fleet</div></div></div>
+<div class="toast" id="toast"></div>
 
 <div class="foot">Litescope · local dashboard · no data leaves this machine</div>
 
@@ -311,6 +328,48 @@ $("#autoBtn").addEventListener("change", (e) => {
   if (e.target.checked) { AUTO = setInterval(load, 15000); }
   else if (AUTO) { clearInterval(AUTO); AUTO = null; }
 });
+
+// Drag-drop import
+let IMPORT_ENABLED = false;
+let TOAST_T = null;
+function toast(msg, kind) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "toast on" + (kind ? " " + kind : "");
+  if (TOAST_T) clearTimeout(TOAST_T);
+  TOAST_T = setTimeout(() => { t.className = "toast"; }, 3500);
+}
+async function importFile(file) {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  toast("Importing " + file.name + "…");
+  try {
+    const res = await fetch("/api/import", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+    toast("Imported " + (data.summary || file.name), "ok");
+    await load();
+  } catch (e) {
+    toast("Import failed: " + e.message, "err");
+  }
+}
+let DRAG_DEPTH = 0;
+window.addEventListener("dragenter", (e) => {
+  if (!IMPORT_ENABLED) return;
+  e.preventDefault(); DRAG_DEPTH++; $("#dropmask").classList.add("on");
+});
+window.addEventListener("dragover", (e) => { if (IMPORT_ENABLED) e.preventDefault(); });
+window.addEventListener("dragleave", (e) => {
+  if (!IMPORT_ENABLED) return;
+  DRAG_DEPTH--; if (DRAG_DEPTH <= 0) { DRAG_DEPTH = 0; $("#dropmask").classList.remove("on"); }
+});
+window.addEventListener("drop", async (e) => {
+  if (!IMPORT_ENABLED) return;
+  e.preventDefault(); DRAG_DEPTH = 0; $("#dropmask").classList.remove("on");
+  const files = [...(e.dataTransfer?.files || [])];
+  for (const f of files) await importFile(f);
+});
+fetch("/api/capabilities").then(r => r.json()).then(c => { IMPORT_ENABLED = !!c.import; }).catch(() => {});
 
 load();
 </script>

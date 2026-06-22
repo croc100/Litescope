@@ -11,6 +11,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"time"
@@ -38,15 +39,24 @@ type Overview struct {
 // package stays decoupled from license gating and config loading.
 type Provider func() (*Overview, error)
 
+// ImportFn ingests an uploaded data file (CSV/TSV/JSON) and returns a short
+// human summary (e.g. the new table name). The CLI supplies it so this package
+// stays decoupled from the importer; when nil, drag-drop import is disabled.
+type ImportFn func(filename string, data io.Reader) (summary string, err error)
+
 // Server serves the embedded dashboard and its JSON API.
 type Server struct {
 	provider Provider
+	importFn ImportFn
 }
 
 // New builds a dashboard server backed by the given provider.
 func New(provider Provider) *Server {
 	return &Server{provider: provider}
 }
+
+// SetImportHandler enables drag-drop import in the dashboard.
+func (s *Server) SetImportHandler(fn ImportFn) { s.importFn = fn }
 
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
@@ -66,6 +76,38 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, ov)
+	})
+
+	// Advertises whether drag-drop import is available to the frontend.
+	mux.HandleFunc("/api/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{"import": s.importFn != nil})
+	})
+
+	mux.HandleFunc("/api/import", func(w http.ResponseWriter, r *http.Request) {
+		if s.importFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "import is disabled"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST a file"})
+			return
+		}
+		if err := r.ParseMultipartForm(64 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		file, hdr, err := r.FormFile("file")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no file uploaded"})
+			return
+		}
+		defer file.Close()
+		summary, err := s.importFn(hdr.Filename, file)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "summary": summary})
 	})
 
 	return mux
