@@ -65,6 +65,7 @@ genuinely proprietary asset and stays closed.
 - `health` — single-DB fault check
 - `fleet fingerprint` / `fleet health` — read-only shock diagnosis, up to 10 databases
 - `serve` — **local, self-hosted web dashboard** (fleet topology + health + fingerprint); no cloud, no account, no telemetry
+- `metrics` — **Prometheus / OpenMetrics exporter** (fleet health + schema drift); one-shot or `--serve` /metrics scrape endpoint, drops into Grafana/Alertmanager. Read-only, up to 10 databases (full fleet with Pro)
 - `advise` — index & query recommendations
 - `mcp` — AI agent integration
 - GUI: explorer, 1 named connection
@@ -80,6 +81,7 @@ is free.
 - `monitor watch` (advanced) — webhook alerts (Slack/Discord) and remote targets (Turso/D1)
 - `fleet *` — full fleet (>10 DBs) and all actions: discover / snapshot / check / converge / recover / migrate (staged canary), plus `fingerprint`/`health` beyond the 10-DB Free preview and any watch/recover/alert
 - `serve` — dashboard over the full fleet (Free shows the 10-DB preview; Pro lifts the cap)
+- `metrics` — Prometheus exporter over the full fleet (Free shows the 10-DB preview; Pro lifts the cap)
 - `policy` — write-protection / automated gates
 - `team` — role-based access control (local)
 - GUI: unlimited named connections, all Pro panels
@@ -97,7 +99,10 @@ is free.
   configuration; bundles the OSS CLI features into one deployable application
 - **Cloud-to-cloud** — runs in the customer's cloud environment as well as ours
 - **SLA + priority support**
-- CLI side: `litescope push` (agent → dashboard, API key, offline buffering)
+- CLI side: `litescope push` (agent → dashboard, API key) — **shipped**; the
+  hosted backend (`litescope-cloud`, Cloudflare Workers + D1) is **live** at
+  `litescope-cloud.croc100.workers.dev` (Lemon Squeezy webhook auto-provisioning,
+  metadata-only ingestion)
 
 **Principle: anything involving a team, a time-series backend, or a deployment
 contract is Ex.** The data model already exists (audit log + fleet health events)
@@ -161,8 +166,11 @@ gold-plating — it must serve the next gate (**Free adoption**). Four axes,
    `monitor watch` completeness; proves the $99 value. Don't over-invest pre-revenue.
 3. **Stability & trust hardening** _(before OSS launch)_ — edge cases, error
    messages, test coverage, docs. "It doesn't break" is table stakes for virality.
-4. **`litescope push` (Ex groundwork)** _(latest — respect the sequence)_ — turns
-   the CLI into the dashboard agent; prerequisite for the Enterprise dashboard.
+4. **`litescope push` (Ex groundwork)** _(✅ shipped + deployed)_ — turns the CLI
+   into the dashboard agent; the hosted `litescope-cloud` backend is live.
+5. **Prometheus / OpenMetrics exporter** _(✅ shipped)_ — `litescope metrics`
+   exposes fleet health + schema drift to Grafana/Alertmanager. Zero hosting
+   cost; fills the observability-integration gap competitors' ops stacks assume.
 
 **Discipline:** build axis 1 now; axes 2–4 are gated behind their validation
 signals above. Resist building Ex/Pro depth before the Free adoption gate proves out.
