@@ -139,6 +139,7 @@ window.LS_I18N = {
     "Contact sales →": "영업 문의 →",
     "Enterprise · Web dashboard": "Enterprise · 웹 대시보드",
     "Running SQLite on Turso, Cloudflare D1 and local files? The CLI you already use becomes the agent — <code>litescope push</code> streams health and schema metadata (never your data) to a dashboard that shows your entire fleet, thousands of instances, on one screen. Drift history, fault triage, and alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or fully self-hosted on your own servers.": "Turso, Cloudflare D1, 로컬 파일에서 SQLite를 돌리고 있나요? 이미 쓰는 CLI가 에이전트가 됩니다 — <code>litescope push</code>가 헬스·스키마 메타데이터(데이터는 절대 아님)를 대시보드로 스트리밍해 수천 인스턴스의 전체 플릿을 한 화면에 보여줍니다. 드리프트 히스토리, 장애 분류, 문제 발생 시 알림. 우리 클라우드, <em>당신의</em> 클라우드, 또는 완전 셀프호스트로 실행하세요.",
+    "The hosted dashboard is the multi-user, cloud version of <code>litescope serve</code> — fleet health, topology, fault triage, and schema drift on one screen.": "호스팅 대시보드는 <code>litescope serve</code>의 멀티유저 클라우드 버전입니다 — 플릿 health, 토폴로지, 장애 분류, 스키마 드리프트를 한 화면에.",
     // compare table headers / sections
     "Feature": "기능",
     "Pro — $99/yr": "Pro — $99/년",
@@ -392,6 +393,7 @@ window.LS_I18N = {
     "Contact sales →": "联系销售 →",
     "Enterprise · Web dashboard": "Enterprise · Web 仪表盘",
     "Running SQLite on Turso, Cloudflare D1 and local files? The CLI you already use becomes the agent — <code>litescope push</code> streams health and schema metadata (never your data) to a dashboard that shows your entire fleet, thousands of instances, on one screen. Drift history, fault triage, and alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or fully self-hosted on your own servers.": "在 Turso、Cloudflare D1 和本地文件上运行 SQLite？你已经在用的 CLI 就成了代理——<code>litescope push</code> 将健康与模式元数据（绝不含你的数据）流式传输到仪表盘，在一屏上展示你的整个集群、数千个实例。漂移历史、故障分诊，以及出问题时的告警。可在我们的云、<em>你的</em>云，或完全自托管于你自己的服务器上运行。",
+    "The hosted dashboard is the multi-user, cloud version of <code>litescope serve</code> — fleet health, topology, fault triage, and schema drift on one screen.": "托管仪表盘是 <code>litescope serve</code> 的多用户云端版本——集群健康、拓扑、故障分诊与模式漂移尽在一屏。",
     "Feature": "功能",
     "Pro — $99/yr": "Pro — $99/年",
     "Explore, inspect &amp; validate": "探索、检查与校验",
@@ -640,6 +642,7 @@ window.LS_I18N = {
     "Contact sales →": "営業へ問い合わせ →",
     "Enterprise · Web dashboard": "Enterprise · Webダッシュボード",
     "Running SQLite on Turso, Cloudflare D1 and local files? The CLI you already use becomes the agent — <code>litescope push</code> streams health and schema metadata (never your data) to a dashboard that shows your entire fleet, thousands of instances, on one screen. Drift history, fault triage, and alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or fully self-hosted on your own servers.": "Turso、Cloudflare D1、ローカルファイルでSQLiteを運用していますか？すでに使っているCLIがエージェントになります——<code>litescope push</code>がヘルスとスキーマのメタデータ（データには触れません）をダッシュボードへ送り、数千インスタンスのフリート全体を1画面で表示。ドリフト履歴、障害トリアージ、問題発生時のアラート。当社のクラウド、<em>あなたの</em>クラウド、または完全セルフホストで実行できます。",
+    "The hosted dashboard is the multi-user, cloud version of <code>litescope serve</code> — fleet health, topology, fault triage, and schema drift on one screen.": "ホスト型ダッシュボードは <code>litescope serve</code> のマルチユーザー・クラウド版です——フリートのヘルス、トポロジー、障害トリアージ、スキーマドリフトを1画面で。",
     "Feature": "機能",
     "Pro — $99/yr": "Pro — $99/年",
     "Explore, inspect &amp; validate": "探索・点検・検証",
