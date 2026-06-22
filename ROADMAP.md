@@ -56,6 +56,7 @@ genuinely proprietary asset and stays closed.
 ### Free — explore & inspect (single database)
 - `diff` — schema & data comparison (all formats, HTML, CI/PR markdown)
 - `schema` — inspect a single database (local / Turso / D1), Mermaid ERD output
+- `import` — load a CSV / TSV / JSON file into a SQLite table with type inference (the data-in half: drag a spreadsheet, get a real database)
 - `dump` — export a local database as portable SQL (schema + data)
 - `validate` — lock migrations to a spec, enforce in CI
 - `check` — single-file backup integrity, incl. one `--against` reference comparison
