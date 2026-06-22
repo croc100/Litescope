@@ -498,7 +498,7 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 
 ## Pricing
 
-Three tiers, one funnel. See [ROADMAP.md](ROADMAP.md) for the full plan.
+Three tiers, one funnel. See the [public roadmap](https://github.com/croc100/litescope-dist/blob/main/ROADMAP.md) for the full plan.
 
 | | **Free** | **Pro** — $99/yr | **Enterprise** |
 |---|---|---|---|
