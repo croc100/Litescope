@@ -11,6 +11,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdDiff())
 	root.AddCommand(cmdSchema())
 	root.AddCommand(cmdDump())
+	root.AddCommand(cmdImport())
 	root.AddCommand(cmdValidate())
 	root.AddCommand(cmdCheck())
 	root.AddCommand(cmdHealth())
