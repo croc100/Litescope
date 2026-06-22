@@ -479,7 +479,7 @@ Get a Pro key at **[croc100.github.io/Litescope](https://croc100.github.io/Lites
 (Turso + Cloudflare D1 + local) from one screen, with SSO, team access, and
 self-host options for your own servers or cloud. The CLI becomes the agent. We
 collect health & schema metadata only — never your data.
-**Contact sales: [croc100100@gmail.com](mailto:croc100100@gmail.com?subject=Litescope%20Enterprise)**
+**A capped monthly subscription from $49/month (up to 25 databases; Scale tier $149/month up to 250), via Lemon Squeezy, provisioned within ~1 week of purchase.**
 
 ---
 

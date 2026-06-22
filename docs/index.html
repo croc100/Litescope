@@ -773,18 +773,19 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       </div>
       <div class="plan">
         <div class="plan-tier" style="color:var(--head)">Enterprise</div>
-        <div class="plan-price">Let's talk</div>
-        <div class="plan-desc">Your whole SQLite fleet on one screen — for teams &amp; large companies.</div>
+        <div class="plan-price">$49<span class="period"> /month</span></div>
+        <div class="plan-desc">Your whole SQLite fleet on one screen — hosted &amp; multi-user. Predictable monthly pricing, capped so the bill never runs away.</div>
         <ul class="plan-features">
           <li><span class="check">✓</span>Everything in Pro</li>
           <li><span class="check">✓</span>Hosted dashboard — multi-user, time-series history</li>
+          <li><span class="check">✓</span><b>Up to 25 databases</b> (Scale tier for more)</li>
           <li><span class="check">✓</span>Alerting — Slack, PagerDuty, on-call</li>
           <li><span class="check">✓</span>SSO + org multi-user + RBAC</li>
           <li><span class="check">✓</span>Self-host — on-prem or your own cloud</li>
-          <li><span class="check">✓</span>Metadata only — never your data</li>
-          <li><span class="check">✓</span>SLA + priority support</li>
+          <li><span class="check">✓</span>Provisioned within ~1 week of purchase</li>
         </ul>
-        <a class="btn btn-ghost" href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" rel="noopener">Contact sales →</a>
+        <!-- TODO: set href to the Enterprise $49/mo Lemon Squeezy checkout URL once the product is created -->
+        <a class="btn btn-ghost" href="" data-ls-checkout="enterprise" target="_blank" rel="noopener">Buy Enterprise — $49/mo</a>
       </div>
     </div>
 
@@ -797,6 +798,12 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         thousands of instances, on one screen. Drift history, fault triage, and
         alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or
         fully self-hosted on your own servers.
+      </p>
+      <p class="section-sub" style="margin-top:12px">
+        <b>$49/month</b> covers up to <b>25 databases</b>. Bigger fleet?
+        <b>Enterprise Scale — $149/month</b> covers up to <b>250 databases</b>.
+        Larger or air-gapped? The self-host build runs on your own infrastructure.
+        Every plan is a flat, capped monthly price — no surprise bills.
       </p>
     </div>
 
@@ -893,13 +900,13 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <a href="/docs">Docs</a>
         <a href="#pricing">Pricing</a>
         <a href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro</a>
-        <a href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" rel="noopener">Enterprise</a>
+        <a href="#pricing">Enterprise</a>
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
         <a href="/refund">Refund</a>
       </div>
     </div>
-    <p class="foot-note">The Free CLI/GUI is open source. Pro unlocks production &amp; fleet features with a paid license key — the same binary, no separate download. Enterprise (web dashboard, SSO, self-host) is a separate closed-source product — <a href="mailto:croc100100@gmail.com?subject=Litescope%20Enterprise" style="color:inherit;text-decoration:underline">contact sales</a>. Payments &amp; refunds handled by Lemon Squeezy, our Merchant of Record. © 2026 Crode.</p>
+    <p class="foot-note">The Free CLI/GUI is open source. Pro unlocks production &amp; fleet features with a paid license key — the same binary, no separate download. Enterprise (hosted dashboard, SSO, self-host) is a separate closed-source product — a capped monthly subscription from $49/month (up to 25 databases; Scale tier $149/month up to 250), provisioned within about a week of purchase. Payments &amp; refunds handled by Lemon Squeezy, our Merchant of Record. © 2026 Crode.</p>
   </div>
 </footer>
 

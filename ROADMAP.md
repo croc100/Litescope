@@ -10,7 +10,7 @@ It is the source of truth; README, website, and pricing must match it.
 ## The model: three tiers, one funnel
 
 ```
-Free (OSS)  ──►  Pro (closed, paid)  ──►  Enterprise / "Ex" (closed, contact sales)
+Free (OSS)  ──►  Pro (closed, paid)  ──►  Enterprise / "Ex" (closed, capped $49+/mo)
 adoption          cash-flow validation     MRR + self-host + teams
 ```
 
@@ -21,7 +21,7 @@ until the previous one shows the signal it is meant to prove.
 |---|---|---|---|
 | Audience | Individual developer | Serious individual operator | Large company / team |
 | Source | **Open source** | **Closed** (paid license key) | **Closed** |
-| Price | $0 | $99 / year (Lemon Squeezy) | **Contact sales** (email) |
+| Price | $0 | $99 / year (Lemon Squeezy) | **from $49 / month**, capped (Lemon Squeezy) |
 | Proves | Adoption / word of mouth | Willingness to pay | Real recurring revenue |
 | Delivery | CLI + GUI binary | Same binary, key unlocks | Web SaaS + self-host app |
 
@@ -39,10 +39,15 @@ user can binary-patch the gate — true protection for client-side Pro is imposs
 real lock-in lives server-side in Enterprise. The $99 tier relies on convenience +
 goodwill, which is fine.)
 
-**Why Ex is closed and contact-only:** the enterprise buyer wants SSO, self-host,
-and a real contract — not a self-serve checkout. A "Contact sales" email gate
-also qualifies leads and lets us price per deployment. The web SaaS code is the
-one genuinely proprietary asset and stays closed.
+**Why Ex is a capped monthly product (not contact-sales):** Lemon Squeezy, our
+Merchant of Record, does not support custom/contact-sales arrangements, so
+Enterprise ships as **fixed, capped monthly SKUs** — **$49/mo up to 25 databases**,
+**Scale $149/mo up to 250**, self-host beyond that. The cap is deliberate: a
+customer running hundreds of DBs self-selects a higher fixed SKU instead of
+overrunning one flat price, which keeps hosting margins safe (we host on our own
+infra) and stays Lemon-Squeezy-compatible. **Provisioned within ~1 week of
+purchase** (the hosted/self-host setup is hands-on). The web SaaS code is the one
+genuinely proprietary asset and stays closed.
 
 ---
 
@@ -81,7 +86,7 @@ is free.
 
 **Principle: time-axis, automation, and many-DB-from-one-operator are Pro.**
 
-### Enterprise (Ex) — teams, web & scale (closed, contact sales)
+### Enterprise (Ex) — teams, web & scale (closed, capped $49+/mo)
 - **Hosted web dashboard** — the multi-user, cloud version of `serve`: fleet
   aggregation across machines, time-series history (health trend, schema drift
   over time), one screen for thousands of instances. (The single-operator local
@@ -122,12 +127,12 @@ customer environment.
 ## Sequencing (do not skip gates)
 
 1. **Now — repackage:** unify code/README/website on the 3-tier model; fix the
-   stale single-tier website; add web-SaaS messaging; Ex = "Contact sales".
+   stale single-tier website; add web-SaaS messaging; Ex = capped monthly SKUs ($49/mo ≤25 DB, $149/mo ≤250; Lemon Squeezy; provisioned ~1 week).
 2. **Free adoption signal:** publish OSS, measure installs / stars / inbound.
    *Gate: is anyone using it?*
 3. **Pro willingness-to-pay:** Lemon Squeezy live (KYC) → first sales.
    *Gate: will an individual pay $99?*
-4. **Ex demand signal:** "Contact sales" inbound + dashboard waitlist.
+4. **Ex demand signal:** Enterprise ($49+/mo) orders + dashboard waitlist.
    *Gate: does a team want the web/SSO/self-host product?*
 5. **Build Ex** only after step 4 shows real inbound. Web SaaS is a separate,
    closed codebase; CLI gets `litescope push`.
