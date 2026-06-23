@@ -88,6 +88,75 @@ func TestRunReadOnlyQuery_EmptyRejected(t *testing.T) {
 	}
 }
 
+func TestBrowseTable_PaginateAndSort(t *testing.T) {
+	dsn := filepath.Join(t.TempDir(), "b.db")
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE nums(id INTEGER PRIMARY KEY, v INTEGER);`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 250; i++ {
+		if _, err := db.Exec(`INSERT INTO nums(v) VALUES(?)`, 1000-i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	// First page, default order (insertion).
+	r, err := browseTable(dsn, "nums", "", "", 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Total != 250 {
+		t.Fatalf("total = %d, want 250", r.Total)
+	}
+	if len(r.Rows) != 100 {
+		t.Fatalf("page rows = %d, want 100", len(r.Rows))
+	}
+
+	// Third page should hold the remaining 50.
+	r, err = browseTable(dsn, "nums", "", "", 100, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Rows) != 50 {
+		t.Fatalf("last page rows = %d, want 50", len(r.Rows))
+	}
+
+	// Sort ascending by v: smallest v (=750) is row with id 250.
+	r, err = browseTable(dsn, "nums", "v", "asc", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Rows[0][1]; got != int64(750) {
+		t.Fatalf("min v = %v, want 750", got)
+	}
+	if r.OrderBy != "v" || r.Dir != "asc" {
+		t.Fatalf("order metadata = %q/%q", r.OrderBy, r.Dir)
+	}
+
+	// Limit is capped at the max.
+	r, err = browseTable(dsn, "nums", "", "", 99999, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Limit != serveBrowseMaxLimit {
+		t.Fatalf("limit = %d, want cap %d", r.Limit, serveBrowseMaxLimit)
+	}
+}
+
+func TestBrowseTable_RejectsInjection(t *testing.T) {
+	dsn := makeServeTestDB(t)
+	if _, err := browseTable(dsn, "widgets", "name); DROP TABLE widgets;--", "asc", 10, 0); err == nil {
+		t.Fatal("expected unknown sort column to be rejected")
+	}
+	if _, err := browseTable(dsn, "no_such_table", "", "", 10, 0); err == nil {
+		t.Fatal("expected unknown table to be rejected")
+	}
+}
+
 func TestSchemaGraph(t *testing.T) {
 	dsn := filepath.Join(t.TempDir(), "erd.db")
 	db, err := sql.Open("sqlite", dsn)

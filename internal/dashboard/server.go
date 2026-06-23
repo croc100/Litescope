@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/croc100/litescope/internal/fleet"
@@ -56,6 +57,18 @@ type QueryResult struct {
 	Rows       [][]any  `json:"rows"`
 	Truncated  bool     `json:"truncated"`
 	DurationMs int64    `json:"duration_ms"`
+}
+
+// BrowseResult is one page of a table, with server-side sorting and the total
+// row count so the dashboard can paginate.
+type BrowseResult struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+	Total   int64    `json:"total"`
+	Offset  int      `json:"offset"`
+	Limit   int      `json:"limit"`
+	OrderBy string   `json:"order_by,omitempty"`
+	Dir     string   `json:"dir,omitempty"`
 }
 
 // SchemaColumn is one column in an ERD table node. Drift, when set, marks how
@@ -121,12 +134,17 @@ type TablesFn func(dbName string) ([]TableInfo, error)
 // safety is enforced by the CLI at the engine level (mode=ro + query_only).
 type QueryFn func(dbName, sql string) (*QueryResult, error)
 
+// BrowseFn returns one paginated, optionally sorted page of a table. The CLI
+// supplies it; it validates the table and sort column to prevent injection.
+type BrowseFn func(dbName, table, orderBy, dir string, limit, offset int) (*BrowseResult, error)
+
 // Server serves the embedded dashboard and its JSON API.
 type Server struct {
 	provider Provider
 	importFn ImportFn
 	tablesFn TablesFn
 	queryFn  QueryFn
+	browseFn BrowseFn
 	schemaFn SchemaFn
 }
 
@@ -143,6 +161,9 @@ func (s *Server) SetDataBrowser(tables TablesFn, query QueryFn) {
 	s.tablesFn = tables
 	s.queryFn = query
 }
+
+// SetTableBrowser enables paginated, sortable table browsing.
+func (s *Server) SetTableBrowser(fn BrowseFn) { s.browseFn = fn }
 
 // SetSchemaProvider enables the interactive ERD.
 func (s *Server) SetSchemaProvider(fn SchemaFn) { s.schemaFn = fn }
@@ -172,6 +193,7 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{
 			"import": s.importFn != nil,
 			"data":   s.tablesFn != nil && s.queryFn != nil,
+			"browse": s.browseFn != nil,
 			"schema": s.schemaFn != nil,
 		})
 	})
@@ -224,6 +246,23 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		res, err := s.queryFn(req.DB, req.SQL)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	})
+
+	// Returns one paginated, optionally sorted page of a table.
+	mux.HandleFunc("/api/browse", func(w http.ResponseWriter, r *http.Request) {
+		if s.browseFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table browser is disabled"})
+			return
+		}
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		res, err := s.browseFn(q.Get("db"), q.Get("table"), q.Get("order"), q.Get("dir"), limit, offset)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return

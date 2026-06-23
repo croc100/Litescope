@@ -136,6 +136,13 @@ Examples:
 					return runReadOnlyQuery(dsn, query)
 				},
 			)
+			srv.SetTableBrowser(func(name, table, orderBy, dir string, limit, offset int) (*dashboard.BrowseResult, error) {
+				dsn, err := resolveDSN(name)
+				if err != nil {
+					return nil, err
+				}
+				return browseTable(dsn, table, orderBy, dir, limit, offset)
+			})
 			// Interactive ERD over the fleet's local databases.
 			srv.SetSchemaProvider(func(name string) (*dashboard.SchemaGraph, error) {
 				dsn, err := resolveDSN(name)
@@ -404,6 +411,108 @@ func listTables(dsn string) ([]dashboard.TableInfo, error) {
 		out = append(out, dashboard.TableInfo{Name: n, Rows: count})
 	}
 	return out, nil
+}
+
+// serveBrowseMaxLimit caps the page size a single browse request may return.
+const serveBrowseMaxLimit = 1000
+
+// quoteIdent wraps a SQLite identifier in double quotes, escaping embedded ones.
+func quoteIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+// browseTable returns one paginated, optionally sorted page of a table. The
+// table and sort column are validated against the live schema so neither can be
+// used for SQL injection; pagination is enforced server-side.
+func browseTable(dsn, table, orderBy, dir string, limit, offset int) (*dashboard.BrowseResult, error) {
+	if strings.TrimSpace(table) == "" {
+		return nil, fmt.Errorf("no table specified")
+	}
+	db, err := openReadOnly(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	// Resolve and validate the table's columns; this also rejects unknown tables.
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+	valid := map[string]bool{}
+	var cols []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		valid[n] = true
+		cols = append(cols, n)
+	}
+	rows.Close()
+	if len(cols) == 0 {
+		return nil, fmt.Errorf("unknown table %q", table)
+	}
+
+	// Sort column must be a real column; direction is normalized to ASC/DESC.
+	if orderBy != "" && !valid[orderBy] {
+		return nil, fmt.Errorf("unknown sort column %q", orderBy)
+	}
+	dir = strings.ToLower(strings.TrimSpace(dir))
+	if dir != "desc" {
+		dir = "asc"
+	}
+
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > serveBrowseMaxLimit {
+		limit = serveBrowseMaxLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	q := "SELECT * FROM " + quoteIdent(table)
+	if orderBy != "" {
+		q += " ORDER BY " + quoteIdent(orderBy) + " " + strings.ToUpper(dir)
+	}
+	q += " LIMIT ? OFFSET ?"
+
+	res := &dashboard.BrowseResult{Offset: offset, Limit: limit, OrderBy: orderBy}
+	if orderBy != "" {
+		res.Dir = dir
+	}
+	_ = db.QueryRow("SELECT count(*) FROM "+quoteIdent(table)).Scan(&res.Total)
+
+	dataRows, err := db.Query(q, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer dataRows.Close()
+	res.Columns, _ = dataRows.Columns()
+	res.Rows = [][]any{}
+	for dataRows.Next() {
+		vals := make([]any, len(res.Columns))
+		ptrs := make([]any, len(res.Columns))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := dataRows.Scan(ptrs...); err != nil {
+			continue
+		}
+		row := make([]any, len(res.Columns))
+		for i, v := range vals {
+			if b, ok := v.([]byte); ok {
+				row[i] = string(b)
+			} else {
+				row[i] = v
+			}
+		}
+		res.Rows = append(res.Rows, row)
+	}
+	return res, dataRows.Err()
 }
 
 // runReadOnlyQuery executes a SQL query against a local database opened
