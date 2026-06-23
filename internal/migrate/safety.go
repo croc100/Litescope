@@ -29,6 +29,43 @@ func (k OpKind) Icon() string {
 	}
 }
 
+// Label returns the lowercase severity name, used by the CI gate (--fail-on).
+func (k OpKind) Label() string {
+	switch k {
+	case OpSafe:
+		return "safe"
+	case OpRisky:
+		return "risky"
+	default:
+		return "destructive"
+	}
+}
+
+// ParseOpKind maps a severity name ("safe"/"risky"/"destructive") to an OpKind.
+func ParseOpKind(s string) (OpKind, error) {
+	switch s {
+	case "safe":
+		return OpSafe, nil
+	case "risky":
+		return OpRisky, nil
+	case "destructive":
+		return OpDestructive, nil
+	default:
+		return 0, fmt.Errorf("unknown severity %q (want safe, risky, or destructive)", s)
+	}
+}
+
+// MaxKind returns the highest severity among the operations (OpSafe for none).
+func MaxKind(ops []Operation) OpKind {
+	max := OpSafe
+	for _, op := range ops {
+		if op.Kind > max {
+			max = op.Kind
+		}
+	}
+	return max
+}
+
 // Operation describes one migration operation with its measured blast radius.
 type Operation struct {
 	Table    string

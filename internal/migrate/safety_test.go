@@ -9,6 +9,35 @@ import (
 	"github.com/croc100/litescope/internal/schema"
 )
 
+func TestParseOpKind(t *testing.T) {
+	cases := map[string]OpKind{"safe": OpSafe, "risky": OpRisky, "destructive": OpDestructive}
+	for in, want := range cases {
+		got, err := ParseOpKind(in)
+		if err != nil || got != want {
+			t.Fatalf("ParseOpKind(%q) = %v, %v; want %v", in, got, err, want)
+		}
+		if got.Label() != in {
+			t.Fatalf("Label round-trip: %q -> %q", in, got.Label())
+		}
+	}
+	if _, err := ParseOpKind("nope"); err == nil {
+		t.Fatal("expected error for unknown severity")
+	}
+}
+
+func TestMaxKind(t *testing.T) {
+	if k := MaxKind(nil); k != OpSafe {
+		t.Fatalf("MaxKind(nil) = %v, want OpSafe", k)
+	}
+	ops := []Operation{{Kind: OpSafe}, {Kind: OpDestructive}, {Kind: OpRisky}}
+	if k := MaxKind(ops); k != OpDestructive {
+		t.Fatalf("MaxKind = %v, want OpDestructive", k)
+	}
+	if k := MaxKind([]Operation{{Kind: OpSafe}, {Kind: OpRisky}}); k != OpRisky {
+		t.Fatalf("MaxKind = %v, want OpRisky", k)
+	}
+}
+
 func TestEstimateRebuildLock(t *testing.T) {
 	cases := []struct {
 		name    string

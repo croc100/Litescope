@@ -61,7 +61,8 @@ Examples:
 // ── declarative schema-as-code ──────────────────────────────────────────────
 
 func cmdMigratePlan() *cobra.Command {
-	var schemaFile, output string
+	var schemaFile, output, failOn string
+	var exitCode bool
 	cmd := &cobra.Command{
 		Use:   "plan <db> --schema <schema.sql>",
 		Short: "Plan the migration to bring a database to a declarative schema (free)",
@@ -72,12 +73,28 @@ it. Shows the SQL and a blast-radius report; does not apply anything.
   litescope migrate plan prod.db --schema schema.sql
   litescope migrate plan prod.db --schema schema.sql -o migration.sql
 
+CI drift gate — fail the build when a database has drifted from its declared
+schema, or when the plan to reconcile it contains dangerous changes:
+
+  litescope migrate plan prod.db --schema schema.sql --exit-code
+  litescope migrate plan prod.db --schema schema.sql --fail-on destructive
+
 Pair with the versioned workflow:
   litescope migrate new sync --from prod.db --schema schema.sql`,
-		Args: cobra.ExactArgs(1),
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true, // CI gate failures shouldn't dump usage
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if schemaFile == "" {
 				return fmt.Errorf("--schema is required")
+			}
+			var threshold migrate.OpKind
+			gate := failOn != ""
+			if gate {
+				k, err := migrate.ParseOpKind(failOn)
+				if err != nil {
+					return err
+				}
+				threshold = k
 			}
 			sqlText, err := os.ReadFile(schemaFile)
 			if err != nil {
@@ -100,7 +117,8 @@ Pair with the versioned workflow:
 			}
 
 			m := migrate.Generate(d, desired)
-			if ops, err := migrate.AnalyzeAll(d, args[0]); err == nil {
+			ops, opsErr := migrate.AnalyzeAll(d, args[0])
+			if opsErr == nil {
 				printBlastRadius(ops)
 			}
 
@@ -109,14 +127,28 @@ Pair with the versioned workflow:
 					return err
 				}
 				fmt.Printf("  %s  Migration written → %s\n\n", styleOK.Render("✓"), output)
-				return nil
+			} else {
+				fmt.Print(m.SQL())
 			}
-			fmt.Print(m.SQL())
+
+			// CI gates. --fail-on trips when the plan contains an operation at or
+			// above the given severity; --exit-code trips on any drift at all.
+			if gate && opsErr == nil {
+				if worst := migrate.MaxKind(ops); worst >= threshold {
+					return fmt.Errorf("%s drift gate: plan contains %s changes (threshold: %s)",
+						args[0], worst.Label(), threshold.Label())
+				}
+			}
+			if exitCode {
+				return fmt.Errorf("%s has drifted from %s (%d change(s))", args[0], schemaFile, len(d.Schema))
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&schemaFile, "schema", "", "declarative schema file (CREATE statements)")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "write SQL to file instead of stdout")
+	cmd.Flags().BoolVar(&exitCode, "exit-code", false, "exit non-zero if the database has drifted from the schema (CI gate)")
+	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit non-zero if the plan contains changes at or above this severity: safe, risky, or destructive")
 	return cmd
 }
 
