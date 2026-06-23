@@ -58,6 +58,39 @@ type QueryResult struct {
 	DurationMs int64    `json:"duration_ms"`
 }
 
+// SchemaColumn is one column in an ERD table node.
+type SchemaColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	PK   bool   `json:"pk"`
+	FK   bool   `json:"fk"`
+}
+
+// SchemaEdge is a foreign-key relationship between two tables.
+type SchemaEdge struct {
+	From   string `json:"from"`   // table holding the foreign key
+	To     string `json:"to"`     // referenced table
+	Column string `json:"column"` // column in From that references To
+}
+
+// SchemaGraph is the entity-relationship graph of one database, rendered as an
+// interactive ERD in the dashboard.
+type SchemaGraph struct {
+	Tables []SchemaTable `json:"tables"`
+	Edges  []SchemaEdge  `json:"edges"`
+}
+
+// SchemaTable is one entity (table) in the ERD.
+type SchemaTable struct {
+	Name    string         `json:"name"`
+	Columns []SchemaColumn `json:"columns"`
+}
+
+// SchemaFn returns the ERD graph of the named database. The CLI supplies it so
+// this package stays decoupled from schema loading; when nil, the ERD is
+// disabled.
+type SchemaFn func(dbName string) (*SchemaGraph, error)
+
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
 // browser is disabled.
@@ -73,6 +106,7 @@ type Server struct {
 	importFn ImportFn
 	tablesFn TablesFn
 	queryFn  QueryFn
+	schemaFn SchemaFn
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -88,6 +122,9 @@ func (s *Server) SetDataBrowser(tables TablesFn, query QueryFn) {
 	s.tablesFn = tables
 	s.queryFn = query
 }
+
+// SetSchemaProvider enables the interactive ERD.
+func (s *Server) SetSchemaProvider(fn SchemaFn) { s.schemaFn = fn }
 
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
@@ -114,7 +151,22 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{
 			"import": s.importFn != nil,
 			"data":   s.tablesFn != nil && s.queryFn != nil,
+			"schema": s.schemaFn != nil,
 		})
+	})
+
+	// Returns the ERD graph (tables, columns, foreign keys) of a database.
+	mux.HandleFunc("/api/schema", func(w http.ResponseWriter, r *http.Request) {
+		if s.schemaFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "ERD is disabled"})
+			return
+		}
+		g, err := s.schemaFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, g)
 	})
 
 	// Lists the browsable tables of a database (read-only).

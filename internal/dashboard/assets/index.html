@@ -140,6 +140,26 @@
   table.result td { padding:7px 12px; border-bottom:1px solid var(--border); color:var(--text); white-space:nowrap; max-width:360px; overflow:hidden; text-overflow:ellipsis; }
   table.result tr:hover td { background:var(--surface); }
   td.null { color:var(--dim); font-style:italic; }
+
+  /* ERD */
+  .erd-canvas { position:relative; height:600px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; overflow:hidden;
+    background-image:radial-gradient(var(--border) 1px, transparent 1px); background-size:22px 22px; }
+  .erd-canvas svg { width:100%; height:100%; display:block; cursor:grab; }
+  .erd-canvas svg.panning { cursor:grabbing; }
+  .erd-node rect.box { fill:var(--surface-2); stroke:var(--border); stroke-width:1; }
+  .erd-node.sel rect.box { stroke:var(--teal); stroke-width:1.5; }
+  .erd-node rect.hdr { fill:#1b2533; }
+  .erd-node .tname { fill:var(--head); font:600 12.5px var(--sans); }
+  .erd-node text.col { fill:var(--text); font:11.5px var(--mono); }
+  .erd-node text.col .pk { fill:var(--gold); }
+  .erd-node .keytag { fill:var(--dim); font:9.5px var(--mono); }
+  .erd-node { cursor:grab; }
+  .erd-node.drag { cursor:grabbing; }
+  .erd-edge { stroke:var(--dim); stroke-width:1.4; fill:none; }
+  .erd-edge.hl { stroke:var(--teal); stroke-width:2; }
+  .erd-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--dim); font-size:13px; }
 </style>
 </head>
 <body>
@@ -176,6 +196,21 @@
     </div>
     <div class="qhist" id="qhist"></div>
     <div id="queryResult"></div>
+  </section>
+</div>
+
+<div class="wrap" id="erdPanel" style="display:none">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Schema — ERD</div><h2>Entity-relationship diagram</h2>
+    <p class="sub">Tables and their foreign-key relationships. Drag tables to rearrange, scroll to zoom, drag the canvas to pan.</p>
+    <div class="data-bar">
+      <select id="erdSelect" class="select"></select>
+      <button class="savebtn" id="erdReset" title="Re-layout the diagram">⟲ Auto-layout</button>
+      <span class="runinfo" id="erdHint"></span>
+    </div>
+    <div class="erd-canvas" id="erdCanvas">
+      <svg id="erdSvg"><g id="erdViewport"><g id="erdEdges"></g><g id="erdNodes"></g></g></svg>
+    </div>
   </section>
 </div>
 
@@ -363,6 +398,7 @@ async function load() {
     CLUSTER_OF = buildClusterMap(data.fingerprint?.clusters || []);
     render();
     syncDataPanel();
+    syncErdPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -592,10 +628,197 @@ $("#sqlBox")?.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); runQuery($("#sqlBox").value); }
 });
 
+// --- Interactive ERD ---
+let SCHEMA_ENABLED = false;
+const SVGNS = "http://www.w3.org/2000/svg";
+let ERD = { nodes: {}, edges: [], view: { x: 0, y: 0, k: 1 } };
+
+function syncErdPanel() {
+  if (!SCHEMA_ENABLED || !STATE) return;
+  const sel = $("#erdSelect");
+  const names = (STATE.health?.results || []).map(r => ({ name: r.database, remote: !!r.report?.remote }));
+  const want = names.map(n => n.name).join("");
+  if (sel.dataset.sig !== want) {
+    const prev = sel.value;
+    sel.innerHTML = names.map(n =>
+      `<option value="${esc(n.name)}"${n.remote ? " disabled" : ""}>${esc(n.name)}${n.remote ? " (remote — n/a)" : ""}</option>`).join("");
+    sel.dataset.sig = want;
+    if (prev && names.some(n => n.name === prev && !n.remote)) sel.value = prev;
+    loadErd();
+  }
+}
+
+async function loadErd() {
+  const db = $("#erdSelect").value;
+  const hint = $("#erdHint");
+  if (!db) return;
+  hint.textContent = "loading…";
+  try {
+    const res = await fetch("/api/schema?db=" + encodeURIComponent(db));
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+    buildErd(data);
+    const tn = (data.tables || []).length, en = (data.edges || []).length;
+    hint.textContent = `${tn} table${tn === 1 ? "" : "s"} · ${en} relationship${en === 1 ? "" : "s"}`;
+  } catch (e) {
+    hint.textContent = e.message;
+    $("#erdNodes").innerHTML = ""; $("#erdEdges").innerHTML = "";
+  }
+}
+
+const ERD_W = 200, ERD_ROW = 19, ERD_HDR = 30, ERD_PAD = 10;
+
+function layoutErd(tables) {
+  // Simple columnar grid: fill columns top-to-bottom, wrapping by available height.
+  const nodes = {};
+  const gapX = 70, gapY = 40;
+  let x = 30, y = 30, colMax = 0, colH = 0;
+  const limit = 560;
+  for (const t of tables) {
+    const h = ERD_HDR + t.columns.length * ERD_ROW + ERD_PAD;
+    if (colH && colH + h > limit) { x += ERD_W + gapX; y = 30; colH = 0; }
+    nodes[t.name] = { x, y, w: ERD_W, h, cols: t.columns };
+    y += h + gapY; colH += h + gapY; colMax = Math.max(colMax, h);
+  }
+  return nodes;
+}
+
+function buildErd(graph) {
+  ERD.nodes = layoutErd(graph.tables || []);
+  ERD.edges = (graph.edges || []).filter(e => ERD.nodes[e.from] && ERD.nodes[e.to]);
+  ERD.view = { x: 0, y: 0, k: 1 };
+  renderErdNodes(graph.tables || []);
+  applyErdView();
+  routeEdges();
+}
+
+function renderErdNodes(tables) {
+  const g = $("#erdNodes");
+  g.innerHTML = "";
+  for (const t of tables) {
+    const n = ERD.nodes[t.name];
+    const grp = document.createElementNS(SVGNS, "g");
+    grp.setAttribute("class", "erd-node");
+    grp.setAttribute("data-name", t.name);
+    grp.setAttribute("transform", `translate(${n.x},${n.y})`);
+    let inner = `<rect class="box" width="${n.w}" height="${n.h}" rx="7"></rect>` +
+      `<rect class="hdr" width="${n.w}" height="${ERD_HDR}" rx="7"></rect>` +
+      `<rect class="hdr" y="${ERD_HDR - 7}" width="${n.w}" height="7"></rect>` +
+      `<text class="tname" x="11" y="20">${esc(t.name)}</text>`;
+    t.columns.forEach((c, i) => {
+      const cy = ERD_HDR + ERD_PAD / 2 + i * ERD_ROW + 12;
+      const key = c.pk ? `<tspan class="keytag" style="fill:var(--gold)">PK </tspan>` : (c.fk ? `<tspan class="keytag">FK </tspan>` : "");
+      inner += `<text class="col" x="11" y="${cy}">${key}${esc(c.name)}<tspan class="keytag"> ${esc(c.type || "")}</tspan></text>`;
+    });
+    grp.innerHTML = inner;
+    g.appendChild(grp);
+  }
+}
+
+function edgePath(a, b) {
+  // From right edge of source to left edge of target (or reversed if target is left).
+  const ay = a.y + a.h / 2, by = b.y + b.h / 2;
+  let ax, bx, c1, c2;
+  if (b.x > a.x) { ax = a.x + a.w; bx = b.x; c1 = ax + 50; c2 = bx - 50; }
+  else { ax = a.x; bx = b.x + b.w; c1 = ax - 50; c2 = bx + 50; }
+  return `M ${ax} ${ay} C ${c1} ${ay}, ${c2} ${by}, ${bx} ${by}`;
+}
+
+function routeEdges() {
+  const g = $("#erdEdges");
+  g.innerHTML = "";
+  for (const e of ERD.edges) {
+    const a = ERD.nodes[e.from], b = ERD.nodes[e.to];
+    const p = document.createElementNS(SVGNS, "path");
+    p.setAttribute("class", "erd-edge");
+    p.setAttribute("d", edgePath(a, b));
+    p.setAttribute("data-from", e.from);
+    p.setAttribute("data-to", e.to);
+    g.appendChild(p);
+  }
+}
+
+function applyErdView() {
+  const v = ERD.view;
+  $("#erdViewport").setAttribute("transform", `translate(${v.x},${v.y}) scale(${v.k})`);
+}
+
+// Node dragging + canvas pan + wheel zoom.
+function initErdInteractions() {
+  const svg = $("#erdSvg");
+  let mode = null, start = null, node = null;
+
+  svg.addEventListener("pointerdown", (e) => {
+    const grp = e.target.closest(".erd-node");
+    if (grp) {
+      mode = "node"; node = grp;
+      const n = ERD.nodes[grp.getAttribute("data-name")];
+      start = { mx: e.clientX, my: e.clientY, ox: n.x, oy: n.y };
+      grp.classList.add("drag");
+      // Highlight connected edges.
+      const name = grp.getAttribute("data-name");
+      $("#erdNodes").querySelectorAll(".erd-node").forEach(x => x.classList.remove("sel"));
+      grp.classList.add("sel");
+      $("#erdEdges").querySelectorAll(".erd-edge").forEach(p =>
+        p.classList.toggle("hl", p.getAttribute("data-from") === name || p.getAttribute("data-to") === name));
+    } else {
+      mode = "pan"; start = { mx: e.clientX, my: e.clientY, ox: ERD.view.x, oy: ERD.view.y };
+      svg.classList.add("panning");
+    }
+    svg.setPointerCapture(e.pointerId);
+  });
+
+  svg.addEventListener("pointermove", (e) => {
+    if (!mode) return;
+    if (mode === "node") {
+      const n = ERD.nodes[node.getAttribute("data-name")];
+      n.x = start.ox + (e.clientX - start.mx) / ERD.view.k;
+      n.y = start.oy + (e.clientY - start.my) / ERD.view.k;
+      node.setAttribute("transform", `translate(${n.x},${n.y})`);
+      routeEdges();
+      $("#erdEdges").querySelectorAll(".erd-edge").forEach(p => {
+        const nm = node.getAttribute("data-name");
+        if (p.getAttribute("data-from") === nm || p.getAttribute("data-to") === nm) p.classList.add("hl");
+      });
+    } else {
+      ERD.view.x = start.ox + (e.clientX - start.mx);
+      ERD.view.y = start.oy + (e.clientY - start.my);
+      applyErdView();
+    }
+  });
+
+  const end = (e) => {
+    if (node) node.classList.remove("drag");
+    svg.classList.remove("panning");
+    mode = null; node = null; start = null;
+  };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const v = ERD.view;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const k = Math.min(2.5, Math.max(0.25, v.k * factor));
+    // Zoom toward the cursor.
+    v.x = mx - (mx - v.x) * (k / v.k);
+    v.y = my - (my - v.y) * (k / v.k);
+    v.k = k;
+    applyErdView();
+  }, { passive: false });
+}
+
+$("#erdSelect")?.addEventListener("change", loadErd);
+$("#erdReset")?.addEventListener("click", () => loadErd());
+
 fetch("/api/capabilities").then(r => r.json()).then(c => {
   IMPORT_ENABLED = !!c.import;
   DATA_ENABLED = !!c.data;
+  SCHEMA_ENABLED = !!c.schema;
   if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); renderHistory(); }
+  if (SCHEMA_ENABLED) { $("#erdPanel").style.display = ""; initErdInteractions(); syncErdPanel(); }
 }).catch(() => {});
 
 load();

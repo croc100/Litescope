@@ -15,6 +15,7 @@ import (
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/importer"
 	"github.com/croc100/litescope/internal/license"
+	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 	_ "modernc.org/sqlite"
 )
@@ -135,6 +136,14 @@ Examples:
 					return runReadOnlyQuery(dsn, query)
 				},
 			)
+			// Interactive ERD over the fleet's local databases.
+			srv.SetSchemaProvider(func(name string) (*dashboard.SchemaGraph, error) {
+				dsn, err := resolveDSN(name)
+				if err != nil {
+					return nil, err
+				}
+				return schemaGraph(dsn)
+			})
 
 			url := "http://" + addr
 
@@ -228,6 +237,35 @@ func openReadOnly(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// schemaGraph loads the ERD graph (tables, columns, foreign keys) of a local
+// database. Remote DSNs are rejected — the ERD is a local-only feature.
+func schemaGraph(dsn string) (*dashboard.SchemaGraph, error) {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("ERD supports local SQLite only (this database is remote)")
+	}
+	s, err := schema.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	g := &dashboard.SchemaGraph{}
+	for _, t := range s.Tables {
+		fkCols := make(map[string]bool, len(t.ForeignKeys))
+		for _, fk := range t.ForeignKeys {
+			fkCols[fk.From] = true
+			g.Edges = append(g.Edges, dashboard.SchemaEdge{From: t.Name, To: fk.Table, Column: fk.From})
+		}
+		st := dashboard.SchemaTable{Name: t.Name}
+		for _, c := range t.Columns {
+			st.Columns = append(st.Columns, dashboard.SchemaColumn{
+				Name: c.Name, Type: c.Type, PK: c.PK > 0, FK: fkCols[c.Name],
+			})
+		}
+		g.Tables = append(g.Tables, st)
+	}
+	return g, nil
 }
 
 // listTables returns the user tables of a local database with row counts,

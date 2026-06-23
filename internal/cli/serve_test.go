@@ -86,3 +86,59 @@ func TestRunReadOnlyQuery_EmptyRejected(t *testing.T) {
 		t.Fatal("expected empty query to be rejected")
 	}
 }
+
+func TestSchemaGraph(t *testing.T) {
+	dsn := filepath.Join(t.TempDir(), "erd.db")
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT);
+		CREATE TABLE orders(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), total REAL);`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	g, err := schemaGraph(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Tables) != 2 {
+		t.Fatalf("want 2 tables, got %d", len(g.Tables))
+	}
+	if len(g.Edges) != 1 {
+		t.Fatalf("want 1 edge, got %d: %+v", len(g.Edges), g.Edges)
+	}
+	e := g.Edges[0]
+	if e.From != "orders" || e.To != "users" || e.Column != "user_id" {
+		t.Fatalf("unexpected edge: %+v", e)
+	}
+	// The PK and FK flags must be set on the right columns.
+	var orders *struct {
+		pk, fk bool
+	}
+	for _, tb := range g.Tables {
+		if tb.Name != "orders" {
+			continue
+		}
+		orders = &struct{ pk, fk bool }{}
+		for _, c := range tb.Columns {
+			if c.Name == "id" && c.PK {
+				orders.pk = true
+			}
+			if c.Name == "user_id" && c.FK {
+				orders.fk = true
+			}
+		}
+	}
+	if orders == nil || !orders.pk || !orders.fk {
+		t.Fatalf("orders PK/FK flags wrong: %+v", orders)
+	}
+}
+
+func TestSchemaGraph_RejectsRemote(t *testing.T) {
+	if _, err := schemaGraph("turso://tok@org/db"); err == nil {
+		t.Fatal("expected remote DSN to be rejected")
+	}
+}
