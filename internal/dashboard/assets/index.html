@@ -123,6 +123,17 @@
   .run:hover { filter:brightness(1.08); }
   .run:disabled { opacity:.5; cursor:default; }
   .runinfo { font-size:12px; color:var(--dim); font-family:var(--mono); }
+  .savebtn { font-family:var(--sans); font-size:13px; font-weight:600; color:var(--text); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:8px 14px; cursor:pointer; }
+  .savebtn:hover { border-color:var(--teal); color:var(--head); }
+  .qhist { margin-top:14px; }
+  .qhist .qhlabel { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 7px; }
+  .qhist .qhrow { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .qchip { display:inline-flex; align-items:center; gap:7px; max-width:340px; font-family:var(--mono); font-size:12px; color:var(--text); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:5px 9px; cursor:pointer; transition:border-color .1s; }
+  .qchip:hover { border-color:var(--teal); color:var(--head); }
+  .qchip .qtext { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .qchip .qstar { color:var(--teal); }
+  .qchip .qx { color:var(--dim); font-size:13px; line-height:1; padding:0 1px; }
+  .qchip .qx:hover { color:var(--danger); }
   .resultwrap { margin-top:18px; overflow:auto; border:1px solid var(--border); border-radius:10px; max-height:60vh; }
   table.result { border-collapse:collapse; width:100%; font-family:var(--mono); font-size:12.5px; }
   table.result th { position:sticky; top:0; background:var(--surface-2); color:var(--head); text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; font-weight:600; }
@@ -160,8 +171,10 @@
     <textarea id="sqlBox" class="sqlbox" spellcheck="false" placeholder="SELECT * FROM …  (read-only)"></textarea>
     <div class="runrow">
       <button class="run" id="runBtn">Run ▸</button>
+      <button class="savebtn" id="saveBtn" title="Bookmark this query">★ Save</button>
       <span class="runinfo" id="runInfo">⌘/Ctrl + Enter to run</span>
     </div>
+    <div class="qhist" id="qhist"></div>
     <div id="queryResult"></div>
   </section>
 </div>
@@ -491,6 +504,7 @@ async function runQuery(sql) {
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
     renderResult(data);
+    recordRecent(sql);
     $("#runInfo").textContent = "⌘/Ctrl + Enter to run";
   } catch (e) {
     $("#queryResult").innerHTML = `<div class="err" style="margin-top:14px">${esc(e.message)}</div>`;
@@ -499,6 +513,68 @@ async function runQuery(sql) {
     $("#runBtn").disabled = false;
   }
 }
+
+// --- Query history & saved queries (client-side, localStorage) ---
+const QH_RECENT = "litescope.qhist.recent";
+const QH_SAVED = "litescope.qhist.saved";
+const QH_MAX = 15;
+
+function qhLoad(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+}
+function qhStore(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch {}
+}
+function recordRecent(sql) {
+  sql = (sql || "").trim();
+  if (!sql) return;
+  let list = qhLoad(QH_RECENT).filter(q => q !== sql);
+  list.unshift(sql);
+  if (list.length > QH_MAX) list = list.slice(0, QH_MAX);
+  qhStore(QH_RECENT, list);
+  renderHistory();
+}
+function saveCurrent() {
+  const sql = $("#sqlBox").value.trim();
+  if (!sql) { toast("Nothing to save", "err"); return; }
+  const list = qhLoad(QH_SAVED);
+  if (list.includes(sql)) { toast("Already saved", "err"); return; }
+  list.unshift(sql);
+  qhStore(QH_SAVED, list);
+  renderHistory();
+  toast("Query saved");
+}
+function deleteFrom(key, sql) {
+  qhStore(key, qhLoad(key).filter(q => q !== sql));
+  renderHistory();
+}
+function qhChips(key, list, starred) {
+  return list.map(sql => {
+    const one = sql.replace(/\s+/g, " ").trim();
+    return `<span class="qchip" data-key="${key}" data-sql="${esc(sql)}" title="${esc(one)}">` +
+      (starred ? `<span class="qstar">★</span>` : "") +
+      `<span class="qtext">${esc(one)}</span>` +
+      `<span class="qx" data-del="1">✕</span></span>`;
+  }).join("");
+}
+function renderHistory() {
+  const saved = qhLoad(QH_SAVED), recent = qhLoad(QH_RECENT);
+  let h = "";
+  if (saved.length) h += `<div class="qhlabel">Saved</div><div class="qhrow">${qhChips(QH_SAVED, saved, true)}</div>`;
+  if (recent.length) h += `<div class="qhlabel">Recent</div><div class="qhrow">${qhChips(QH_RECENT, recent, false)}</div>`;
+  $("#qhist").innerHTML = h;
+}
+$("#saveBtn")?.addEventListener("click", saveCurrent);
+$("#qhist")?.addEventListener("click", (e) => {
+  const chip = e.target.closest(".qchip");
+  if (!chip) return;
+  if (e.target.closest("[data-del]")) {
+    deleteFrom(chip.getAttribute("data-key"), chip.getAttribute("data-sql"));
+    return;
+  }
+  $("#sqlBox").value = chip.getAttribute("data-sql");
+  $("#sqlBox").focus();
+});
 
 $("#dbSelect")?.addEventListener("change", loadTables);
 $("#tableList")?.addEventListener("click", (e) => {
@@ -519,7 +595,7 @@ $("#sqlBox")?.addEventListener("keydown", (e) => {
 fetch("/api/capabilities").then(r => r.json()).then(c => {
   IMPORT_ENABLED = !!c.import;
   DATA_ENABLED = !!c.data;
-  if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); }
+  if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); renderHistory(); }
 }).catch(() => {});
 
 load();
