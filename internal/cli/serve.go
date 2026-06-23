@@ -187,6 +187,8 @@ func importDropped(dir, filename string, data io.Reader) (name, dsn, table strin
 		res, err = importer.ImportCSV(db, data, opt)
 	case "json":
 		res, err = importer.ImportJSON(db, data, opt)
+	case "xlsx":
+		res, err = importer.ImportXLSX(db, data, opt)
 	default:
 		res, err = importer.ImportCSV(db, data, opt)
 	}

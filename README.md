@@ -170,14 +170,16 @@ litescope dump app.db --table users    # one table and its data
 
 ---
 
-### `import` — Turn a CSV/TSV/JSON file into SQLite (free)
+### `import` — Turn a CSV/TSV/JSON/Excel file into SQLite (free)
 
 Drop a spreadsheet or data export into a real, queryable SQLite database — types
 inferred, header detected, one command. The format is read from the extension
-(`.csv` / `.tsv` / `.json`) unless you override it with `--format`.
+(`.csv` / `.tsv` / `.json` / `.xlsx`) unless you override it with `--format`.
+Excel imports read the first sheet.
 
 ```bash
 litescope import sales.csv                          # -> sales.db, table "sales"
+litescope import budget.xlsx                         # first sheet -> budget.db
 litescope import sales.csv --to shop.db --table orders
 litescope import data.tsv --delimiter ';'
 litescope import records.json --to app.db --replace # drop & recreate table
@@ -192,11 +194,14 @@ name; both are overridable. Use `--no-header` when a CSV/TSV has no header row.
 ### `export` — Stream a table or query out of SQLite (free)
 
 The data-out half: import a spreadsheet, fix it, export it back. Dumps an entire
-table — or any read-only query — to CSV, TSV, or JSON. The database is opened
-read-only; output goes to stdout unless `-o` is given.
+table — or any read-only query — to CSV, TSV, JSON, or Excel (`.xlsx`). The
+database is opened read-only; output goes to stdout unless `-o` is given (Excel
+is binary and requires `-o`). When `-o` ends in a known extension the format is
+inferred.
 
 ```bash
 litescope export shop.db --table orders > orders.csv
+litescope export shop.db --table orders -o orders.xlsx
 litescope export shop.db --table orders --format json -o orders.json
 litescope export shop.db --query "SELECT city, COUNT(*) FROM users GROUP BY city"
 ```

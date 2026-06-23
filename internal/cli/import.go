@@ -23,17 +23,18 @@ func cmdImport() *cobra.Command {
 	var delimiter string
 
 	cmd := &cobra.Command{
-		Use:   "import <file.csv|tsv|json>",
-		Short: "Import a CSV / TSV / JSON file into a SQLite table (with type inference)",
+		Use:   "import <file.csv|tsv|json|xlsx>",
+		Short: "Import a CSV / TSV / JSON / Excel file into a SQLite table (with type inference)",
 		Long: `Turn a spreadsheet or data file into a real SQLite database — type-inferred,
 header-aware, one command.
 
-Format is detected from the extension (.csv / .tsv / .json) unless --format is
-given. The destination database defaults to <file>.db and the table to the file's
-name; both can be overridden.
+Format is detected from the extension (.csv / .tsv / .json / .xlsx) unless
+--format is given. The destination database defaults to <file>.db and the table
+to the file's name; both can be overridden. Excel imports read the first sheet.
 
 Examples:
   litescope import sales.csv                       # -> sales.db, table "sales"
+  litescope import budget.xlsx                      # first sheet -> budget.db
   litescope import sales.csv --to shop.db --table orders
   litescope import data.tsv --append
   litescope import records.json --to app.db --replace`,
@@ -92,8 +93,10 @@ Examples:
 				res, err = importer.ImportCSV(db, f, opt)
 			case "json":
 				res, err = importer.ImportJSON(db, f, opt)
+			case "xlsx":
+				res, err = importer.ImportXLSX(db, f, opt)
 			default:
-				return fmt.Errorf("unknown format %q (use csv, tsv, or json)", format)
+				return fmt.Errorf("unknown format %q (use csv, tsv, json, or xlsx)", format)
 			}
 			if err != nil {
 				return err
@@ -110,7 +113,7 @@ Examples:
 
 	cmd.Flags().StringVar(&toPath, "to", "", "destination database file (default <file>.db)")
 	cmd.Flags().StringVar(&table, "table", "", "destination table name (default from filename)")
-	cmd.Flags().StringVarP(&format, "format", "f", "auto", "input format: auto|csv|tsv|json")
+	cmd.Flags().StringVarP(&format, "format", "f", "auto", "input format: auto|csv|tsv|json|xlsx")
 	cmd.Flags().BoolVar(&replace, "replace", false, "drop and recreate the table if it exists")
 	cmd.Flags().BoolVar(&appendMode, "append", false, "append into an existing table")
 	cmd.Flags().BoolVar(&noHeader, "no-header", false, "CSV/TSV has no header row (columns named col1, col2, …)")
@@ -124,6 +127,8 @@ func detectFormat(path string) string {
 		return "tsv"
 	case ".json":
 		return "json"
+	case ".xlsx":
+		return "xlsx"
 	default:
 		return "csv"
 	}

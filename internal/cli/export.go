@@ -18,15 +18,18 @@ func cmdExport() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "export <db>",
-		Short: "Export a table or query to CSV / TSV / JSON",
+		Short: "Export a table or query to CSV / TSV / JSON / Excel",
 		Long: `Stream a whole table — or any read-only query — out of a SQLite database to
-CSV, TSV, or JSON. The data-out half of Litescope: import a spreadsheet, fix it,
-export it back.
+CSV, TSV, JSON, or Excel (.xlsx). The data-out half of Litescope: import a
+spreadsheet, fix it, export it back.
 
-The database is opened read-only. Output goes to stdout unless -o is given.
+The database is opened read-only. Output goes to stdout unless -o is given; when
+-o ends in a known extension the format is inferred. Excel output is binary and
+requires -o.
 
 Examples:
   litescope export shop.db --table orders > orders.csv
+  litescope export shop.db --table orders -o orders.xlsx
   litescope export shop.db --table orders --format json -o orders.json
   litescope export shop.db --query "SELECT city, COUNT(*) FROM users GROUP BY city"`,
 		Args: cobra.ExactArgs(1),
@@ -39,6 +42,17 @@ Examples:
 			q := query
 			if table != "" {
 				q = `SELECT * FROM "` + sqlEscapeIdent(table) + `"`
+			}
+
+			// Infer format from the output extension when -o is given and the
+			// format flag is left at its default.
+			if outPath != "" && !cmd.Flags().Changed("format") {
+				if f := detectFormat(outPath); f != "" {
+					format = f
+				}
+			}
+			if format == "xlsx" && outPath == "" {
+				return fmt.Errorf("Excel output is binary — provide -o <file.xlsx>")
 			}
 
 			db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
@@ -58,7 +72,12 @@ Examples:
 				defer out.Close()
 			}
 
-			n, err := exporter.Export(db, q, format, out)
+			var n int64
+			if format == "xlsx" {
+				n, err = exporter.ExportXLSX(db, q, out)
+			} else {
+				n, err = exporter.Export(db, q, format, out)
+			}
 			if err != nil {
 				return err
 			}
@@ -73,7 +92,7 @@ Examples:
 
 	cmd.Flags().StringVar(&table, "table", "", "export this entire table")
 	cmd.Flags().StringVar(&query, "query", "", "export the result of a read-only SQL query")
-	cmd.Flags().StringVarP(&format, "format", "f", "csv", "output format: csv|tsv|json")
+	cmd.Flags().StringVarP(&format, "format", "f", "csv", "output format: csv|tsv|json|xlsx")
 	cmd.Flags().StringVarP(&outPath, "output", "o", "", "write to this file (default stdout)")
 	return cmd
 }
