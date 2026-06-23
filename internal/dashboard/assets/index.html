@@ -152,6 +152,30 @@
   .pager select { background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--text); padding:3px 6px; font-family:var(--mono); font-size:12px; }
   .pager .range { color:var(--head); }
 
+  /* Visual query builder */
+  .qb { border:1px solid var(--border); border-radius:10px; background:var(--surface); padding:14px 16px; margin:12px 0; }
+  .qb-grid { display:grid; grid-template-columns:auto 1fr; gap:12px 14px; align-items:start; }
+  .qb-grid > .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); padding-top:7px; }
+  .qb-cols { display:flex; flex-wrap:wrap; gap:6px; }
+  .qb-cols label { font-family:var(--mono); font-size:12px; color:var(--text); background:var(--surface-2);
+    border:1px solid var(--border); border-radius:7px; padding:4px 9px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .qb-cols label.on { border-color:var(--teal); color:var(--head); }
+  .qb-cols input { accent-color:var(--teal); }
+  .qb-conds { display:flex; flex-direction:column; gap:8px; }
+  .qb-cond { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .qb-cond select, .qb-cond input, .qb-row select, .qb-row input {
+    background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--text);
+    padding:5px 8px; font-family:var(--mono); font-size:12px; }
+  .qb-cond .val { min-width:140px; }
+  .qb-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .qb .xbtn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--dim); cursor:pointer; padding:3px 8px; font-size:12px; }
+  .qb .xbtn:hover { border-color:var(--danger); color:var(--danger); }
+  .qb .addbtn { background:var(--surface-2); border:1px dashed var(--border); border-radius:7px; color:var(--dim);
+    cursor:pointer; padding:4px 11px; font-size:12px; font-family:var(--mono); }
+  .qb .addbtn:hover { border-color:var(--teal); color:var(--teal); }
+  .qb-foot { display:flex; gap:10px; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+  .qb-foot .limit { width:80px; }
+
   /* ERD */
   .erd-canvas { position:relative; height:600px; background:var(--surface);
     border:1px solid var(--border); border-radius:12px; overflow:hidden;
@@ -222,9 +246,34 @@
       <span class="runinfo" id="dataHint"></span>
     </div>
     <div class="tablist" id="tableList"></div>
+    <div class="qb" id="qb" style="display:none">
+      <div class="qb-grid">
+        <span class="lbl">From</span>
+        <div class="qb-row"><select id="qbTable" class="select"></select></div>
+        <span class="lbl">Select</span>
+        <div class="qb-cols" id="qbCols"></div>
+        <span class="lbl">Where</span>
+        <div>
+          <div class="qb-conds" id="qbConds"></div>
+          <button class="addbtn" id="qbAdd" style="margin-top:8px">+ condition</button>
+        </div>
+        <span class="lbl">Order by</span>
+        <div class="qb-row">
+          <select id="qbOrder"></select>
+          <select id="qbDir"><option value="ASC">ASC</option><option value="DESC">DESC</option></select>
+        </div>
+      </div>
+      <div class="qb-foot">
+        <span class="lbl" style="padding:0">Limit</span>
+        <input id="qbLimit" class="limit" type="number" min="1" value="100" />
+        <button class="run" id="qbApply">Build &amp; Run ▸</button>
+        <span class="runinfo">composes read-only SQL below</span>
+      </div>
+    </div>
     <textarea id="sqlBox" class="sqlbox" spellcheck="false" placeholder="SELECT * FROM …  (read-only)"></textarea>
     <div class="runrow">
       <button class="run" id="runBtn">Run ▸</button>
+      <button class="savebtn" id="qbToggle" title="Build a query visually">⚒ Build</button>
       <button class="savebtn" id="saveBtn" title="Bookmark this query">★ Save</button>
       <span class="runinfo" id="runInfo">⌘/Ctrl + Enter to run</span>
     </div>
@@ -738,6 +787,124 @@ $("#queryResult")?.addEventListener("change", (e) => {
     BROWSE.offset = 0;
     loadBrowse();
   }
+});
+
+// --- Visual query builder ---
+let QB_COLS = {};   // table -> [column names], loaded from /api/schema
+const QB_OPS = ["=", "!=", "<", "<=", ">", ">=", "LIKE", "IS NULL", "IS NOT NULL"];
+
+async function qbLoadSchema() {
+  const db = $("#dbSelect").value;
+  QB_COLS = {};
+  if (!db) return;
+  try {
+    const res = await fetch("/api/schema?db=" + encodeURIComponent(db));
+    const data = await res.json();
+    if (res.ok && !data.error) {
+      for (const t of (data.tables || [])) {
+        if (t.ghost) continue;
+        QB_COLS[t.name] = (t.columns || []).filter(c => c.drift !== "missing").map(c => c.name);
+      }
+    }
+  } catch {}
+}
+
+function qbColOptions() {
+  const t = $("#qbTable").value;
+  return (QB_COLS[t] || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+}
+
+function qbCondRow() {
+  const div = document.createElement("div");
+  div.className = "qb-cond";
+  div.innerHTML =
+    `<select class="qb-col">${qbColOptions()}</select>` +
+    `<select class="qb-op">${QB_OPS.map(o => `<option>${o}</option>`).join("")}</select>` +
+    `<input class="val" placeholder="value" />` +
+    `<button class="xbtn" data-del>✕</button>`;
+  return div;
+}
+
+function qbRebuild() {
+  const t = $("#qbTable").value;
+  const cols = QB_COLS[t] || [];
+  // Column checkboxes (all on = SELECT *).
+  $("#qbCols").innerHTML = cols.map(c =>
+    `<label class="on"><input type="checkbox" checked value="${esc(c)}" />${esc(c)}</label>`).join("");
+  // Order-by options.
+  $("#qbOrder").innerHTML = `<option value="">(none)</option>` + qbColOptions();
+  // Reset conditions to a single empty row.
+  $("#qbConds").innerHTML = "";
+  $("#qbConds").appendChild(qbCondRow());
+}
+
+function qbPopulate() {
+  const tables = Object.keys(QB_COLS).sort();
+  $("#qbTable").innerHTML = tables.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  if (ACTIVE_TABLE && QB_COLS[ACTIVE_TABLE]) $("#qbTable").value = ACTIVE_TABLE;
+  qbRebuild();
+}
+
+function qbQuote(id) { return `"${id.replace(/"/g, '""')}"`; }
+function qbValue(raw) {
+  const v = raw.trim();
+  if (v === "") return "''";
+  if (/^-?\d+(\.\d+)?$/.test(v)) return v;            // numeric literal
+  return `'${v.replace(/'/g, "''")}'`;                 // quoted string
+}
+
+function qbBuildSQL() {
+  const t = $("#qbTable").value;
+  if (!t) return "";
+  const checked = [...$("#qbCols").querySelectorAll("input")].filter(i => i.checked).map(i => i.value);
+  const total = (QB_COLS[t] || []).length;
+  const sel = (checked.length === 0 || checked.length === total) ? "*" : checked.map(qbQuote).join(", ");
+  let sql = `SELECT ${sel} FROM ${qbQuote(t)}`;
+
+  const conds = [];
+  for (const row of $("#qbConds").querySelectorAll(".qb-cond")) {
+    const col = row.querySelector(".qb-col").value;
+    const op = row.querySelector(".qb-op").value;
+    const val = row.querySelector(".val").value;
+    if (!col) continue;
+    if (op === "IS NULL" || op === "IS NOT NULL") conds.push(`${qbQuote(col)} ${op}`);
+    else if (val.trim() !== "") conds.push(`${qbQuote(col)} ${op} ${qbValue(val)}`);
+  }
+  if (conds.length) sql += `\n  WHERE ${conds.join("\n    AND ")}`;
+
+  const ord = $("#qbOrder").value;
+  if (ord) sql += `\n  ORDER BY ${qbQuote(ord)} ${$("#qbDir").value}`;
+
+  const lim = parseInt($("#qbLimit").value, 10);
+  if (lim > 0) sql += `\n  LIMIT ${lim}`;
+  return sql + ";";
+}
+
+$("#qbToggle")?.addEventListener("click", async () => {
+  const qb = $("#qb");
+  const opening = qb.style.display === "none";
+  qb.style.display = opening ? "" : "none";
+  $("#qbToggle").classList.toggle("active", opening);
+  if (opening) { await qbLoadSchema(); qbPopulate(); }
+});
+$("#qbTable")?.addEventListener("change", qbRebuild);
+$("#qbCols")?.addEventListener("change", (e) => {
+  const lbl = e.target.closest("label");
+  if (lbl) lbl.classList.toggle("on", e.target.checked);
+});
+$("#qbConds")?.addEventListener("click", (e) => {
+  if (e.target.closest("[data-del]")) {
+    const rows = $("#qbConds").querySelectorAll(".qb-cond");
+    if (rows.length > 1) e.target.closest(".qb-cond").remove();
+    else { e.target.closest(".qb-cond").querySelector(".val").value = ""; }
+  }
+});
+$("#qbAdd")?.addEventListener("click", () => $("#qbConds").appendChild(qbCondRow()));
+$("#qbApply")?.addEventListener("click", () => {
+  const sql = qbBuildSQL();
+  if (!sql) { toast("Pick a table first", "err"); return; }
+  $("#sqlBox").value = sql;
+  runQuery(sql);
 });
 
 $("#dbSelect")?.addEventListener("change", loadTables);
