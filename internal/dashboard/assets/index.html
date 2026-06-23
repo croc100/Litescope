@@ -158,6 +158,29 @@
   .erd-node.drag { cursor:grabbing; }
   .erd-edge { stroke:var(--dim); stroke-width:1.4; fill:none; }
   .erd-edge.hl { stroke:var(--teal); stroke-width:2; }
+  /* Fingerprint drift overlay on the ERD */
+  .erd-node.drift rect.box { stroke:var(--gold); stroke-width:1.5; }
+  .erd-node.drift rect.hdr { fill:#332b14; }
+  .erd-node.ghost rect.box { fill:none; stroke:var(--dim); stroke-width:1.3; stroke-dasharray:5 4; }
+  .erd-node.ghost rect.hdr { fill:rgba(120,130,145,0.12); }
+  .erd-node.ghost .tname, .erd-node.ghost text.col { fill:var(--dim); }
+  .erd-node text.col.added { fill:var(--gold); }
+  .erd-node text.col.changed { fill:#e08c5a; }
+  .erd-node text.col.missing { fill:var(--dim); text-decoration:line-through; }
+  .erd-node .drifttag { font:600 8.5px var(--sans); }
+  .fp-banner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px;
+    padding:9px 13px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:12.5px; }
+  .fp-banner.canon { border-color:rgba(0,212,170,0.4); }
+  .fp-banner.drift { border-color:rgba(226,201,126,0.5); }
+  .fp-banner .id { font-family:var(--mono); color:var(--head); }
+  .fp-banner .tag { font-size:10px; font-weight:600; text-transform:uppercase; padding:1px 7px; border-radius:999px; }
+  .fp-banner.canon .tag { background:rgba(0,212,170,0.15); color:var(--teal); }
+  .fp-banner.drift .tag { background:rgba(226,201,126,0.15); color:var(--gold); }
+  .fp-banner .sep { color:var(--border); }
+  .fp-banner .muted { color:var(--dim); }
+  .fp-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--dim); margin-left:auto; }
+  .fp-legend i { font-style:normal; }
+  .fp-legend .sw { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:middle; }
   .erd-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:var(--dim); font-size:13px; }
 </style>
@@ -208,6 +231,7 @@
       <button class="savebtn" id="erdReset" title="Re-layout the diagram">⟲ Auto-layout</button>
       <span class="runinfo" id="erdHint"></span>
     </div>
+    <div id="fpBanner"></div>
     <div class="erd-canvas" id="erdCanvas">
       <svg id="erdSvg"><g id="erdViewport"><g id="erdEdges"></g><g id="erdNodes"></g></g></svg>
     </div>
@@ -687,9 +711,36 @@ function buildErd(graph) {
   ERD.nodes = layoutErd(graph.tables || []);
   ERD.edges = (graph.edges || []).filter(e => ERD.nodes[e.from] && ERD.nodes[e.to]);
   ERD.view = { x: 0, y: 0, k: 1 };
+  renderFpBanner(graph.fingerprint);
   renderErdNodes(graph.tables || []);
   applyErdView();
   routeEdges();
+}
+
+// Renders the fleet fingerprint context above the ERD: which schema cluster this
+// database belongs to and how far it has drifted from canonical.
+function renderFpBanner(fp) {
+  const el = $("#fpBanner");
+  if (!fp) { el.innerHTML = ""; return; }
+  const canon = fp.is_canonical;
+  const legend = canon ? "" : `<span class="fp-legend">
+    <i><span class="sw" style="background:var(--gold)"></span>added here</i>
+    <i><span class="sw" style="background:#e08c5a"></span>changed</i>
+    <i><span class="sw" style="background:var(--dim)"></span>missing vs canonical</i></span>`;
+  if (canon) {
+    el.className = "fp-banner canon";
+    el.innerHTML = `<span class="tag">canonical</span>
+      <span>Schema <span class="id">${esc(fp.cluster_id)}</span> — the fleet reference.</span>
+      <span class="muted">Shared by ${fp.cluster_count} of ${fp.fleet_total} database${fp.fleet_total === 1 ? "" : "s"}.</span>`;
+  } else {
+    el.className = "fp-banner drift";
+    const td = fp.drift_tables, cd = fp.drift_columns;
+    el.innerHTML = `<span class="tag">drift</span>
+      <span>Schema <span class="id">${esc(fp.cluster_id)}</span> differs from canonical <span class="id">${esc(fp.canonical_id)}</span>:
+      ${td} table${td === 1 ? "" : "s"}, ${cd} column${cd === 1 ? "" : "s"}.</span>
+      <span class="muted">This shape is shared by ${fp.cluster_count} of ${fp.fleet_total} databases.</span>
+      ${legend}`;
+  }
 }
 
 function renderErdNodes(tables) {
@@ -698,17 +749,23 @@ function renderErdNodes(tables) {
   for (const t of tables) {
     const n = ERD.nodes[t.name];
     const grp = document.createElementNS(SVGNS, "g");
-    grp.setAttribute("class", "erd-node");
+    let cls = "erd-node";
+    if (t.ghost) cls += " ghost";
+    else if (t.drift === "added") cls += " drift";
+    grp.setAttribute("class", cls);
     grp.setAttribute("data-name", t.name);
     grp.setAttribute("transform", `translate(${n.x},${n.y})`);
+    const badge = t.ghost ? `<text class="drifttag" x="${n.w - 11}" y="20" text-anchor="end" style="fill:var(--dim)">MISSING</text>`
+      : (t.drift === "added" ? `<text class="drifttag" x="${n.w - 11}" y="20" text-anchor="end" style="fill:var(--gold)">EXTRA</text>` : "");
     let inner = `<rect class="box" width="${n.w}" height="${n.h}" rx="7"></rect>` +
       `<rect class="hdr" width="${n.w}" height="${ERD_HDR}" rx="7"></rect>` +
       `<rect class="hdr" y="${ERD_HDR - 7}" width="${n.w}" height="7"></rect>` +
-      `<text class="tname" x="11" y="20">${esc(t.name)}</text>`;
+      `<text class="tname" x="11" y="20">${esc(t.name)}</text>` + badge;
     t.columns.forEach((c, i) => {
       const cy = ERD_HDR + ERD_PAD / 2 + i * ERD_ROW + 12;
       const key = c.pk ? `<tspan class="keytag" style="fill:var(--gold)">PK </tspan>` : (c.fk ? `<tspan class="keytag">FK </tspan>` : "");
-      inner += `<text class="col" x="11" y="${cy}">${key}${esc(c.name)}<tspan class="keytag"> ${esc(c.type || "")}</tspan></text>`;
+      const dcls = c.drift ? ` ${c.drift}` : "";
+      inner += `<text class="col${dcls}" x="11" y="${cy}">${key}${esc(c.name)}<tspan class="keytag"> ${esc(c.type || "")}</tspan></text>`;
     });
     grp.innerHTML = inner;
     g.appendChild(grp);

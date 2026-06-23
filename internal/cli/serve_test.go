@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/croc100/litescope/internal/fleet"
 	_ "modernc.org/sqlite"
 )
 
@@ -140,5 +141,98 @@ func TestSchemaGraph(t *testing.T) {
 func TestSchemaGraph_RejectsRemote(t *testing.T) {
 	if _, err := schemaGraph("turso://tok@org/db"); err == nil {
 		t.Fatal("expected remote DSN to be rejected")
+	}
+}
+
+// fpTestDB creates a database with the given DDL and returns its DSN.
+func fpTestDB(t *testing.T, ddl string) string {
+	t.Helper()
+	dsn := filepath.Join(t.TempDir(), "fp.db")
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	return dsn
+}
+
+func TestAnnotateSchemaFingerprint_Canonical(t *testing.T) {
+	canon := `CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT);`
+	a := fpTestDB(t, canon)
+	b := fpTestDB(t, canon)
+	dbs := []fleet.Database{{Name: "a", DSN: a}, {Name: "b", DSN: b}}
+	fp := fleet.Fingerprint(dbs, 0)
+
+	g, err := schemaGraph(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	annotateSchemaFingerprint(g, "a", fp)
+	if g.Fingerprint == nil || !g.Fingerprint.IsCanonical {
+		t.Fatalf("expected canonical fingerprint, got %+v", g.Fingerprint)
+	}
+	if g.Fingerprint.ClusterCount != 2 || g.Fingerprint.FleetTotal != 2 {
+		t.Fatalf("cluster/fleet counts wrong: %+v", g.Fingerprint)
+	}
+}
+
+func TestAnnotateSchemaFingerprint_Drift(t *testing.T) {
+	// Two canonical DBs form the reference; the drifted one adds a column, an
+	// extra table, and is missing a column that canonical has.
+	canon := `CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT, country TEXT);`
+	drifted := `CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT, phone TEXT);
+		CREATE TABLE audit(id INTEGER PRIMARY KEY, msg TEXT);`
+	c1 := fpTestDB(t, canon)
+	c2 := fpTestDB(t, canon)
+	d := fpTestDB(t, drifted)
+	dbs := []fleet.Database{{Name: "c1", DSN: c1}, {Name: "c2", DSN: c2}, {Name: "d", DSN: d}}
+	fp := fleet.Fingerprint(dbs, 0)
+
+	g, err := schemaGraph(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	annotateSchemaFingerprint(g, "d", fp)
+	if g.Fingerprint == nil || g.Fingerprint.IsCanonical {
+		t.Fatalf("expected drift fingerprint, got %+v", g.Fingerprint)
+	}
+
+	var ghost, extra bool
+	var added, missing bool
+	for _, tb := range g.Tables {
+		if tb.Ghost {
+			ghost = true // not expected here (no whole table is missing)
+		}
+		if tb.Name == "audit" && tb.Drift == "added" {
+			extra = true
+		}
+		if tb.Name == "users" {
+			for _, c := range tb.Columns {
+				if c.Name == "phone" && c.Drift == "added" {
+					added = true
+				}
+				if c.Name == "country" && c.Drift == "missing" {
+					missing = true
+				}
+			}
+		}
+	}
+	if ghost {
+		t.Fatal("did not expect a ghost table")
+	}
+	if !extra {
+		t.Fatal("expected audit table marked as extra (drift=added)")
+	}
+	if !added {
+		t.Fatal("expected users.phone marked drift=added")
+	}
+	if !missing {
+		t.Fatal("expected users.country marked drift=missing (present in canonical)")
+	}
+	if g.Fingerprint.DriftColumns < 2 {
+		t.Fatalf("expected >=2 drift columns, got %d", g.Fingerprint.DriftColumns)
 	}
 }

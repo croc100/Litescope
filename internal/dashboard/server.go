@@ -58,12 +58,16 @@ type QueryResult struct {
 	DurationMs int64    `json:"duration_ms"`
 }
 
-// SchemaColumn is one column in an ERD table node.
+// SchemaColumn is one column in an ERD table node. Drift, when set, marks how
+// the column deviates from the fleet's canonical schema: "added" (present here,
+// absent in canonical), "changed" (type/not-null differs), or "missing"
+// (present in canonical, absent here).
 type SchemaColumn struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	PK   bool   `json:"pk"`
-	FK   bool   `json:"fk"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	PK    bool   `json:"pk"`
+	FK    bool   `json:"fk"`
+	Drift string `json:"drift,omitempty"`
 }
 
 // SchemaEdge is a foreign-key relationship between two tables.
@@ -76,14 +80,31 @@ type SchemaEdge struct {
 // SchemaGraph is the entity-relationship graph of one database, rendered as an
 // interactive ERD in the dashboard.
 type SchemaGraph struct {
-	Tables []SchemaTable `json:"tables"`
-	Edges  []SchemaEdge  `json:"edges"`
+	Tables      []SchemaTable      `json:"tables"`
+	Edges       []SchemaEdge       `json:"edges"`
+	Fingerprint *SchemaFingerprint `json:"fingerprint,omitempty"` // fleet drift overlay
 }
 
-// SchemaTable is one entity (table) in the ERD.
+// SchemaTable is one entity (table) in the ERD. Drift "added" marks a table
+// present here but absent from canonical; Ghost marks a table present in
+// canonical but missing here (rendered as a placeholder).
 type SchemaTable struct {
 	Name    string         `json:"name"`
 	Columns []SchemaColumn `json:"columns"`
+	Drift   string         `json:"drift,omitempty"`
+	Ghost   bool           `json:"ghost,omitempty"`
+}
+
+// SchemaFingerprint places one database's ERD in the context of the whole fleet:
+// which schema cluster it belongs to and how far it has drifted from canonical.
+type SchemaFingerprint struct {
+	ClusterID    string `json:"cluster_id"`
+	IsCanonical  bool   `json:"is_canonical"`
+	CanonicalID  string `json:"canonical_id"`
+	ClusterCount int    `json:"cluster_count"` // databases sharing this exact schema
+	FleetTotal   int    `json:"fleet_total"`   // databases fingerprinted
+	DriftTables  int    `json:"drift_tables"`  // tables differing from canonical
+	DriftColumns int    `json:"drift_columns"` // columns differing from canonical
 }
 
 // SchemaFn returns the ERD graph of the named database. The CLI supplies it so

@@ -142,7 +142,15 @@ Examples:
 				if err != nil {
 					return nil, err
 				}
-				return schemaGraph(dsn)
+				g, err := schemaGraph(dsn)
+				if err != nil {
+					return nil, err
+				}
+				// Overlay the fleet fingerprint: show how this one database's
+				// schema deviates from the fleet's canonical schema. This is what
+				// turns a single-DB ERD into a fleet-operations view.
+				annotateSchemaFingerprint(g, name, fleet.Fingerprint(currentDBs(), 0))
+				return g, nil
 			})
 
 			url := "http://" + addr
@@ -266,6 +274,101 @@ func schemaGraph(dsn string) (*dashboard.SchemaGraph, error) {
 		g.Tables = append(g.Tables, st)
 	}
 	return g, nil
+}
+
+// annotateSchemaFingerprint overlays the fleet fingerprint onto a single
+// database's ERD graph: it records which schema cluster the database belongs to
+// and, when that cluster has drifted from canonical, marks each table and column
+// that differs. Ghost entries are added for tables/columns that canonical has
+// but this database is missing. It is a no-op for fleets with no clusters or a
+// database that could not be fingerprinted.
+func annotateSchemaFingerprint(g *dashboard.SchemaGraph, dbName string, fp *fleet.FingerprintReport) {
+	if g == nil || fp == nil || len(fp.Clusters) == 0 {
+		return
+	}
+	var canonID string
+	var cluster *fleet.FingerprintCluster
+	for i := range fp.Clusters {
+		if fp.Clusters[i].IsCanonical {
+			canonID = fp.Clusters[i].ID
+		}
+		for _, m := range fp.Clusters[i].Members {
+			if m == dbName {
+				cluster = &fp.Clusters[i]
+			}
+		}
+	}
+	if cluster == nil {
+		return
+	}
+
+	info := &dashboard.SchemaFingerprint{
+		ClusterID:    cluster.ID,
+		IsCanonical:  cluster.IsCanonical,
+		CanonicalID:  canonID,
+		ClusterCount: cluster.Count,
+		FleetTotal:   fp.Total,
+	}
+	g.Fingerprint = info
+	if cluster.IsCanonical {
+		return
+	}
+
+	// cluster.Drift is the diff from canonical → this cluster's schema, so
+	// "Added" means present here, "Removed" means present in canonical only.
+	idx := make(map[string]int, len(g.Tables))
+	for i := range g.Tables {
+		idx[g.Tables[i].Name] = i
+	}
+
+	for _, td := range cluster.Drift {
+		switch {
+		case td.Added:
+			if i, ok := idx[td.Name]; ok {
+				g.Tables[i].Drift = "added"
+			}
+			info.DriftTables++
+		case td.Removed:
+			ghost := dashboard.SchemaTable{Name: td.Name, Ghost: true}
+			for _, c := range td.RemovedColumns {
+				ghost.Columns = append(ghost.Columns, dashboard.SchemaColumn{
+					Name: c.Name, Type: c.Type, PK: c.PK > 0, Drift: "missing",
+				})
+			}
+			g.Tables = append(g.Tables, ghost)
+			info.DriftTables++
+		default:
+			i, ok := idx[td.Name]
+			if !ok {
+				continue
+			}
+			added := make(map[string]bool, len(td.AddedColumns))
+			for _, c := range td.AddedColumns {
+				added[c.Name] = true
+			}
+			changed := make(map[string]bool, len(td.ChangedColumns))
+			for _, cc := range td.ChangedColumns {
+				changed[cc.Name] = true
+			}
+			for ci := range g.Tables[i].Columns {
+				switch cn := g.Tables[i].Columns[ci].Name; {
+				case added[cn]:
+					g.Tables[i].Columns[ci].Drift = "added"
+					info.DriftColumns++
+				case changed[cn]:
+					g.Tables[i].Columns[ci].Drift = "changed"
+					info.DriftColumns++
+				}
+			}
+			for _, c := range td.RemovedColumns {
+				g.Tables[i].Columns = append(g.Tables[i].Columns, dashboard.SchemaColumn{
+					Name: c.Name, Type: c.Type, PK: c.PK > 0, Drift: "missing",
+				})
+				info.DriftColumns++
+			}
+			info.DriftTables++
+		}
+	}
 }
 
 // listTables returns the user tables of a local database with row counts,
