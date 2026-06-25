@@ -427,10 +427,10 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       <a href="#features">Features</a>
       <a href="#fleet">Fleet</a>
       <a href="#ai">AI / MCP</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#pricing">Open source</a>
       <a href="#install">Install</a>
       <a href="/docs">Docs</a>
-      <a class="nav-cta" href="https://github.com/croc100/litescope-dist" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="nav-cta" href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
   </div>
 </nav>
@@ -442,7 +442,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     <p class="hero-sub">Agents, RAG pipelines, and edge services all ship on SQLite — then drift, bloat, and corrupt in the dark. Litescope is the operations layer: see your schema, catch faults, and fix them — from one local file to a fleet of thousands.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
-      <a class="btn btn-ghost" href="#pricing">View pricing</a>
+      <a class="btn btn-ghost" href="#pricing">Free &amp; open source</a>
     </div>
 
     <div class="terminal">
@@ -571,27 +571,27 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       </div>
       <div class="card">
         <span class="card-icon">⚡</span>
-        <div class="cmd-name">migrate <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
+        <div class="cmd-name">migrate <span class="tier-tag tier-free">free</span></div>
         <h3>See the blast radius first</h3>
-        <p><b>Free:</b> diff → runnable SQL with every op classified Safe / Risky / Destructive, plus declarative <code>plan</code> and versioned authoring (<code>new</code> / <code>status</code>) — Atlas-grade, no license. <b>Pro:</b> safe <code>apply</code>/<code>up</code> with auto-backup, single transaction, FK verification, and rollback.</p>
+        <p>Diff → runnable SQL with every op classified Safe / Risky / Destructive, plus declarative <code>plan</code> (with a CI drift gate) and versioned authoring (<code>new</code> / <code>status</code>) — Atlas-grade. Apply safely with <code>apply</code>/<code>up</code>: auto-backup, single transaction, FK verification, and rollback.</p>
       </div>
       <div class="card">
         <span class="card-icon">📡</span>
-        <div class="cmd-name">monitor <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
+        <div class="cmd-name">monitor <span class="tier-tag tier-free">free</span></div>
         <h3>Catch drift over time</h3>
-        <p><b>Free:</b> baseline a known-good schema and check for drift on demand (cron/CI). <b>Pro:</b> <code>watch</code> continuously with webhook alerts to Slack and Discord.</p>
+        <p>Baseline a known-good schema and check for drift on demand (cron/CI), or <code>watch</code> continuously with webhook alerts to Slack and Discord.</p>
       </div>
       <div class="card">
         <span class="card-icon">🛡️</span>
-        <div class="cmd-name">check <span class="tier-tag tier-pro">pro</span></div>
+        <div class="cmd-name">check <span class="tier-tag tier-free">free</span></div>
         <h3>Trust your backups</h3>
         <p>Batch PRAGMA integrity checks plus schema and row-count comparison against a reference. Catch a bad backup before you need it.</p>
       </div>
       <div class="card">
         <span class="card-icon">🌐</span>
-        <div class="cmd-name">fleet <span class="tier-tag tier-free">free</span><span class="tier-tag tier-pro">pro</span></div>
+        <div class="cmd-name">fleet <span class="tier-tag tier-free">free</span></div>
         <h3>Operate hundreds at once</h3>
-        <p><b>Free:</b> read-only shock diagnosis — fingerprint + health on up to 10 databases. <b>Pro:</b> the full lifecycle across a Turso org or D1 account — converge drift to canonical, recover corrupt databases, staged canary rollouts.</p>
+        <p>Read-only shock diagnosis — fingerprint + health across a Turso org or D1 account — and the full lifecycle: converge drift to canonical, recover corrupt databases, staged canary rollouts. A fleet of any size.</p>
       </div>
       <div class="card">
         <span class="card-icon">📊</span>
@@ -656,7 +656,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>The first command to run when the pager fires. <b>fleet health</b> triages every database worst-first, <b>fleet recover</b> restores from verified backups, and <b>blast-radius</b> flags the at-risk neighbors in the same group.</p>
       </div>
     </div>
-    <p class="section-sub center" style="margin-top:28px">Run the shock diagnosis on up to 10 databases free and see your own drift. Fixing the whole fleet is Pro.</p>
+    <p class="section-sub center" style="margin-top:28px">Run the shock diagnosis, see your own drift, and fix the whole fleet — free and open source, on a fleet of any size.</p>
   </div>
 </section>
 
@@ -744,77 +744,33 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
 <section id="pricing">
   <div class="wrap center">
-    <div class="eyebrow">Pricing</div>
-    <h2>Explore free. Operate with Pro.<br/>Scale with Enterprise.</h2>
-    <p class="section-sub">Free is open source. Pro unlocks the full toolchain with a license key; Enterprise adds a web dashboard, SSO and self-host for teams.</p>
-  </div>
-  <div class="wrap">
-    <div class="pricing-grid">
-      <div class="plan">
-        <div class="plan-tier">Free</div>
-        <div class="plan-price">$0</div>
-        <div class="plan-desc">Get familiar with your SQLite databases. Open source, no credit card.</div>
-        <ul class="plan-features">
-          <li><span class="check">✓</span>doctor — one-shot checkup + HTML report</li>
-          <li><span class="check">✓</span>diff, schema &amp; ERD, dump — explore &amp; export</li>
-          <li><span class="check">✓</span>lint — schema anti-pattern linter (CI)</li>
-          <li><span class="check">✓</span>health &amp; advise — faults + index tips</li>
-          <li><span class="check">✓</span>validate — migration locking for CI</li>
-          <li><span class="check">✓</span>mcp — AI agent integration</li>
-          <li><span class="check">✓</span><b>Local web dashboard</b> + data browser & SQL (litescope serve)</li>
-          <li><span class="check">✓</span>fleet shock diagnosis — read-only (≤10 DBs)</li>
-          <li><span class="check">✓</span>Explorer + 1 named connection (GUI)</li>
-        </ul>
-        <a class="btn btn-ghost" href="#install">Install free</a>
-      </div>
-      <div class="plan featured">
-        <div class="plan-badge">Most popular</div>
-        <div class="plan-tier" style="color:var(--teal)">Pro</div>
-        <div class="plan-price">$99<span class="period"> /year</span></div>
-        <div class="plan-desc">The full SQLite operations toolchain for the individual operator.</div>
-        <ul class="plan-features">
-          <li><span class="check">✓</span>Everything in Free</li>
-          <li><span class="check">✓</span>migrate — blast-radius analysis + safe apply</li>
-          <li><span class="check">✓</span>check — backup integrity verification</li>
-          <li><span class="check">✓</span>monitor — continuous drift + webhook alerts</li>
-          <li><span class="check">✓</span>fleet — fingerprint, converge, health &amp; recover</li>
-          <li><span class="check">✓</span>policy gates + team RBAC (local)</li>
-          <li><span class="check">✓</span>Unlimited named connections (GUI)</li>
-        </ul>
-        <a class="btn btn-primary" href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro — $99/yr</a>
-      </div>
-      <div class="plan">
-        <div class="plan-tier" style="color:var(--head)">Enterprise</div>
-        <div class="plan-price">$49<span class="period"> /month</span></div>
-        <div class="plan-desc">Your whole SQLite fleet on one screen — hosted &amp; multi-user. Predictable monthly pricing, capped so the bill never runs away.</div>
-        <ul class="plan-features">
-          <li><span class="check">✓</span>Everything in Pro</li>
-          <li><span class="check">✓</span>Hosted dashboard — multi-user, time-series history</li>
-          <li><span class="check">✓</span><b>Up to 25 databases</b> (Scale tier for more)</li>
-          <li><span class="check">✓</span>Alerting — Slack, PagerDuty, on-call</li>
-          <li><span class="check">✓</span>SSO + org multi-user + RBAC</li>
-          <li><span class="check">✓</span>Self-host — on-prem or your own cloud</li>
-          <li><span class="check">✓</span>Provisioned within ~1 week of purchase</li>
-        </ul>
-        <a class="btn btn-ghost" href="https://crode.lemonsqueezy.com/checkout/buy/978a9e0b-b651-47e8-ae0d-dc8374cb28f7" data-ls-checkout="enterprise" target="_blank" rel="noopener">Buy Enterprise — $49/mo</a>
-      </div>
+    <div class="eyebrow">Free &amp; open source</div>
+    <h2>The whole toolchain is free.<br/>Forever.</h2>
+    <p class="section-sub">Litescope is open source under the GNU AGPL-3.0. Every command — diff, migrate, monitor, the entire fleet lifecycle, and the local web dashboard — is unlocked for everyone, on a fleet of any size. No license key, no tiers, nothing to unlock.</p>
+    <div class="cta-row" style="margin-top:24px">
+      <a class="btn btn-primary" href="#install">Install free</a>
+      <a class="btn btn-ghost" href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">Star on GitHub ↗</a>
     </div>
+  </div>
 
-    <div class="center" style="margin-top:40px;max-width:680px;margin-left:auto;margin-right:auto;">
-      <div class="eyebrow">Enterprise · Web dashboard</div>
+  <div class="wrap">
+    <div class="center" style="margin-top:48px;max-width:680px;margin-left:auto;margin-right:auto;">
+      <div class="eyebrow">Coming later · Hosted dashboard</div>
+      <h3 style="margin-top:10px">One thing we'll host for you</h3>
       <p class="section-sub" style="margin-top:10px">
-        Running SQLite on Turso, Cloudflare D1 and local files? The CLI you already
-        use becomes the agent — <code>litescope push</code> streams health and schema
-        metadata (never your data) to a dashboard that shows your entire fleet,
-        thousands of instances, on one screen. Drift history, fault triage, and
-        alerts when something breaks. Run it in our cloud, in <em>your</em> cloud, or
-        fully self-hosted on your own servers.
+        The only paid offering is optional and runs <em>beside</em> the open-source
+        tool, never gating it. Running SQLite on Turso, Cloudflare D1, and local
+        files? The CLI you already use becomes the agent — <code>litescope push</code>
+        streams health and schema metadata (never your data) to a hosted dashboard
+        that shows your entire fleet, thousands of instances, on one screen, with
+        time-series drift history and alerts when something breaks.
       </p>
       <p class="section-sub" style="margin-top:12px">
-        <b>$49/month</b> covers up to <b>25 databases</b>. Bigger fleet?
-        <b>Enterprise Scale — $149/month</b> covers up to <b>250 databases</b>.
-        Larger or air-gapped? The self-host build runs on your own infrastructure.
-        Every plan is a flat, capped monthly price — no surprise bills.
+        It runs on a metadata-only edge stack (Cloudflare Workers + D1), so it costs
+        almost nothing to operate — and there's nothing to host yourself unless you
+        want to: <code>litescope serve</code> already gives you the same dashboard
+        locally, free. The hosted version is <b>planned and demand-gated</b> — see the
+        <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">roadmap</a>. Need enterprise self-host or support? <a href="mailto:croc100100@gmail.com">croc100100@gmail.com</a>.
       </p>
     </div>
 
@@ -823,67 +779,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
            loading="lazy"
            style="width:100%;height:auto;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.35);" />
       <p class="section-sub" style="margin-top:10px;font-size:13px;opacity:.7">
-        The hosted dashboard is the multi-user, cloud version of <code>litescope serve</code> — fleet health, topology, fault triage, and schema drift on one screen.
+        Run this locally today with <code>litescope serve</code> — free. The hosted version is the multi-user, always-on cloud edition.
       </p>
-    </div>
-
-    <div class="compare-wrap">
-      <table class="compare">
-        <thead>
-          <tr>
-            <th style="width:46%">Feature</th>
-            <th>Free</th>
-            <th class="col-pro">Pro — $99/yr</th>
-            <th>Enterprise</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="section-row"><td colspan="4">Explore, inspect &amp; validate</td></tr>
-          <tr><td>doctor — one-shot checkup + HTML report</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Explorer — browse tables &amp; query rows</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>diff — schema &amp; data comparison</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>schema — inspect + Mermaid ERD</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>dump — portable SQL export</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>import / export — CSV/TSV/JSON ↔ SQLite</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>metrics — Prometheus / OpenMetrics exporter</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>lint — schema anti-pattern linter (CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>advise — index &amp; query recommendations</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>health — single-DB fault check</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>validate — migration locking for CI</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>migrate — diff → SQL + blast-radius report</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Operate</td></tr>
-          <tr><td>migrate apply — safe apply, backup &amp; rollback</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Versioned migrations (new / status / up)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>check — backup integrity + 1 reference</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>check — batch (&gt;1 file) + save-report</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Monitor</td></tr>
-          <tr><td>monitor snapshot / check — drift baseline (cron/CI)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>monitor watch — single local DB</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>monitor watch — remote targets (Turso/D1)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Webhook alerts (Slack, Discord)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Drift history &amp; audit trail</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Fleet — Turso &amp; Cloudflare D1</td></tr>
-          <tr><td>fleet check — parallel drift across all DBs</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint / health — read-only shock diagnosis (≤10 DBs)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet fingerprint / health — full fleet (11+ DBs)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet converge — auto-fix drift to canonical</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet recover — restore &amp; quarantine</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>fleet migrate — staged canary rollouts</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>policy gates + team RBAC (local)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Web dashboard</td></tr>
-          <tr><td>Local dashboard — <code>litescope serve</code> (self-hosted)</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Data browser + read-only web SQL console</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Hosted dashboard — multi-user, time-series history</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">Enterprise — teams &amp; scale</td></tr>
-          <tr><td>Alerting — Slack / PagerDuty / on-call</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>SSO + org multi-user + org RBAC</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>Self-host — on-prem or your own cloud</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr><td>SLA + priority support</td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
-          <tr class="section-row"><td colspan="4">GUI</td></tr>
-          <tr><td>Named connections</td><td><span class="val">1</span></td><td><span class="val">Unlimited</span></td><td><span class="val">Unlimited</span></td></tr>
-          <tr><td>All Pro panels (Migrate, Check, Monitor, Fleet)</td><td><span class="no">—</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
-        </tbody>
-      </table>
     </div>
   </div>
 </section>
@@ -897,7 +794,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       <div class="install-tabs">
         <button class="active" data-cmd="brew install croc100/tap/litescope">Homebrew</button>
         <button data-cmd="# Download litescope_windows_amd64.zip from the link below">Windows</button>
-        <button data-cmd="# Download binary from github.com/croc100/litescope-dist/releases">Linux</button>
+        <button data-cmd="# Download binary from github.com/croc100/Litescope/releases">Linux</button>
       </div>
       <div class="install-code">
         <span><span class="prompt">$</span><span id="installCmd">brew install croc100/tap/litescope</span></span>
@@ -906,7 +803,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     </div>
     <div class="cta-row" style="margin-top:32px">
       <a class="btn btn-primary" href="/docs">Read the docs</a>
-      <a id="releasesLink" class="btn btn-ghost" href="https://github.com/croc100/litescope-dist/releases" target="_blank" rel="noopener" style="display:none">Download binary ↗</a>
+      <a id="releasesLink" class="btn btn-ghost" href="https://github.com/croc100/Litescope/releases" target="_blank" rel="noopener" style="display:none">Download binary ↗</a>
     </div>
   </div>
 </section>
@@ -919,17 +816,15 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         Litescope
       </a>
       <div class="foot-links">
-        <a href="https://github.com/croc100/litescope-dist" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">GitHub</a>
         <a href="/docs">Docs</a>
-        <a href="#pricing">Pricing</a>
-        <a href="https://crode.lemonsqueezy.com/checkout/buy/2f257ab2-af4c-4a12-b7d5-d9424e7228bf" target="_blank" rel="noopener">Buy Pro</a>
-        <a href="#pricing">Enterprise</a>
+        <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a>
+        <a href="https://github.com/sponsors/croc100" target="_blank" rel="noopener">Sponsor</a>
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
-        <a href="/refund">Refund</a>
       </div>
     </div>
-    <p class="foot-note">The Free CLI/GUI is open source. Pro unlocks production &amp; fleet features with a paid license key — the same binary, no separate download. Enterprise (hosted dashboard, SSO, self-host) is a separate closed-source product — a capped monthly subscription from $49/month (up to 25 databases; Scale tier $149/month up to 250), provisioned within about a week of purchase. Payments &amp; refunds handled by Lemon Squeezy, our Merchant of Record. © 2026 Crode.</p>
+    <p class="foot-note">Litescope is free and open source under the GNU AGPL-3.0 — the entire CLI and GUI, no license key. A hosted dashboard and enterprise self-host with support are planned, separate, optional offerings that never gate the open-source tool. Questions: croc100100@gmail.com. © 2026 Crode.</p>
   </div>
 </footer>
 

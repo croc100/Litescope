@@ -105,9 +105,9 @@
     </a>
     <div style="display:flex; gap:24px; font-size:14px;">
       <a href="/#features" style="color:var(--text);">Features</a>
-      <a href="/#pricing" style="color:var(--text);">Pricing</a>
+      <a href="/#pricing" style="color:var(--text);">Open source</a>
       <a href="/docs" style="color:var(--teal);">Docs</a>
-      <a href="https://github.com/croc100/litescope-dist" target="_blank" rel="noopener" style="color:var(--text);">GitHub ↗</a>
+      <a href="https://github.com/croc100/Litescope" target="_blank" rel="noopener" style="color:var(--text);">GitHub ↗</a>
     </div>
   </div>
 </div>
@@ -117,7 +117,7 @@
     <div class="sidebar-section">Getting started</div>
     <nav>
       <a href="#install">Installation</a>
-      <a href="#activate">Activate license</a>
+      <a href="#activate">Licensing</a>
     </nav>
     <div class="sidebar-section">CLI Reference</div>
     <nav>
@@ -164,12 +164,12 @@
       <pre><code>brew install croc100/tap/litescope</code></pre>
 
       <h3>Linux</h3>
-      <p>Download the latest binary from <a href="https://github.com/croc100/litescope-dist/releases" target="_blank">Releases</a>, extract, and move to your <code>PATH</code>:</p>
-      <pre><code>curl -fsSL https://github.com/croc100/litescope-dist/releases/latest/download/litescope_Linux_x86_64.tar.gz | tar xz
+      <p>Download the latest binary from <a href="https://github.com/croc100/Litescope/releases" target="_blank">Releases</a>, extract, and move to your <code>PATH</code>:</p>
+      <pre><code>curl -fsSL https://github.com/croc100/Litescope/releases/latest/download/litescope_Linux_x86_64.tar.gz | tar xz
 sudo mv litescope /usr/local/bin/</code></pre>
 
       <h3>Windows</h3>
-      <p>Download <code>litescope_*_windows_amd64.zip</code> from <a href="https://github.com/croc100/litescope-dist/releases" target="_blank">Releases</a>, extract the <code>.exe</code>, and add its directory to <code>PATH</code>.</p>
+      <p>Download <code>litescope_*_windows_amd64.zip</code> from <a href="https://github.com/croc100/Litescope/releases" target="_blank">Releases</a>, extract the <code>.exe</code>, and add its directory to <code>PATH</code>.</p>
 
       <h3>Verify</h3>
       <pre><code>litescope --version</code></pre>
@@ -177,27 +177,12 @@ sudo mv litescope /usr/local/bin/</code></pre>
 
     <!-- License -->
     <div class="doc-section" id="activate">
-      <h2>Activate Pro license</h2>
-      <p>After purchasing, you'll receive a license key by email (<code>lsc_pro_…</code>). Activate it in any of three ways:</p>
-
-      <h3>Option A — environment variable</h3>
-      <pre><code>export LITESCOPE_LICENSE=lsc_pro_your_key_here</code></pre>
-      <p>Add this to your shell profile (<code>~/.zshrc</code>, <code>~/.bashrc</code>) to persist it.</p>
-
-      <h3>Option B — license file</h3>
-      <pre><code>mkdir -p ~/.litescope
-echo "lsc_pro_your_key_here" > ~/.litescope/license</code></pre>
-
-      <h3>Option C — desktop app (GUI)</h3>
-      <p>Open the app and go to <strong>Settings → License</strong>, paste your <code>lsc_pro_…</code> key, and click <strong>Activate</strong>. The tier badge updates immediately, and Pro panels unlock without a restart.</p>
-
-      <h3>Verify activation</h3>
-      <p>Check the tier Litescope detects (CLI):</p>
-      <pre><code>litescope license</code></pre>
-      <p>In the desktop app, the current tier is shown as a badge in <strong>Settings → License</strong>.</p>
+      <h2>Licensing — free &amp; open source</h2>
+      <p>Litescope is free and open source under the <a href="https://github.com/croc100/Litescope/blob/main/LICENSE" target="_blank">GNU AGPL-3.0</a>. The entire CLI and GUI — every command, fleet operation, migration, and automation — is unlocked for everyone. <strong>There is no license key and nothing to activate.</strong></p>
+      <pre><code>litescope license   # confirms the free/open-source status</code></pre>
 
       <div class="callout">
-        <strong>Online verification, offline-resilient.</strong> Litescope checks your key against the license server (env var first, then <code>~/.litescope/license</code>, then the key saved by the GUI), but caches the result for 24h so most runs need no network. If the server is unreachable, your last verified tier keeps working for a 14-day grace window — the license server is never a hard dependency.
+        <strong>Need a commercial license?</strong> A separate commercial license (which waives the AGPL obligations and adds support) and enterprise self-host are available for organizations that need them — <a href="mailto:croc100100@gmail.com">croc100100@gmail.com</a>. A hosted dashboard is planned; see the <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank">roadmap</a>.
       </div>
     </div>
 
@@ -412,15 +397,15 @@ litescope validate run -e expected.yaml</code></pre>
 
     <!-- check -->
     <div class="doc-section" id="check">
-      <h2>check <span class="tier tier-free">free</span> <span class="tier tier-pro">pro</span></h2>
-      <p>Verify a backup database. The PRAGMA integrity check and a comparison against a single reference (<code>--against</code>, with optional <code>--data</code>) are free. Batch verification of more than one file and saving a report (<code>--save-report</code>) are Pro.</p>
+      <h2>check <span class="tier tier-free">free</span></h2>
+      <p>Verify a backup database. The PRAGMA integrity check and a comparison against a single reference (<code>--against</code>, with optional <code>--data</code>), batch verification of more than one file, and saving a report (<code>--save-report</code>) are all free.</p>
       <pre><code>litescope check &lt;backup.db&gt; [--against &lt;reference.db&gt;] [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td>--against</td><td>—</td><td>Reference DB to compare schema against</td></tr>
           <tr><td>--data</td><td>false</td><td>Also compare row counts per table</td></tr>
-          <tr><td>--save-report</td><td>—</td><td>Append the result to a JSONL history file <span class="tier tier-pro">pro</span></td></tr>
+          <tr><td>--save-report</td><td>—</td><td>Append the result to a JSONL history file</td></tr>
           <tr><td>--format</td><td>text</td><td>Output format: <code>text</code>, <code>json</code></td></tr>
         </tbody>
       </table>
@@ -434,14 +419,14 @@ litescope check backup.db --against prod.db
 # Include row count comparison (free)
 litescope check backup.db --against prod.db --data
 
-# Batch-verify many backups + save a report (Pro)
+# Batch-verify many backups + save a report
 litescope check backups/*.db --against prod.db --save-report report.jsonl</code></pre>
     </div>
 
     <!-- migrate -->
     <div class="doc-section" id="migrate">
-      <h2>migrate <span class="tier tier-free">free</span> <span class="tier tier-pro">pro</span></h2>
-      <p>Generate migration SQL by diffing two databases (free), then apply it safely with backup and rollback (Pro). Generation always prints a <strong>blast-radius analysis</strong> first.</p>
+      <h2>migrate <span class="tier tier-free">free</span></h2>
+      <p>Generate migration SQL by diffing two databases, then apply it safely with backup and rollback. Generation always prints a <strong>blast-radius analysis</strong> first.</p>
 
       <h3>generate</h3>
       <pre><code>litescope migrate &lt;old.db&gt; &lt;new.db&gt; [flags]</code></pre>
@@ -460,7 +445,7 @@ litescope check backups/*.db --against prod.db --save-report report.jsonl</code>
   ✗  DROP TABLE sessions                12,400 rows permanently deleted
   ─────────────────────────────────────────────────────────────</code></pre>
 
-      <h3>apply <span class="tier tier-pro">pro</span></h3>
+      <h3>apply</h3>
       <pre><code>litescope migrate apply &lt;db&gt; &lt;migration.sql&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
@@ -492,7 +477,7 @@ litescope migrate apply prod.db migration.sql</code></pre>
         <tbody>
           <tr><td><code>migrate new &lt;name&gt;</code></td><td>free</td><td>Create the next numbered migration file (use <code>--from</code>/<code>--to</code> to pre-fill from a diff)</td></tr>
           <tr><td><code>migrate status &lt;db&gt;</code></td><td>free</td><td>Show applied vs pending migrations; flags history drift</td></tr>
-          <tr><td><code>migrate up &lt;db&gt;</code></td><td>pro</td><td>Apply all pending migrations in order, each through the safe pipeline</td></tr>
+          <tr><td><code>migrate up &lt;db&gt;</code></td><td>free</td><td>Apply all pending migrations in order, each through the safe pipeline</td></tr>
         </tbody>
       </table>
       <pre><code># Generate a versioned migration from a schema change
@@ -510,7 +495,7 @@ litescope migrate up prod.db</code></pre>
 
     <!-- monitor -->
     <div class="doc-section" id="monitor">
-      <h2>monitor <span class="tier tier-pro">pro</span></h2>
+      <h2>monitor</h2>
       <p>Baseline a known-good schema, then check for drift. The <code>watch</code> subcommand runs continuously and can alert on changes.</p>
 
       <h3>snapshot</h3>
@@ -532,8 +517,8 @@ litescope migrate up prod.db</code></pre>
         </tbody>
       </table>
 
-      <h3>watch <span class="tier tier-free">free</span> <span class="tier tier-pro">pro</span></h3>
-      <p>Watching a single <strong>local</strong> database is free. Webhook alerts (<code>--webhook</code>) and <strong>remote</strong> targets (Turso/D1) are Pro.</p>
+      <h3>watch <span class="tier tier-free">free</span></h3>
+      <p>Watch a single <strong>local</strong> database or <strong>remote</strong> targets (Turso/D1), with webhook alerts (<code>--webhook</code>) to Slack and Discord — all free.</p>
       <pre><code>litescope monitor watch &lt;db&gt; [flags]</code></pre>
       <table class="flag-table">
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
@@ -559,9 +544,9 @@ litescope monitor watch prod.db -b baseline.json \
 
     <!-- fleet -->
     <div class="doc-section" id="fleet">
-      <h2>fleet <span class="tier tier-pro">pro</span></h2>
+      <h2>fleet</h2>
       <p>Operate an entire Turso org or Cloudflare D1 account as one unit. <code>discover</code> writes a <code>litescope.fleet.yaml</code> config; every other subcommand reads it and runs in parallel. The lifecycle: <strong>diagnose</strong> (fingerprint, health), then <strong>treat</strong> (converge, recover).</p>
-      <p><strong>Free preview:</strong> the read-only <code>fleet fingerprint</code> and <code>fleet health</code> run on up to <strong>10 databases</strong> with no license. The full fleet (11+ DBs) and every action subcommand are Pro.</p>
+      <p>Every <code>fleet</code> subcommand — read-only diagnosis (<code>fingerprint</code> / <code>health</code>) and every fix action — is free, on a fleet of any size.</p>
 
       <h3>discover</h3>
       <p>Query the provider API for every database and write the fleet config.</p>
@@ -581,7 +566,7 @@ litescope monitor watch prod.db -b baseline.json \
       <pre><code>litescope fleet snapshot
 litescope fleet check [--tag group:prod] [--format json]</code></pre>
 
-      <h3>fingerprint <span class="tier tier-free">free ≤10</span> <span class="tier tier-pro">pro</span></h3>
+      <h3>fingerprint <span class="tier tier-free">free</span></h3>
       <p>Cluster the fleet by schema. The largest cluster is canonical; every other shows exactly how it drifted. Exits <code>1</code> when more than one schema is found.</p>
       <pre><code>litescope fleet fingerprint</code></pre>
 
@@ -591,7 +576,7 @@ litescope fleet check [--tag group:prod] [--format json]</code></pre>
 litescope fleet converge --canary 5       # fix the first 5, then stop
 litescope fleet converge --to canonical.db</code></pre>
 
-      <h3>health <span class="tier tier-free">free ≤10</span> <span class="tier tier-pro">pro</span></h3>
+      <h3>health <span class="tier tier-free">free</span></h3>
       <p>Parallel fault triage — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. Exits <code>1</code> on any fault. Run it on a schedule to get paged on fleet faults, or continuously with <code>--watch</code>.</p>
       <pre><code>litescope fleet health [--deep] [--tag region:eu]
 litescope fleet health --webhook $SLACK_URL          # one-shot alert (cron)
@@ -662,9 +647,9 @@ litescope fleet recover</code></pre>
           <tr><td><code>litescope_diff</code></td><td>Compare two databases</td></tr>
           <tr><td><code>litescope_advise</code></td><td>Recommend indexes; flag un-indexed FKs and full table scans</td></tr>
           <tr><td><code>litescope_migrate_plan</code></td><td>Migration SQL + blast-radius (write-lock estimate) — no apply</td></tr>
-          <tr><td><code>litescope_check</code></td><td>Backup integrity; schema match vs a reference (Pro)</td></tr>
-          <tr><td><code>litescope_fingerprint</code></td><td>Cluster a fleet by schema (Pro)</td></tr>
-          <tr><td><code>litescope_fleet_health</code></td><td>Parallel fault triage across a fleet (Pro)</td></tr>
+          <tr><td><code>litescope_check</code></td><td>Backup integrity; schema match vs a reference</td></tr>
+          <tr><td><code>litescope_fingerprint</code></td><td>Cluster a fleet by schema</td></tr>
+          <tr><td><code>litescope_fleet_health</code></td><td>Parallel fault triage across a fleet</td></tr>
         </tbody>
       </table>
 
@@ -679,21 +664,19 @@ litescope fleet recover</code></pre>
       <p>The GUI app bundles all CLI operations in a visual interface. It ships as part of the same binary download — run <code>litescope gui</code> to launch, or double-click the <code>.app</code> on macOS.</p>
 
       <h3>Named connections</h3>
-      <p>Add databases by clicking <strong>+ Add</strong> in the sidebar. The Free tier supports 1 named connection; Pro is unlimited.</p>
+      <p>Add databases by clicking <strong>+ Add</strong> in the sidebar. Named connections are unlimited.</p>
 
       <h3>Tools</h3>
       <ul>
         <li><strong>Diff</strong> — visual schema and data diff between two databases</li>
         <li><strong>Explorer</strong> — browse tables and query rows</li>
-        <li><strong>Check</strong> (Pro) — validate a backup against a reference</li>
-        <li><strong>Migrate</strong> (Pro) — blast-radius analysis, generate and apply with dry-run</li>
-        <li><strong>Monitor</strong> (Pro) — snapshot, check drift, run continuous watch</li>
-        <li><strong>Fleet</strong> (Pro) — discover, fingerprint, converge, health, and recover Turso / D1 databases</li>
-        <li><strong>Fleet Map</strong> (Pro) — every database as a cell in a living map, colored by health or schema cluster</li>
+        <li><strong>Check</strong> — validate a backup against a reference</li>
+        <li><strong>Migrate</strong> — blast-radius analysis, generate and apply with dry-run</li>
+        <li><strong>Monitor</strong> — snapshot, check drift, run continuous watch</li>
+        <li><strong>Fleet</strong> — discover, fingerprint, converge, health, and recover Turso / D1 databases</li>
+        <li><strong>Fleet Map</strong> — every database as a cell in a living map, colored by health or schema cluster</li>
       </ul>
 
-      <h3>Activating Pro in the GUI</h3>
-      <p>Open <strong>Settings → License</strong> and paste your <code>lsc_pro_…</code> key, or set the <code>LITESCOPE_LICENSE</code> environment variable before launching.</p>
     </div>
 
     <!-- Changelog -->
@@ -725,7 +708,7 @@ litescope fleet recover</code></pre>
         <li>GUI: Free/Pro tier — 3-connection limit, Pro gate on Monitor and Fleet</li>
         <li>Lemon Squeezy payment integration — $99/year Pro subscription</li>
         <li>Online license verification via Cloudflare Worker</li>
-        <li>Binary releases via <a href="https://github.com/croc100/litescope-dist" target="_blank">litescope-dist</a> + Homebrew tap</li>
+        <li>Binary releases via <a href="https://github.com/croc100/Litescope" target="_blank">litescope-dist</a> + Homebrew tap</li>
       </ul>
 
       <h3>v0.1.0 <span style="color:var(--dim); font-weight:400; font-size:13px;">2026-05-01</span></h3>
