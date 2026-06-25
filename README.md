@@ -2,9 +2,12 @@
 
 **The operations toolchain for production SQLite.**
 
-[Website](https://croc100.github.io/Litescope/) · [Pricing](https://croc100.github.io/Litescope/#pricing) · [Sponsor](https://github.com/sponsors/croc100)
+[Website](https://croc100.github.io/Litescope/) · [Roadmap](ROADMAP.md) · [Sponsor](https://github.com/sponsors/croc100)
 
-[![License: ELv2](https://img.shields.io/badge/license-Elastic%202.0-3fb6a8)](LICENSE)
+**Free and open source (AGPL-3.0). The entire CLI — every fleet operation,
+migration, and automation — is unlocked for everyone, no license key.**
+
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3fb6a8)](LICENSE)
 [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Turso](https://img.shields.io/badge/Turso-supported-4ec9b0)](https://turso.tech)
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare%20D1-supported-f48120?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/d1/)
@@ -63,7 +66,7 @@ litescope doctor app.db --format html -o report.html # shareable report
 Exits **1** when the database needs attention (health warning/critical or any
 performance warning) — drop it straight into CI as a quality gate. `--format html`
 writes a standalone, self-contained report you can attach to a PR or email. Triage
-an entire Turso/D1 fleet at once with `litescope fleet health` (Pro).
+an entire Turso/D1 fleet at once with `litescope fleet health`.
 
 ---
 
@@ -245,11 +248,10 @@ litescope check backup.db --reference production.db
 # Also compare row counts
 litescope check backup.db --reference production.db --data
 
-# Batch-verify many backups at once + save a report (Pro)
+# Batch-verify many backups at once + save a report
 litescope check backups/*.db --reference production.db --save-report report.json
 ```
 
-A single backup checked against one reference is **free**. Batch verification (more than one file) and `--save-report` are **Pro**.
 
 ---
 
@@ -261,10 +263,10 @@ Turn a schema diff into runnable SQL, then apply it safely.
 # Generate migration SQL (free) — destructive changes report rows affected
 litescope migrate before.db after.db --output migration.sql
 
-# Preview: run everything in a transaction, then roll back (Pro)
+# Preview: run everything in a transaction, then roll back
 litescope migrate apply prod.db migration.sql --dry-run
 
-# Apply with automatic backup and verification (Pro)
+# Apply with automatic backup and verification
 litescope migrate apply prod.db migration.sql --verify after.db
 ```
 
@@ -295,7 +297,7 @@ litescope monitor check turso://TOKEN@ORG/prod --baseline baseline.json --format
 # 3. Continuous watch of one local database (free)
 litescope monitor watch production.db --baseline baseline.json --interval 1h
 
-# 4. Watch with webhook alerts and/or remote targets (Pro)
+# 4. Watch with webhook alerts and/or remote targets
 litescope monitor watch turso://TOKEN@ORG/prod \
   --baseline baseline.json \
   --interval 1h \
@@ -304,20 +306,17 @@ litescope monitor watch turso://TOKEN@ORG/prod \
 
 `monitor check` exits **0** (no drift) or **1** (drift detected) — drop it directly into CI.
 
-Watching a single **local** database is **free**. Webhook alerts (Slack/Discord) and **remote** targets (Turso/D1) are **Pro**.
 
 ---
 
-### `fleet` — Manage many databases at once (Pro)
+### `fleet` — Manage many databases at once
 
 One database is `monitor`. A hundred databases is `fleet`. Built for teams running
 SQLite at scale on Turso groups and Cloudflare D1.
 
-> **Free preview:** the read-only commands `litescope fleet fingerprint` and
-> `litescope fleet health` run on up to **10 databases** with no license — enough to
-> see your own drift and what fleet diagnostics look like. The full fleet (11+ DBs)
-> and all the *fixing* actions (converge / recover / migrate, plus discover /
-> snapshot / check, watch & alerts) are **Pro**.
+> Every fleet command — diagnosis (`fingerprint` / `health`) and the *fixing*
+> actions (`converge` / `recover` / `migrate`, plus `discover` / `snapshot` /
+> `check`, watch & alerts) — is free and unlimited, on a fleet of any size.
 
 ```bash
 # 1. Discover every database in a Turso org (or D1 account) → writes a fleet config
@@ -413,9 +412,9 @@ litescope serve --tag group:prod --deep
 ```
 
 Runs entirely on your machine or your own server: **no cloud, no account, no
-telemetry — free, including self-hosting.** Free shows a read-only preview of up
-to 10 databases; Pro lifts the cap to the full fleet. (The hosted, multi-user
-dashboard with SSO and time-series history is a separate Enterprise offering.)
+telemetry — free, including self-hosting**, for a fleet of any size. (A hosted,
+multi-user dashboard with SSO and time-series history is a planned, separate
+offering — see the [roadmap](ROADMAP.md).)
 
 **Drag and drop** a `.csv`, `.tsv`, `.json`, or `.db` file onto the dashboard to
 add it to the fleet on the spot — data files are imported to `<name>.db`
@@ -507,53 +506,32 @@ Download for macOS, Linux, or Windows from [Releases](https://github.com/croc100
 
 ---
 
-## Pricing
+## Free, and what's paid
 
-Three tiers, one funnel. See the [public roadmap](https://github.com/croc100/litescope-dist/blob/main/ROADMAP.md) for the full plan.
+**The entire CLI and GUI are free and open source (AGPL-3.0)** — every command,
+every fleet operation, migration, and automation, on a fleet of any size, with no
+license key. There is nothing to unlock.
 
-| | **Free** | **Pro** — $99/yr | **Enterprise** |
-|---|---|---|---|
-| | Individual dev | Individual operator | Teams & large companies |
-| doctor · diff · schema · dump · validate · lint | ✓ | ✓ | ✓ |
-| check (single file + 1 reference) · health · advise · mcp | ✓ | ✓ | ✓ |
-| migrate (generate SQL) | ✓ | ✓ | ✓ |
-| monitor snapshot / check (CI) | ✓ | ✓ | ✓ |
-| monitor watch (single local DB) | ✓ | ✓ | ✓ |
-| fleet fingerprint / health (read-only, ≤10 DBs) — shock diagnosis | ✓ | ✓ | ✓ |
-| **serve** — local web dashboard + read-only data browser & SQL console | ✓ | ✓ | ✓ |
-| GUI explorer | 1 connection | unlimited | unlimited |
-| migrate apply (backup + rollback) | — | ✓ | ✓ |
-| check (batch / --save-report) | — | ✓ | ✓ |
-| monitor watch + webhook alerts + remote targets | — | ✓ | ✓ |
-| **fleet** (4+ DBs) — discover / check / migrate / converge / recover | — | ✓ | ✓ |
-| policy gates · team RBAC (local) | — | ✓ | ✓ |
-| **Web dashboard** — fleet aggregation & history | — | — | ✓ |
-| Alerting (Slack / PagerDuty / on-call) | — | — | ✓ |
-| SSO · org multi-user · org RBAC | — | — | ✓ |
-| **Self-host** (on-prem / your cloud) | — | — | ✓ |
-| SLA + priority support | — | — | ✓ |
+Money comes from things that sit *beside* the open-source tool, never from gating
+it:
 
-**Pro** — set your license key:
+- **Enterprise / managed self-host** *(planned)* — a commercial license plus
+  support for organizations: SSO, org RBAC, audit retention, an AGPL exemption,
+  and an SLA.
+- **Hosted control plane** *(planned, demand-gated)* — a hosted, multi-user
+  dashboard with time-series history and alerting. The CLI becomes the agent and
+  uploads health & schema metadata only — never your data.
+- **[Sponsor](https://github.com/sponsors/croc100)** — support development directly.
 
-```bash
-export LITESCOPE_LICENSE=lsc_pro_xxxxxxxxxxxxxxxx
-# or
-echo "lsc_pro_xxxxxxxxxxxxxxxx" > ~/.litescope/license
-```
-
-Get a Pro key at **[croc100.github.io/Litescope](https://croc100.github.io/Litescope/#pricing)**.
-
-**Enterprise** — a hosted web dashboard for monitoring your entire SQLite fleet
-(Turso + Cloudflare D1 + local) from one screen, with SSO, team access, and
-self-host options for your own servers or cloud. The CLI becomes the agent. We
-collect health & schema metadata only — never your data.
-**A capped monthly subscription from $49/month (up to 25 databases; Scale tier $149/month up to 250), via Lemon Squeezy, provisioned within ~1 week of purchase.**
+See the [roadmap](ROADMAP.md) for where these are headed. Need enterprise
+self-host or have a question? **croc100100@gmail.com**.
 
 ---
 
 ## License
 
-The **Free** CLI/GUI is open source. **Pro** and **Enterprise** are proprietary:
-Pro unlocks with a paid license key — the *same binary* runs Free without one, so
-there is no separate download. The **Enterprise** web dashboard is a separate,
-closed-source product. See [LICENSE](LICENSE).
+Litescope is licensed under the **GNU Affero General Public License v3.0**
+([AGPL-3.0](LICENSE)). You can use, modify, and self-host it freely; if you offer
+it as a network service, the AGPL requires you to share your modifications. A
+separate commercial license (which waives the AGPL obligations and adds support)
+is available for organizations that need it — contact **croc100100@gmail.com**.

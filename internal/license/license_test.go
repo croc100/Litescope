@@ -1,7 +1,6 @@
 package license
 
 import (
-	"errors"
 	"os"
 	"testing"
 )
@@ -32,20 +31,18 @@ func TestCurrent_UnknownKey(t *testing.T) {
 	}
 }
 
-func TestRequirePro_Blocked(t *testing.T) {
+// Litescope is now fully free (AGPL-3.0): RequirePro is a no-op and IsPro is
+// always true, so no feature is ever gated regardless of license state.
+func TestRequirePro_NeverBlocks(t *testing.T) {
 	t.Setenv("LITESCOPE_LICENSE", "")
-	err := RequirePro()
-	if err == nil {
-		t.Fatal("expected error for free tier")
-	}
-	if !errors.Is(err, ErrUpgradeRequired) {
-		t.Errorf("expected ErrUpgradeRequired, got %v", err)
+	if err := RequirePro(); err != nil {
+		t.Errorf("the free CLI must never block: %v", err)
 	}
 }
 
-func TestRequirePro_Allowed(t *testing.T) {
-	t.Setenv("LITESCOPE_LICENSE", "lsc_pro_key")
-	if err := RequirePro(); err != nil {
-		t.Errorf("Pro key should pass RequirePro, got: %v", err)
+func TestIsPro_AlwaysTrue(t *testing.T) {
+	t.Setenv("LITESCOPE_LICENSE", "")
+	if !IsPro() {
+		t.Error("IsPro must be true for the fully-free CLI")
 	}
 }

@@ -3,32 +3,25 @@ package cli
 import (
 	"fmt"
 
-	"github.com/croc100/litescope/internal/license"
 	"github.com/spf13/cobra"
 )
 
 func cmdLicense() *cobra.Command {
 	return &cobra.Command{
 		Use:   "license",
-		Short: "Show the active license tier (Free or Pro)",
-		Long: `Report the license tier Litescope detects for the current machine.
+		Short: "Show licensing information",
+		Long: `Litescope is free and open source under the GNU AGPL-3.0.
 
-Litescope reads your key from, in order:
-  1. the LITESCOPE_LICENSE environment variable
-  2. the file ~/.litescope/license
-  3. the GUI Settings → License panel (desktop app)
+The entire CLI — every command, fleet operation, migration, and automation — is
+unlocked for everyone. There is no key to set and nothing to activate.
 
-The key is verified against the license server, with an offline grace period.`,
+A separate commercial license (waiving the AGPL obligations, with support) is
+available for organizations that need it: croc100100@gmail.com`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			switch license.Current() {
-			case license.TierPro:
-				fmt.Printf("\n  %s  Pro — all features unlocked\n\n", styleOK.Render("●"))
-			default:
-				fmt.Printf("\n  %s  Free\n", styleDim.Render("○"))
-				fmt.Printf("  %s  Set LITESCOPE_LICENSE or ~/.litescope/license to activate Pro.\n", styleDim.Render(" "))
-				fmt.Printf("  %s  Get a key: https://litescope-site.pages.dev/#pricing\n\n", styleDim.Render(" "))
-			}
+			fmt.Printf("\n  %s  Litescope — free and open source (AGPL-3.0)\n", styleOK.Render("●"))
+			fmt.Printf("  %s  Every feature is unlocked. No license key required.\n", styleDim.Render(" "))
+			fmt.Printf("  %s  Enterprise self-host / support: croc100100@gmail.com\n\n", styleDim.Render(" "))
 			return nil
 		},
 	}

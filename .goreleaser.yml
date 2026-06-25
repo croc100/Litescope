@@ -76,7 +76,7 @@ brews:
 release:
   github:
     owner: croc100
-    name: litescope-dist
+    name: Litescope
   name_template: "v{{ .Version }}"
   footer: |
     ## Install
@@ -96,4 +96,4 @@ release:
 
     ---
     **Full docs**: https://github.com/croc100/Litescope#readme
-    **Pricing**: https://github.com/croc100/Litescope#pricing
+    **Roadmap**: https://github.com/croc100/Litescope/blob/main/ROADMAP.md

@@ -181,28 +181,23 @@ func tierFromPrefix(key string) Tier {
 	return TierFree
 }
 
-// IsPro reports whether the current tier is Pro or above.
-func IsPro() bool { return Current() >= TierPro }
+// Litescope is fully open source (AGPL-3.0) and free: the entire CLI — including
+// every fleet operation, migration, and automation — is unlocked for everyone.
+// The tier machinery below is retained only for future paid surfaces that do not
+// gate the CLI: a managed/enterprise self-host license (SSO, org RBAC, support)
+// and the hosted control plane. Nothing in this binary is gated.
 
-// FreeFleetPreview is how many databases a Free user may diagnose (read-only)
-// in a single fleet command — enough to feel the value, capped to nudge upgrade.
+// IsPro reports whether Pro-or-above features are available. The open-source CLI
+// unlocks everything, so this is always true.
+func IsPro() bool { return true }
+
+// FreeFleetPreview previously capped how many databases a Free user could
+// diagnose. The CLI is now fully free, so freePreviewFleet no longer applies the
+// cap (IsPro is always true); this constant is kept for backward compatibility.
 const FreeFleetPreview = 10
 
-// RequirePro checks for Pro tier (Enterprise satisfies it too).
-func RequirePro() error {
-	if Current() >= TierPro {
-		return nil
-	}
-	return fmt.Errorf(`%w
-
-  This feature requires Litescope Pro.
-
-  Get your license: https://litescope-site.pages.dev/#pricing
-  Then activate:   export LITESCOPE_LICENSE=<your-key>
-
-  Pro ($99/year): automated migrate apply, drift alerts, full fleet ops, unlimited connections
-  Need teams, a web dashboard, SSO or self-host? See Enterprise — croc100100@gmail.com`,
-		ErrUpgradeRequired)
-}
+// RequirePro is a no-op now that the CLI is fully free. It is kept so existing
+// call sites compile unchanged.
+func RequirePro() error { return nil }
 
 var ErrUpgradeRequired = fmt.Errorf("upgrade required")
