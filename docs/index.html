@@ -755,24 +755,49 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
   <div class="wrap">
     <div class="center" style="margin-top:48px;max-width:680px;margin-left:auto;margin-right:auto;">
-      <div class="eyebrow">Coming later · Hosted dashboard</div>
+      <div class="eyebrow">Hosted dashboard · early access</div>
       <h3 style="margin-top:10px">One thing we'll host for you</h3>
       <p class="section-sub" style="margin-top:10px">
-        The only paid offering is optional and runs <em>beside</em> the open-source
-        tool, never gating it. Running SQLite on Turso, Cloudflare D1, and local
-        files? The CLI you already use becomes the agent — <code>litescope push</code>
+        The only paid offering runs <em>beside</em> the open-source tool, never
+        gating it. The CLI you already use becomes the agent — <code>litescope push</code>
         streams health and schema metadata (never your data) to a hosted dashboard
         that shows your entire fleet, thousands of instances, on one screen, with
-        time-series drift history and alerts when something breaks.
-      </p>
-      <p class="section-sub" style="margin-top:12px">
-        It runs on a metadata-only edge stack (Cloudflare Workers + D1), so it costs
-        almost nothing to operate — and there's nothing to host yourself unless you
-        want to: <code>litescope serve</code> already gives you the same dashboard
-        locally, free. The hosted version is <b>planned and demand-gated</b> — see the
-        <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">roadmap</a>. Need enterprise self-host or support? <a href="mailto:dl_litescope@crode.net">dl_litescope@crode.net</a>.
+        time-series drift history and alerts when something breaks. It runs on a
+        metadata-only edge stack (Cloudflare Workers + D1) — and you only need it if
+        you'd rather not self-host: <code>litescope serve</code> gives you the same
+        dashboard locally, free.
       </p>
     </div>
+
+    <div class="pricing-grid" style="margin-top:32px;max-width:760px;margin-left:auto;margin-right:auto;grid-template-columns:1fr 1fr;">
+      <div class="plan">
+        <div class="plan-tier" style="color:var(--teal)">Hosted</div>
+        <div class="plan-price">$49<span class="period"> /month</span></div>
+        <div class="plan-desc">Your fleet on one screen, hosted &amp; multi-user. A flat, capped monthly price — the bill never runs away.</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span>Up to <b>25 databases</b></li>
+          <li><span class="check">✓</span>Multi-user, time-series drift history</li>
+          <li><span class="check">✓</span>Fault &amp; drift alerts</li>
+          <li><span class="check">✓</span>Metadata only — never your data</li>
+        </ul>
+        <a class="btn btn-primary" href="mailto:dl_litescope@crode.net?subject=Litescope%20hosted%20dashboard%20early%20access">Get early access →</a>
+      </div>
+      <div class="plan">
+        <div class="plan-tier" style="color:var(--head)">Scale</div>
+        <div class="plan-price">$149<span class="period"> /month</span></div>
+        <div class="plan-desc">For bigger fleets. Same hosted dashboard, a higher cap. Larger or air-gapped? Self-host on your own infrastructure.</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span>Up to <b>250 databases</b></li>
+          <li><span class="check">✓</span>Everything in Hosted</li>
+          <li><span class="check">✓</span>Self-host option (your cloud / on-prem)</li>
+          <li><span class="check">✓</span>Priority support</li>
+        </ul>
+        <a class="btn btn-ghost" href="mailto:dl_litescope@crode.net?subject=Litescope%20Scale%20early%20access">Get early access →</a>
+      </div>
+    </div>
+    <p class="section-sub center" style="margin-top:18px;font-size:13px;opacity:.7;max-width:680px;margin-left:auto;margin-right:auto;">
+      In early access — <a href="mailto:dl_litescope@crode.net">email us</a> to get on the list. The CLI, local dashboard, and self-hosting stay free forever. See the <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">roadmap</a>.
+    </p>
 
     <div class="center" style="margin-top:32px;max-width:920px;margin-left:auto;margin-right:auto;">
       <img src="/assets/dashboard-preview.png" alt="Litescope dashboard — fleet health, topology map, fault triage, and schema fingerprint on one screen"
