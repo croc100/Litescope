@@ -18,15 +18,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # The Wails GUI embeds gui/frontend/dist, a build artifact that isn't in
-      # the repo and needs node/wails to produce. CI checks the CLI + library
-      # packages; the desktop app is built separately at release time.
-      - name: Resolve packages (excluding the Wails GUI)
-        id: pkgs
-        run: echo "list=$(go list ./... | grep -v '/gui' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      # The Wails GUI (gui/) embeds gui/frontend/dist, a build artifact that
+      # isn't in the repo and needs node/wails to produce, so it can't build in
+      # plain Go CI. All other code lives under cmd/ and internal/; the desktop
+      # app is built separately at release time.
       - name: Vet
-        run: go vet ${{ steps.pkgs.outputs.list }}
+        run: go vet ./cmd/... ./internal/...
       - name: Test
-        run: go test ${{ steps.pkgs.outputs.list }}
+        run: go test ./cmd/... ./internal/...
       - name: Build
-        run: go build ${{ steps.pkgs.outputs.list }}
+        run: go build ./cmd/... ./internal/...
