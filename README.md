@@ -2,7 +2,7 @@
 
 **The operations toolchain for production SQLite.**
 
-[Website](https://croc100.github.io/Litescope/) · [Roadmap](ROADMAP.md) · [Sponsor](https://github.com/sponsors/croc100)
+[Website](https://litescope-site.pages.dev) · [Roadmap](ROADMAP.md) · [Sponsor](https://github.com/sponsors/croc100)
 
 **Free and open source (AGPL-3.0). The entire CLI — every fleet operation,
 migration, and automation — is unlocked for everyone, no license key.**
