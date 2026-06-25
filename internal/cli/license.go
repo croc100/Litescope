@@ -16,12 +16,12 @@ The entire CLI — every command, fleet operation, migration, and automation —
 unlocked for everyone. There is no key to set and nothing to activate.
 
 A separate commercial license (waiving the AGPL obligations, with support) is
-available for organizations that need it: croc100100@gmail.com`,
+available for organizations that need it: dl_litescope@crode.net`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\n  %s  Litescope — free and open source (AGPL-3.0)\n", styleOK.Render("●"))
 			fmt.Printf("  %s  Every feature is unlocked. No license key required.\n", styleDim.Render(" "))
-			fmt.Printf("  %s  Enterprise self-host / support: croc100100@gmail.com\n\n", styleDim.Render(" "))
+			fmt.Printf("  %s  Enterprise self-host / support: dl_litescope@crode.net\n\n", styleDim.Render(" "))
 			return nil
 		},
 	}

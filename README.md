@@ -524,7 +524,7 @@ it:
 - **[Sponsor](https://github.com/sponsors/croc100)** — support development directly.
 
 See the [roadmap](ROADMAP.md) for where these are headed. Need enterprise
-self-host or have a question? **croc100100@gmail.com**.
+self-host or have a question? **dl_litescope@crode.net**.
 
 ---
 
@@ -534,4 +534,4 @@ Litescope is licensed under the **GNU Affero General Public License v3.0**
 ([AGPL-3.0](LICENSE)). You can use, modify, and self-host it freely; if you offer
 it as a network service, the AGPL requires you to share your modifications. A
 separate commercial license (which waives the AGPL obligations and adds support)
-is available for organizations that need it — contact **croc100100@gmail.com**.
+is available for organizations that need it — contact **dl_litescope@crode.net**.
