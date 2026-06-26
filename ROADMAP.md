@@ -77,6 +77,22 @@ Features that only make sense because D1 is the primary target.
 
 ---
 
+## Phase 2.5 — D1 data operations (making D1-first real)
+
+Concrete D1 workflows that wrangler doesn't cover well.
+
+- **D1 ↔ Local sync** — `litescope d1 pull d1://DB_ID ./local.db` and
+  `litescope d1 push ./local.db d1://DB_ID`. Full schema + data round-trip.
+  The missing bridge between local dev and production D1.
+- **D1 migration workflow** — `litescope migrate plan ./local.db d1://PROD`
+  diffs local schema against D1 and generates ready-to-apply SQL.
+  `litescope migrate apply d1://PROD` runs it. No manual file juggling.
+- **D1 Time Travel explorer** — `litescope rewind list d1://DB_ID` shows
+  available restore points. `litescope bisect d1://DB_ID --bad now --good "2d ago"`
+  binary-searches Time Travel snapshots to find the breaking migration.
+
+---
+
 ## Phase 3 — SQLite moats (D1-flavored)
 
 The three capabilities that generic DB tools cannot replicate — applied to D1.
