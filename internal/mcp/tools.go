@@ -382,14 +382,26 @@ func Registry(allowWrites bool) []Tool {
 				"busy_timeout, locking mode, and WAL bloat for local files, and returns " +
 				"provider-specific guidance for D1 and Turso. Each finding includes the exact " +
 				"PRAGMA or DSN change to apply. Returns a JSON report with a verdict " +
-				"(ok / attention / critical). Read-only.",
+				"(ok / attention / critical).\n\n" +
+				"Set live=true (local files only) to instead probe the *current* lock state: " +
+				"whether a writer is holding the lock right now and which processes have the " +
+				"file open. Use this when an app is actively reporting \"database is locked\". " +
+				"Read-only.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
+				"live":   boolProp("Probe the live lock state right now instead of static PRAGMA config (local files only)"),
 			}, "source"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
 					return "", err
+				}
+				if live, _ := args["live"].(bool); live {
+					p, err := locks.Probe(src, 250*time.Millisecond)
+					if err != nil {
+						return "", err
+					}
+					return toJSON(p)
 				}
 				r, err := locks.Diagnose(src)
 				if err != nil {

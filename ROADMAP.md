@@ -69,16 +69,20 @@ databases without hand-written glue and without footguns.
 The three moats are partly built. These phases finish them and harden the MCP
 write path, which is where the agent-operations differentiation actually lives.
 
-### Phase A — Lock doctor: live detection
+### Phase A — Lock doctor: live detection ✅ shipped
 
-Today `locks` reads PRAGMA settings statically. The real `database is locked`
-moment is finding the *live* holder. Zero hosting cost; completes moat #3.
+`locks` now probes the *current* lock state, not just static PRAGMA config —
+this is the real `database is locked` debugging moment. Zero hosting cost;
+completes moat #3.
 
-- **Live lock holder** — identify which process / connection currently holds the
-  write lock (WAL holder, busy reproduction), not just misconfiguration.
-- **Contention reproduction** — surface the exact statement / pool setting that
-  triggers `SQLITE_BUSY` under concurrent load.
-- **`locks --watch`** — stream lock contention events as they happen.
+- ✅ **Live lock probe** — `litescope locks app.db --live` attempts `BEGIN
+  IMMEDIATE` with a short timeout to detect whether a writer holds the lock
+  right now (FREE / LOCKED), with the wait time it took to resolve.
+- ✅ **Holder identification** — lists the processes (PID, command, access mode)
+  holding the database file open, via `lsof`, so you know *who* to fix.
+- ✅ **`locks --watch`** — streams lock-state changes as they happen.
+- ✅ **MCP** — `litescope_locks` accepts `live=true` so agents can diagnose a
+  live lock during an incident.
 
 ### Phase B — MCP write safety (the agent moat)
 
