@@ -234,10 +234,23 @@ func Registry(allowWrites bool) []Tool {
 			Description: "Run a read-only SQL query on any SQLite or D1 database and return the " +
 				"results as JSON. Only SELECT statements and read-only PRAGMAs are allowed. " +
 				"This is the primary tool for an AI agent to explore data in a D1 database.\n\n" +
+				"Token budgeting: results are capped at max_rows (default 200) so a large table " +
+				"won't blow your context window — the response reports total_rows and truncated. " +
+				"Use the columns argument to project only the fields you need. Narrow with LIMIT / " +
+				"WHERE for precise reads.\n\n" +
 				"For D1: set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and use source=d1://DB_ID.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
 				"sql":    strProp("A read-only SQL query (SELECT or read-only PRAGMA). Mutations are rejected."),
+				"max_rows": map[string]interface{}{
+					"type":        "number",
+					"description": "Maximum rows to return (default 200, max 2000). Excess rows are dropped and reported via truncated.",
+				},
+				"columns": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional: keep only these columns in each row (projection) to save context.",
+				},
 			}, "source", "sql"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
@@ -260,7 +273,7 @@ func Registry(allowWrites bool) []Tool {
 				if err != nil {
 					return "", err
 				}
-				return toJSON(map[string]interface{}{"rows": rows, "count": len(rows)})
+				return toJSON(budgetRows(rows, args))
 			},
 		},
 		{
@@ -762,6 +775,69 @@ func requireSource(args map[string]interface{}) (string, error) {
 
 func isRemote(src string) bool {
 	return strings.HasPrefix(src, "d1://") || strings.HasPrefix(src, "turso://")
+}
+
+// budgetRows enforces token-budgeting on a query result: it applies an optional
+// column projection and caps the row count, reporting what was dropped so the
+// agent knows the result is partial instead of silently losing data.
+func budgetRows(rows []map[string]interface{}, args map[string]interface{}) map[string]interface{} {
+	const defaultMax, hardMax = 200, 2000
+	maxRows := defaultMax
+	if n, ok := args["max_rows"].(float64); ok && n > 0 {
+		maxRows = int(n)
+	}
+	if maxRows > hardMax {
+		maxRows = hardMax
+	}
+
+	// Column projection.
+	if cols := stringSlice(args["columns"]); len(cols) > 0 {
+		keep := make(map[string]bool, len(cols))
+		for _, c := range cols {
+			keep[c] = true
+		}
+		for i, row := range rows {
+			projected := make(map[string]interface{}, len(cols))
+			for k, v := range row {
+				if keep[k] {
+					projected[k] = v
+				}
+			}
+			rows[i] = projected
+		}
+	}
+
+	total := len(rows)
+	truncated := false
+	if total > maxRows {
+		rows = rows[:maxRows]
+		truncated = true
+	}
+
+	out := map[string]interface{}{
+		"rows":       rows,
+		"count":      len(rows),
+		"total_rows": total,
+		"truncated":  truncated,
+	}
+	if truncated {
+		out["note"] = fmt.Sprintf("showing %d of %d rows (max_rows=%d). Narrow with LIMIT/WHERE or raise max_rows.", len(rows), total, maxRows)
+	}
+	return out
+}
+
+func stringSlice(v interface{}) []string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, e := range arr {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // rejectMutation blocks SQL that would mutate the database.

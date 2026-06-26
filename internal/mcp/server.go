@@ -29,12 +29,23 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+// server holds the per-connection state shared across requests.
+type server struct {
+	tools         []Tool
+	byName        map[string]Tool
+	prompts       []Prompt
+	promptByName  map[string]Prompt
+	version       string
+	defaultSource string // optional database bound at startup for concrete resources
+}
+
 // Serve runs the MCP server over newline-delimited JSON-RPC on the given
 // streams until in reaches EOF. stdout carries only protocol messages.
 // When allowWrites is true, write-capable tools (litescope_query_write,
 // litescope_migrate_apply, litescope_d1_create, litescope_d1_delete) are
-// included; otherwise only read-only tools are exposed.
-func Serve(in io.Reader, out io.Writer, version string, allowWrites bool) error {
+// included; otherwise only read-only tools are exposed. defaultSource, when
+// non-empty, is exposed as concrete schema/dictionary resources.
+func Serve(in io.Reader, out io.Writer, version string, allowWrites bool, defaultSource string) error {
 	reader := bufio.NewReader(in)
 	writer := bufio.NewWriter(out)
 
@@ -43,11 +54,21 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool) error 
 	for _, t := range tools {
 		byName[t.Name] = t
 	}
+	prompts := Prompts()
+	promptByName := make(map[string]Prompt, len(prompts))
+	for _, p := range prompts {
+		promptByName[p.Name] = p
+	}
+	s := &server{
+		tools: tools, byName: byName,
+		prompts: prompts, promptByName: promptByName,
+		version: version, defaultSource: defaultSource,
+	}
 
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			handleLine(line, writer, tools, byName, version)
+			s.handleLine(line, writer)
 		}
 		if err != nil {
 			if err == io.EOF {
@@ -58,7 +79,10 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool) error 
 	}
 }
 
-func handleLine(line []byte, w *bufio.Writer, tools []Tool, byName map[string]Tool, version string) {
+func (s *server) handleLine(line []byte, w *bufio.Writer) {
+	version := s.version
+	tools := s.tools
+	byName := s.byName
 	var req rpcRequest
 	if err := json.Unmarshal(line, &req); err != nil {
 		return // ignore malformed input
@@ -78,8 +102,12 @@ func handleLine(line []byte, w *bufio.Writer, tools []Tool, byName map[string]To
 		}
 		respond(w, req.ID, map[string]interface{}{
 			"protocolVersion": ver,
-			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
-			"serverInfo":      map[string]interface{}{"name": "litescope", "version": version},
+			"capabilities": map[string]interface{}{
+				"tools":     map[string]interface{}{},
+				"prompts":   map[string]interface{}{},
+				"resources": map[string]interface{}{},
+			},
+			"serverInfo": map[string]interface{}{"name": "litescope", "version": version},
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// notifications: no response
@@ -89,6 +117,16 @@ func handleLine(line []byte, w *bufio.Writer, tools []Tool, byName map[string]To
 		respond(w, req.ID, map[string]interface{}{"tools": toolDescriptors(tools)})
 	case "tools/call":
 		handleToolCall(w, req, byName)
+	case "prompts/list":
+		respond(w, req.ID, map[string]interface{}{"prompts": promptDescriptors(s.prompts)})
+	case "prompts/get":
+		s.handlePromptGet(w, req)
+	case "resources/list":
+		respond(w, req.ID, map[string]interface{}{"resources": concreteResources(s.defaultSource)})
+	case "resources/templates/list":
+		respond(w, req.ID, map[string]interface{}{"resourceTemplates": resourceTemplates()})
+	case "resources/read":
+		handleResourceRead(w, req)
 	default:
 		if !isNotification {
 			respondError(w, req.ID, -32601, "method not found: "+req.Method)
@@ -118,6 +156,57 @@ func handleToolCall(w *bufio.Writer, req rpcRequest, byName map[string]Tool) {
 		return
 	}
 	respond(w, req.ID, toolResult(text, false))
+}
+
+func (s *server) handlePromptGet(w *bufio.Writer, req rpcRequest) {
+	var params struct {
+		Name      string            `json:"name"`
+		Arguments map[string]string `json:"arguments"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		respondError(w, req.ID, -32602, "invalid params")
+		return
+	}
+	p, ok := s.promptByName[params.Name]
+	if !ok {
+		respondError(w, req.ID, -32602, "unknown prompt: "+params.Name)
+		return
+	}
+	for _, a := range p.Arguments {
+		if a.Required && params.Arguments[a.Name] == "" {
+			respondError(w, req.ID, -32602, "missing required argument: "+a.Name)
+			return
+		}
+	}
+	respond(w, req.ID, map[string]interface{}{
+		"description": p.Description,
+		"messages": []map[string]interface{}{{
+			"role":    "user",
+			"content": map[string]interface{}{"type": "text", "text": p.Render(params.Arguments)},
+		}},
+	})
+}
+
+func handleResourceRead(w *bufio.Writer, req rpcRequest) {
+	var params struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		respondError(w, req.ID, -32602, "invalid params")
+		return
+	}
+	text, mime, err := readResource(params.URI)
+	if err != nil {
+		respondError(w, req.ID, -32602, err.Error())
+		return
+	}
+	respond(w, req.ID, map[string]interface{}{
+		"contents": []map[string]interface{}{{
+			"uri":      params.URI,
+			"mimeType": mime,
+			"text":     text,
+		}},
+	})
 }
 
 func toolDescriptors(tools []Tool) []map[string]interface{} {

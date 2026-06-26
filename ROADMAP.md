@@ -68,6 +68,14 @@ databases without hand-written glue and without footguns.
 - `metrics` — Prometheus/OpenMetrics exporter
 - `import` / `export` / `dump` — CSV/TSV/JSON/XLSX ↔ SQLite, portable SQL
 
+**MCP protocol depth**
+- **Tools, Prompts, and Resources — the MCP server now exposes canned prompt
+  workflows (`diagnose_locked_database`, `review_migration`, `safe_optimize`,
+  `health_checkup`), and schema + data-dictionary as readable resources
+  (`litescope mcp ./app.db` binds concrete resources; `litescope://schema/{source}`
+  templates work for any source). `litescope_query` enforces token budgeting —
+  `max_rows` cap + `columns` projection + truncation reporting** ✨ new
+
 **D1 & MCP foundation**
 - Any-source DSN — every tool takes `source`: `./local.db`, `d1://DB_ID`, `turso://…`
 - D1 env-var auth — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` → short `d1://DB_ID`
@@ -101,18 +109,9 @@ Open follow-ups before moving to depth & reach:
 
 ## Next — depth & reach
 
-### Phase E — MCP protocol depth
+Phase E (MCP protocol depth — Prompts, Resources, token budgeting) has shipped.
 
-We expose Tools only. The rest of the MCP spec makes agents far more effective.
-
-- **Resources** — expose schema and a data dictionary as readable MCP resources,
-  so agents get context without spending a tool call.
-- **Prompts** — ship canned workflows ("diagnose my locked database",
-  "review this migration") as MCP prompts.
-- **Token budgeting** — enforce row limits / column projection / summarization on
-  `litescope_query` so large result sets don't blow the agent's context window.
-
-### Phase F — Exploration UI
+### Phase F — Exploration UI ← next
 
 Reach the non-developer / CSV-wrangling user the CLI doesn't serve today.
 

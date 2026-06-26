@@ -44,8 +44,13 @@ For D1 with write access:
   }
 
 Then ask Claude things like "use litescope to check the health of ./app.db"
-or "list my D1 databases and show me the schema of the users table".`,
-		Args: cobra.NoArgs,
+or "list my D1 databases and show me the schema of the users table".
+
+Pass an optional database source (e.g. 'litescope mcp ./app.db') to bind it as
+MCP resources — its schema and a data dictionary become readable to the agent
+without spending a tool call. Schema/dictionary for any source are also always
+available via resource templates.`,
+		Args: cobra.MaximumNArgs(1),
 		// The MCP server owns stdout for protocol messages — keep cobra quiet.
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -54,7 +59,11 @@ or "list my D1 databases and show me the schema of the users table".`,
 			if version == "" {
 				version = "dev"
 			}
-			return mcp.Serve(os.Stdin, os.Stdout, version, allowWrites)
+			var defaultSource string
+			if len(args) == 1 {
+				defaultSource = args[0]
+			}
+			return mcp.Serve(os.Stdin, os.Stdout, version, allowWrites, defaultSource)
 		},
 	}
 
