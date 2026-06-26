@@ -1,125 +1,151 @@
 # Litescope Roadmap
 
-**Identity:** The MCP-first operations tool for Cloudflare D1 and SQLite.
+**Identity:** The MCP-first operations tool for SQLite and Cloudflare D1.
 
 Litescope gives AI agents (Claude, Cursor, any MCP client) and developers a
-complete operations layer for D1 — inspect, diff, migrate, and monitor D1
-databases the same way you would a local SQLite file. Every operation is also
-available as a CLI command for humans and CI pipelines.
+complete operations layer for SQLite — inspect, diff, migrate, monitor, and
+*safely repair* databases, whether they live as a local file, on Cloudflare D1,
+or on Turso. Every operation is available as both an MCP tool and a CLI command.
 
-**Why D1?** D1 is production SQLite on Cloudflare's edge. Its management surface
-is thin: the Workers dashboard and wrangler. Litescope is the missing ops layer —
-and because D1 *is* SQLite, every SQLite-specific capability (schema diffing,
-migration safety analysis, per-tenant fleet ops) applies directly.
+**Why SQLite-first?** SQLite is the most-deployed database on earth and now runs
+in production at the edge (D1, Turso). Its operational surface is thin — no DBA,
+no ops console, just a file and a thin provider API. Litescope is the missing
+operations layer, and it leans into three things generic DB tools cannot do:
 
-**Why MCP?** AI agents need to query, inspect, and migrate databases autonomously.
-Litescope exposes everything as MCP tools — read-only by default, with explicit
-opt-in for writes — so Claude and other agents can reason about your D1 databases
-without you writing glue code.
+1. **File superpowers** — a SQLite database is a single file, so we can rewind it,
+   bisect its history, and snapshot it instantly.
+2. **DBA autopilot** — index recommendations, ANALYZE, and `PRAGMA optimize`
+   applied automatically, each action explained in plain language.
+3. **Lock doctor** — diagnose and fix `database is locked` / `SQLITE_BUSY`, the
+   single most common SQLite production failure.
+
+**Why MCP?** AI agents need to query, inspect, migrate, and *repair* databases
+autonomously. Litescope exposes everything as MCP tools — read-only by default,
+with explicit, guarded opt-in for writes — so agents can operate on real
+databases without hand-written glue and without footguns.
 
 ---
 
-## Current status
+## Shipped
 
-### Done
-
-- `mcp` — MCP server; all tools below callable from Claude / any MCP client
-- `health` — fault detection: corruption, WAL bloat, fragmentation
+**Core inspection & diagnosis**
+- `mcp` — MCP server; every tool below callable from Claude / any MCP client
+- `health` — fault detection: corruption, WAL bloat, fragmentation, reachability
 - `schema` — table/column/index inspection; Mermaid ERD (`--erd`)
-- `diff` — schema + row-count comparison across any two sources (local, D1, Turso)
-- `migrate` — generate + apply migrations; blast-radius analysis
+- `diff` — schema + row-count comparison across any two sources (local / D1 / Turso)
 - `advise` — index recommendations, FK-without-index detection
 - `lint` — schema anti-pattern linter (CI-native)
-- `doctor` — single-command checkup (integrity + health + advise + lint)
+- `doctor` — one-command checkup (integrity + health + advise + lint)
 - `check` — backup integrity verification
+- **`locks` — lock doctor: diagnose `database is locked` / `SQLITE_BUSY`,
+  prescribe WAL / `busy_timeout` / locking-mode fixes (local, D1, Turso)** ✨ new
+
+**Change management**
+- `migrate` — generate + apply migrations; blast-radius analysis
 - `validate` — snapshot-based migration locking for CI
 - `monitor` — continuous drift detection; webhook alerts
+
+**File superpowers**
+- `rewind` — D1 Time Travel restore to any point in the last 30 days
+- `bisect` — binary-search Time Travel snapshots to find the breaking migration
+
+**Fleet & data**
 - `fleet` — parallel ops across hundreds of databases (health, fingerprint, migrate canary)
 - `serve` — local web dashboard (fleet topology + health)
 - `metrics` — Prometheus/OpenMetrics exporter
-- `import` — CSV/TSV/JSON/XLSX → SQLite
-- `export` — table/query → CSV/TSV/JSON
-- `dump` — portable SQL export
-- D1 connector — `d1://TOKEN@ACCOUNT_ID/DB_ID` and env-var short form
+- `import` / `export` / `dump` — CSV/TSV/JSON/XLSX ↔ SQLite, portable SQL
+
+**D1 & MCP foundation**
+- Any-source DSN — every tool takes `source`: `./local.db`, `d1://DB_ID`, `turso://…`
+- D1 env-var auth — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` → short `d1://DB_ID`
+- MCP write tools (opt-in, `--allow-writes`): `litescope_query_write`, `litescope_migrate_apply`
+- D1 lifecycle MCP tools: `litescope_d1_list` / `_create` / `_delete` / `_pull`
+- D1 ↔ local sync: `litescope d1 pull` / `push`
 
 ---
 
-## Phase 1 — D1+MCP foundation (now)
+## Now — close the moats
 
-Make D1 a first-class citizen in MCP tools. Today all MCP tools take a local
-`path`; D1 and Turso DSNs are blocked. This phase closes that gap.
+The three moats are partly built. These phases finish them and harden the MCP
+write path, which is where the agent-operations differentiation actually lives.
 
-- **MCP tools accept any source** — `source` param replaces `path`; any DSN
-  works: `./local.db`, `d1://ACCOUNT/DB_ID`, `turso://TOKEN@ORG/DB`
-- **D1 env-var auth** — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` → short
-  form `d1://DB_ID` (no token in the string). Safe for AI agent configs.
-- **`litescope_d1_list`** — new MCP tool: list all D1 databases in the account.
-  Claude can call this first to discover DB IDs before operating on them.
-- **`litescope_query`** — new MCP tool: run any read-only SQL on any source.
-  The most-requested AI-agent primitive.
+### Phase A — Lock doctor: live detection
 
----
+Today `locks` reads PRAGMA settings statically. The real `database is locked`
+moment is finding the *live* holder. Zero hosting cost; completes moat #3.
 
-## Phase 2 — D1-native operations ✅ shipped
+- **Live lock holder** — identify which process / connection currently holds the
+  write lock (WAL holder, busy reproduction), not just misconfiguration.
+- **Contention reproduction** — surface the exact statement / pool setting that
+  triggers `SQLITE_BUSY` under concurrent load.
+- **`locks --watch`** — stream lock contention events as they happen.
 
-Features that only make sense because D1 is the primary target.
+### Phase B — MCP write safety (the agent moat)
 
-- ✅ **D1 Time Travel integration** — `litescope rewind d1://DB_ID --to "2h ago"`.
-  Restore to any point in the last 30 days via Cloudflare's Time Travel API.
-  Accepts relative durations (`2h ago`, `3d ago`, `yesterday`) or RFC 3339.
-- ✅ **D1 fleet from account** — `litescope fleet discover d1` auto-generates a
-  fleet config from all databases in the account. Supports `--merge` to update
-  an existing config without losing baselines or tags.
-- ✅ **MCP write tools (opt-in)** — `litescope_migrate_apply`, `litescope_query_write`
-  behind an explicit `--allow-writes` flag on `litescope mcp`. Off by default.
-- ✅ **`litescope_d1_create` / `litescope_d1_delete`** — lifecycle management from
-  MCP (create a D1 database, drop it). Useful for AI-driven test-fixture setup.
+`--allow-writes` gates writes, but an agent needs guardrails *inside* the write.
+This is the single biggest MCP differentiator we don't yet have.
 
----
+- **Dry-run by default** — write tools return the planned change without applying.
+- **Impact preview** — report affected row count before commit ("this UPDATE
+  hits 40k rows") so the agent (and human) can reason about blast radius.
+- **Auto-snapshot before write** — take an instant file/Time-Travel snapshot
+  before any mutation, so every agent write is one rewind away from undo.
+- **Error → remediation loop** — when a write fails (`locked`, constraint), return
+  structured lock-doctor guidance the agent can act on, not a raw error string.
 
-## Phase 2.5 — D1 data operations (making D1-first real)
+### Phase C — Backup & point-in-time for local + Turso
 
-Concrete D1 workflows that wrangler doesn't cover well.
+`rewind` only covers D1 Time Travel. Local and Turso SQLite have no backup/PITR —
+the first question of any ops tool ("did you back up?") goes unanswered.
 
-- **D1 ↔ Local sync** — `litescope d1 pull d1://DB_ID ./local.db` and
-  `litescope d1 push ./local.db d1://DB_ID`. Full schema + data round-trip.
-  The missing bridge between local dev and production D1.
-- **D1 migration workflow** — `litescope migrate plan ./local.db d1://PROD`
-  diffs local schema against D1 and generates ready-to-apply SQL.
-  `litescope migrate apply d1://PROD` runs it. No manual file juggling.
-- **D1 Time Travel explorer** — `litescope rewind list d1://DB_ID` shows
-  available restore points. `litescope bisect d1://DB_ID --bad now --good "2d ago"`
-  binary-searches Time Travel snapshots to find the breaking migration.
+- **Snapshot / restore** — `litescope snapshot ./app.db` and `litescope restore`,
+  instant copy-on-write style snapshots of the file.
+- **`health` backup warning** — flag databases with no backup configured.
+- **Scheduled snapshots** — retention policy for local/Turso, parity with D1.
 
----
+### Phase D — Autopilot (DBA self-driving)
 
-## Phase 3 — SQLite moats (D1-flavored)
+The third moat. Auto-apply safe optimizations across one DB or a whole fleet,
+explaining every action in plain language.
 
-The three capabilities that generic DB tools cannot replicate — applied to D1.
-
-- **Lock doctor** — diagnose `SQLITE_BUSY` / writer starvation across a D1 fleet;
-  prescribe WAL mode, `busy_timeout`, pool config in plain language.
-  (`litescope locks d1://DB_ID`)
-- **Bisect** — binary-search across Time Travel snapshots to find the exact
-  migration that broke a D1 database. (`litescope bisect --bad d1://DB_ID`)
-- **Autopilot** — auto-apply `PRAGMA optimize`, ANALYZE, index recommendations
-  across a D1 fleet; explain every action in plain language.
-  (`litescope autopilot --fleet litescope.fleet.yaml`)
+- **`litescope autopilot`** — `PRAGMA optimize`, ANALYZE, index creation from
+  `advise`, and unused-index cleanup, applied with explanations.
+- **EXPLAIN QUERY PLAN analysis** — detect full scans and missing indexes from
+  real queries, not just schema shape.
+- **Fleet autopilot** — `litescope autopilot --fleet litescope.fleet.yaml`.
 
 ---
 
-## Phase 4 — platform & distribution
+## Next — depth & reach
 
-- **Cloudflare Workers Launchpad** — apply for CF's startup support program;
-  D1 integration is the pitch.
-- **`wrangler` plugin** — ship Litescope as a wrangler plugin so `wrangler d1`
-  users get ops tools without a separate install.
-- **GitHub Action** — `litescope-action` for migration CI on D1: diff, lint,
-  blast-radius comment on PRs.
-- **AGPL dual-license** — commercial license for teams that can't ship AGPL
-  source. Enables enterprise self-host without open-sourcing their product.
+### Phase E — MCP protocol depth
+
+We expose Tools only. The rest of the MCP spec makes agents far more effective.
+
+- **Resources** — expose schema and a data dictionary as readable MCP resources,
+  so agents get context without spending a tool call.
+- **Prompts** — ship canned workflows ("diagnose my locked database",
+  "review this migration") as MCP prompts.
+- **Token budgeting** — enforce row limits / column projection / summarization on
+  `litescope_query` so large result sets don't blow the agent's context window.
+
+### Phase F — Exploration UI
+
+Reach the non-developer / CSV-wrangling user the CLI doesn't serve today.
+
+- **Data browsing** — browse and filter tables in the local dashboard
+  (Datasette-style), not just fleet topology.
+- **Visual diff & migration review** — see schema/data changes before applying.
+
+### Phase G — Platform & distribution
+
+- **`wrangler` plugin** — `wrangler d1` users get Litescope ops without a separate install.
+- **GitHub Action** — migration CI: diff, lint, blast-radius comment on PRs.
+- **Cloudflare Workers Launchpad** — apply for CF's startup support program.
+- **Commercial license** — enterprise self-host / hosting / support on top of the
+  AGPL-3.0 open core.
 
 ---
 
-*Priority shifts based on D1 ecosystem feedback. File issues or start a
-discussion to influence the order.*
+*Priority shifts based on ecosystem feedback. File issues or start a discussion
+to influence the order.*
