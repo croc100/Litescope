@@ -18,6 +18,7 @@ import (
 	"github.com/croc100/litescope/internal/health"
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/migrate"
+	"github.com/croc100/litescope/internal/safewrite"
 	"github.com/croc100/litescope/internal/schema"
 )
 
@@ -515,79 +516,41 @@ func writeTools() []Tool {
 		},
 		{
 			Name: "litescope_query_write",
-			Description: "Execute a SQL statement that modifies a database (INSERT, UPDATE, DELETE, " +
-				"CREATE TABLE, DROP TABLE, etc.). Only available when litescope mcp is started with " +
-				"--allow-writes. Works on local SQLite files and Cloudflare D1 (d1://DB_ID). " +
-				"Returns rows_affected and last_insert_id where applicable.",
+			Description: "Execute a mutating SQL statement (INSERT, UPDATE, DELETE, CREATE TABLE, " +
+				"DROP TABLE, etc.) with agent guardrails. Only available with --allow-writes.\n\n" +
+				"⚠ DRY-RUN BY DEFAULT: with apply=false (the default) the statement is NOT applied — " +
+				"it runs inside a transaction that is rolled back, and the tool returns the exact " +
+				"rows_affected (blast radius) so you can reason before committing. " +
+				"Set apply=true to commit; a snapshot is taken automatically before the write so it " +
+				"is one rewind away from undo. On a lock/busy failure the tool returns structured " +
+				"lock-doctor remediation instead of a raw error. Local SQLite files only for the " +
+				"guarded path; D1/Turso fall back to direct execution and require apply=true.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
-				"sql":    strProp("SQL statement to execute. Must be a single statement."),
+				"sql":    strProp("SQL statement(s) to execute, separated by semicolons."),
+				"apply":  boolProp("Commit the change. Default false (dry-run: measure impact only)."),
 			}, "source", "sql"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				src, err := requireSource(args)
-				if err != nil {
-					return "", err
-				}
-				sql, _ := args["sql"].(string)
-				if sql == "" {
-					return "", fmt.Errorf("sql is required")
-				}
-
-				conn, err := connector.Open(src)
-				if err != nil {
-					return "", err
-				}
-				defer conn.Close()
-
-				rows, err := connector.Query(conn, sql)
-				if err != nil {
-					return "", fmt.Errorf("executing SQL: %w", err)
-				}
-				return toJSON(map[string]interface{}{
-					"rows":    rows,
-					"count":   len(rows),
-					"warning": "This tool mutates the database. Use with care.",
-				})
+				return handleGuardedWrite(args)
 			},
 		},
 		{
 			Name: "litescope_migrate_apply",
-			Description: "Apply a SQL migration to a database. Wraps the migration in a transaction " +
-				"where possible (local SQLite). For D1, statements are executed sequentially. " +
-				"Only available when litescope mcp is started with --allow-writes.",
+			Description: "Apply a multi-statement SQL migration with agent guardrails. Only available " +
+				"with --allow-writes.\n\n" +
+				"⚠ DRY-RUN BY DEFAULT: with apply=false (the default) the migration is validated " +
+				"inside a transaction and rolled back, returning per-statement rows_affected so you " +
+				"can review the blast radius first. Set apply=true to commit; a pre-migration " +
+				"snapshot is taken automatically and restored if the commit fails. Lock/busy errors " +
+				"return structured lock-doctor remediation. Local SQLite files only for the guarded " +
+				"path; D1/Turso fall back to sequential execution and require apply=true.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
 				"sql":    strProp("One or more SQL statements separated by semicolons."),
+				"apply":  boolProp("Commit the migration. Default false (dry-run: validate + measure only)."),
 			}, "source", "sql"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				src, err := requireSource(args)
-				if err != nil {
-					return "", err
-				}
-				sql, _ := args["sql"].(string)
-				if sql == "" {
-					return "", fmt.Errorf("sql is required")
-				}
-
-				conn, err := connector.Open(src)
-				if err != nil {
-					return "", err
-				}
-				defer conn.Close()
-
-				exec, ok := connector.AsExecutor(conn)
-				if !ok {
-					return "", fmt.Errorf("connector for %q does not support execution", src)
-				}
-				stmts := splitStatements(sql)
-				if err := exec.Exec(stmts, false); err != nil {
-					return "", fmt.Errorf("migration failed: %w", err)
-				}
-				return toJSON(map[string]interface{}{
-					"ok":         true,
-					"statements": len(stmts),
-					"source":     src,
-				})
+				return handleGuardedWrite(args)
 			},
 		},
 		{
@@ -665,6 +628,61 @@ func rejectMutation(sql string) error {
 		}
 	}
 	return nil
+}
+
+// handleGuardedWrite backs litescope_query_write and litescope_migrate_apply.
+// Local SQLite files go through the safewrite guardrails (dry-run by default,
+// exact impact preview, auto-snapshot, lock remediation). Remote providers
+// (D1/Turso) have no client-side transaction, so they fall back to direct
+// sequential execution and require an explicit apply=true.
+func handleGuardedWrite(args map[string]interface{}) (string, error) {
+	src, err := requireSource(args)
+	if err != nil {
+		return "", err
+	}
+	sqlText, _ := args["sql"].(string)
+	if sqlText == "" {
+		return "", fmt.Errorf("sql is required")
+	}
+	apply, _ := args["apply"].(bool)
+
+	if !isRemote(src) {
+		res, err := safewrite.PlanLocal(src, sqlText, apply)
+		if err != nil {
+			return "", err
+		}
+		return toJSON(res)
+	}
+
+	// Remote: no transactional dry-run available.
+	if !apply {
+		return toJSON(map[string]interface{}{
+			"ok":      false,
+			"applied": false,
+			"note": "Remote databases (D1/Turso) have no client-side transaction, so dry-run " +
+				"impact preview is unavailable. Re-run with apply=true to execute. Consider " +
+				"litescope_d1_pull to snapshot a D1 database locally first, or litescope_rewind to undo.",
+		})
+	}
+	conn, err := connector.Open(src)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	exec, ok := connector.AsExecutor(conn)
+	if !ok {
+		return "", fmt.Errorf("connector for %q does not support execution", src)
+	}
+	stmts := splitStatements(sqlText)
+	if err := exec.Exec(stmts, false); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+	return toJSON(map[string]interface{}{
+		"ok":         true,
+		"applied":    true,
+		"statements": len(stmts),
+		"source":     src,
+	})
 }
 
 // fleetDBs loads the fleet config and returns the databases matching an optional tag.

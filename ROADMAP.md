@@ -64,31 +64,21 @@ databases without hand-written glue and without footguns.
 - MCP write tools (opt-in, `--allow-writes`): `litescope_query_write`, `litescope_migrate_apply`
 - D1 lifecycle MCP tools: `litescope_d1_list` / `_create` / `_delete` / `_pull`
 - D1 ↔ local sync: `litescope d1 pull` / `push`
+- **MCP write safety (the agent moat): `litescope_query_write` /
+  `litescope_migrate_apply` are dry-run by default — they measure exact
+  rows-affected blast radius inside a rolled-back transaction, auto-snapshot
+  before any real `apply=true` write, and return structured lock-doctor
+  remediation on `database is locked` instead of a raw error** ✨ new
 
 ---
 
 ## Now — close the moats
 
-Moat #3 (lock doctor) is complete, static and live. What remains is hardening
-the MCP write path — where the agent-operations differentiation actually lives —
-then finishing the file-superpower and autopilot moats.
+Moat #3 (lock doctor) is complete, static and live. Phase B (MCP write safety)
+has shipped — the agent moat now has guardrails *inside* the write. What remains
+is the file-superpower (local/Turso backup) and autopilot moats.
 
-### Phase B — MCP write safety (the agent moat) ← next
-
-The next phase to build.
-
-`--allow-writes` gates writes, but an agent needs guardrails *inside* the write.
-This is the single biggest MCP differentiator we don't yet have.
-
-- **Dry-run by default** — write tools return the planned change without applying.
-- **Impact preview** — report affected row count before commit ("this UPDATE
-  hits 40k rows") so the agent (and human) can reason about blast radius.
-- **Auto-snapshot before write** — take an instant file/Time-Travel snapshot
-  before any mutation, so every agent write is one rewind away from undo.
-- **Error → remediation loop** — when a write fails (`locked`, constraint), return
-  structured lock-doctor guidance the agent can act on, not a raw error string.
-
-### Phase C — Backup & point-in-time for local + Turso
+### Phase C — Backup & point-in-time for local + Turso ← next
 
 `rewind` only covers D1 Time Travel. Local and Turso SQLite have no backup/PITR —
 the first question of any ops tool ("did you back up?") goes unanswered.
