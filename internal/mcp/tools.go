@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/croc100/litescope/internal/advisor"
 	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/connector"
+	"github.com/croc100/litescope/internal/d1sync"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
@@ -178,6 +180,52 @@ func Registry(allowWrites bool) []Tool {
 			},
 		},
 		{
+			Name: "litescope_migrate_diff",
+			Description: "Diff two SQLite or D1 databases and return the migration SQL that would " +
+				"bring the 'old' source up to the 'new' schema — without applying it or computing " +
+				"blast-radius. Useful when you only need the SQL to review or pass to " +
+				"litescope_migrate_apply. For a full blast-radius analysis use litescope_migrate_plan. " +
+				"Read-only.",
+			InputSchema: obj(props{
+				"old": strProp("Current ('before') source — " + sourcePropDesc),
+				"new": strProp("Target ('after') source with the desired schema — " + sourcePropDesc),
+			}, "old", "new"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				oldP, _ := args["old"].(string)
+				newP, _ := args["new"].(string)
+				if oldP == "" || newP == "" {
+					return "", fmt.Errorf("both 'old' and 'new' are required")
+				}
+				d, err := diff.Compare(oldP, newP)
+				if err != nil {
+					return "", err
+				}
+				var newSch *schema.Schema
+				if isRemote(newP) {
+					c, err := connector.Open(newP)
+					if err != nil {
+						return "", err
+					}
+					defer c.Close()
+					newSch, err = c.Schema()
+					if err != nil {
+						return "", err
+					}
+				} else {
+					newSch, err = schema.Load(newP)
+					if err != nil {
+						return "", err
+					}
+				}
+				m := migrate.Generate(d, newSch)
+				return toJSON(map[string]interface{}{
+					"sql":        m.SQL(),
+					"statements": len(m.Statements),
+					"tip":        "Pass 'sql' to litescope_migrate_apply to apply this migration.",
+				})
+			},
+		},
+		{
 			Name: "litescope_query",
 			Description: "Run a read-only SQL query on any SQLite or D1 database and return the " +
 				"results as JSON. Only SELECT statements and read-only PRAGMAs are allowed. " +
@@ -338,6 +386,97 @@ func Registry(allowWrites bool) []Tool {
 // MCP server is started with --allow-writes.
 func writeTools() []Tool {
 	return []Tool{
+		{
+			Name: "litescope_rewind",
+			Description: "Restore a Cloudflare D1 database to a previous point in time using " +
+				"D1 Time Travel. Accepts human-readable timestamps: \"2h ago\", \"3d ago\", " +
+				"\"yesterday\", RFC 3339 (\"2024-01-15T10:30:00Z\"), or \"now\". " +
+				"Only available when litescope mcp is started with --allow-writes. " +
+				"Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables.\n\n" +
+				"⚠ This is destructive: the database is restored in-place. Use litescope_health " +
+				"or litescope_query to inspect the database before rewinding.",
+			InputSchema: obj(props{
+				"source": strProp("D1 database DSN (d1://DB_ID). Only D1 is supported."),
+				"to":     strProp("Point in time to restore to: \"2h ago\", \"3d ago\", \"yesterday\", RFC 3339, or \"now\"."),
+			}, "source", "to"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if !strings.HasPrefix(src, "d1://") {
+					return "", fmt.Errorf("litescope_rewind only supports D1 databases (d1://DB_ID); got %q", src)
+				}
+				toStr, _ := args["to"].(string)
+				if toStr == "" {
+					return "", fmt.Errorf("'to' is required (e.g. \"2h ago\", \"yesterday\", RFC 3339)")
+				}
+				ts, err := parseMCPTime(toStr)
+				if err != nil {
+					return "", err
+				}
+				_, accountID, databaseID, err := connector.ParseD1DSN(src)
+				if err != nil {
+					return "", err
+				}
+				result, err := connector.D1TimeTravel(accountID, databaseID, ts)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"ok":        true,
+					"source":    src,
+					"restored":  result.Timestamp,
+					"bookmark":  result.Bookmark,
+					"requested": ts.UTC().Format(time.RFC3339),
+				})
+			},
+		},
+		{
+			Name: "litescope_d1_pull",
+			Description: "Download a Cloudflare D1 database to a local SQLite file. Copies the " +
+				"full schema and all rows. Useful for local inspection, backup, or diffing with " +
+				"another database. Only available when litescope mcp is started with --allow-writes.\n\n" +
+				"After pulling, use litescope_health or litescope_schema on the local file.",
+			InputSchema: obj(props{
+				"source":     strProp("D1 database DSN (d1://DB_ID). Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID."),
+				"local_path": strProp("Local file path to write the SQLite database to (e.g. ./snapshot.db). Created or overwritten."),
+				"batch_size": map[string]interface{}{"type": "number", "description": "Rows per SELECT page (default 500)."},
+			}, "source", "local_path"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if !strings.HasPrefix(src, "d1://") {
+					return "", fmt.Errorf("litescope_d1_pull requires a D1 source (d1://DB_ID); got %q", src)
+				}
+				localPath, _ := args["local_path"].(string)
+				if localPath == "" {
+					return "", fmt.Errorf("local_path is required")
+				}
+				batchSize := 500
+				if n, ok := args["batch_size"].(float64); ok && n > 0 {
+					batchSize = int(n)
+				}
+				var tables []map[string]interface{}
+				opts := d1sync.PullOptions{
+					BatchSize: batchSize,
+					ProgressFn: func(table string, rows int) {
+						tables = append(tables, map[string]interface{}{"table": table, "rows": rows})
+					},
+				}
+				if err := d1sync.Pull(src, localPath, opts); err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"ok":         true,
+					"source":     src,
+					"local_path": localPath,
+					"tables":     tables,
+				})
+			},
+		},
 		{
 			Name: "litescope_query_write",
 			Description: "Execute a SQL statement that modifies a database (INSERT, UPDATE, DELETE, " +
@@ -694,6 +833,44 @@ func idxNames(idxs []schema.Index) []string {
 		out = append(out, ix.Name)
 	}
 	return out
+}
+
+// parseMCPTime converts human-readable time strings to time.Time.
+// Supports RFC 3339, "2h ago", "3d ago", "yesterday", "now".
+func parseMCPTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	now := time.Now().UTC()
+
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	if s == "yesterday" {
+		return now.Add(-24 * time.Hour), nil
+	}
+	if s == "now" {
+		return now, nil
+	}
+
+	s2 := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(s), " ago"), "ago"))
+	for _, u := range []struct {
+		suffix string
+		d      time.Duration
+	}{
+		{"d", 24 * time.Hour},
+		{"h", time.Hour},
+		{"m", time.Minute},
+		{"s", time.Second},
+	} {
+		if strings.HasSuffix(s2, u.suffix) {
+			var n int
+			if _, err := fmt.Sscanf(strings.TrimSuffix(s2, u.suffix), "%d", &n); err == nil {
+				return now.Add(-time.Duration(n) * u.d), nil
+			}
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized time format; use \"2h ago\", \"3d ago\", \"yesterday\", RFC 3339, or \"now\"")
 }
 
 // splitStatements splits a SQL string on semicolons, trimming whitespace and

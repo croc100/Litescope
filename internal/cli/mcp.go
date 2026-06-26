@@ -17,8 +17,8 @@ func cmdMCP() *cobra.Command {
 Desktop, Claude Code, or any MCP client — can call Litescope as a tool.
 
 By default only read-only tools are exposed. Pass --allow-writes to also
-enable litescope_query_write, litescope_migrate_apply, litescope_d1_create,
-and litescope_d1_delete.
+enable litescope_rewind, litescope_d1_pull, litescope_query_write,
+litescope_migrate_apply, litescope_d1_create, and litescope_d1_delete.
 
 Add to your Claude Desktop config (claude_desktop_config.json):
 
@@ -59,6 +59,6 @@ or "list my D1 databases and show me the schema of the users table".`,
 	}
 
 	cmd.Flags().BoolVar(&allowWrites, "allow-writes", false,
-		"Enable write tools: litescope_query_write, litescope_migrate_apply, litescope_d1_create, litescope_d1_delete")
+		"Enable write tools: litescope_rewind, litescope_d1_pull, litescope_query_write, litescope_migrate_apply, litescope_d1_create, litescope_d1_delete")
 	return cmd
 }
