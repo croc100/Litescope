@@ -297,6 +297,32 @@ litescope fleet migrate migration.sql
 
 ---
 
+## CI — GitHub Action
+
+Run Litescope on every pull request — lint the schema, diff against the base
+branch, and comment the blast radius so a risky migration can't merge unreviewed.
+
+```yaml
+- uses: croc100/Litescope@v1
+  with:
+    args: "lint app.db --strict"
+    comment: "true"          # post the result as a sticky PR comment
+```
+
+`args` is any Litescope command; the job exits non-zero when Litescope flags
+something, failing the check. See
+[examples/github-actions/migration-ci.yml](examples/github-actions/migration-ci.yml)
+for a full lint + diff workflow.
+
+| Input | Default | Description |
+|---|---|---|
+| `args` | — | Litescope command to run (required) |
+| `version` | `latest` | Release tag to install, or `latest` |
+| `comment` | `false` | Post output as a sticky PR comment |
+| `working-directory` | `.` | Directory to run in |
+
+---
+
 ## Install
 
 **Homebrew**
@@ -333,4 +359,5 @@ macOS, Linux, Windows — [Releases](https://github.com/croc100/Litescope/releas
 Litescope is **AGPL-3.0**. Free to use, modify, and self-host. If you offer it
 as a network service the AGPL requires you to share your modifications. A
 commercial license (AGPL exception + support SLA) is available for
-organizations — **dl_litescope@crode.net**.
+organizations — see [COMMERCIAL.md](COMMERCIAL.md) or email
+**dl_litescope@crode.net**.

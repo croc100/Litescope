@@ -1,0 +1,49 @@
+# Litescope migration CI — copy this into .github/workflows/ in your repo.
+#
+# On every pull request it lints the committed schema and, when a migration
+# changes it, comments the schema/data diff and blast-radius on the PR. The job
+# fails if Litescope flags anything that needs attention, so a risky change
+# can't merge unreviewed.
+name: Litescope
+
+on:
+  pull_request:
+    paths:
+      - "**/*.db"
+      - "**/*.sql"
+      - "schema/**"
+
+permissions:
+  contents: read
+  pull-requests: write   # required for the PR comment
+
+jobs:
+  lint-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Catch schema anti-patterns before they ship.
+      - name: Lint schema
+        uses: croc100/Litescope@v1
+        with:
+          args: "lint app.db --strict"
+          comment: "true"
+
+  diff-against-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Materialize the base-branch copy of the database for comparison.
+      - name: Check out base schema
+        run: git show "origin/${{ github.base_ref }}:app.db" > base.db || cp app.db base.db
+
+      # Comment the schema + data diff and blast radius on the PR.
+      - name: Diff app.db
+        uses: croc100/Litescope@v1
+        with:
+          args: "diff base.db app.db --format markdown"
+          comment: "true"

@@ -1,0 +1,153 @@
+name: "Litescope"
+description: "Run Litescope SQLite/D1 checks in CI — schema diff, lint, blast-radius — and comment the result on the pull request."
+author: "croc100"
+branding:
+  icon: "database"
+  color: "green"
+
+inputs:
+  args:
+    description: "Litescope arguments to run, e.g. 'doctor app.db --format markdown' or 'lint app.db --strict'."
+    required: true
+  version:
+    description: "Litescope release to use ('latest' or a tag like 'v0.5.0')."
+    required: false
+    default: "latest"
+  comment:
+    description: "Post the command output as a sticky comment on the pull request."
+    required: false
+    default: "false"
+  working-directory:
+    description: "Directory to run Litescope in."
+    required: false
+    default: "."
+  github-token:
+    description: "Token used to post the PR comment (defaults to the workflow token)."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: "Exit code returned by Litescope (0 = clean, non-zero = findings/failure)."
+    value: ${{ steps.run.outputs.exit-code }}
+  output:
+    description: "Captured stdout of the Litescope command."
+    value: ${{ steps.run.outputs.output }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Litescope
+      shell: bash
+      env:
+        LS_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        repo="croc100/Litescope"
+
+        # Resolve the release tag.
+        if [ "$LS_VERSION" = "latest" ]; then
+          tag=$(gh api "repos/$repo/releases/latest" --jq .tag_name)
+        else
+          tag="$LS_VERSION"
+        fi
+        ver="${tag#v}"   # asset filenames omit the leading v
+
+        # Map the runner platform to a release asset.
+        os=$(uname -s | tr '[:upper:]' '[:lower:]')
+        case "$os" in
+          linux)  goos=linux ;;
+          darwin) goos=darwin ;;
+          *) echo "::error::unsupported OS for Litescope action: $os"; exit 1 ;;
+        esac
+        arch=$(uname -m)
+        case "$arch" in
+          x86_64|amd64) goarch=amd64 ;;
+          arm64|aarch64) goarch=arm64 ;;
+          *) echo "::error::unsupported arch for Litescope action: $arch"; exit 1 ;;
+        esac
+
+        asset="litescope_${ver}_${goos}_${goarch}.tar.gz"
+        dest="$RUNNER_TEMP/litescope"
+        mkdir -p "$dest"
+        echo "Downloading $asset from $repo@$tag"
+        gh release download "$tag" --repo "$repo" --pattern "$asset" --dir "$dest"
+        tar -xzf "$dest/$asset" -C "$dest"
+        echo "$dest" >> "$GITHUB_PATH"
+        "$dest/litescope" --version || true
+
+    - name: Run Litescope
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -uo pipefail
+        out_file="$RUNNER_TEMP/litescope-output.txt"
+        # Capture output and exit code without aborting the step, so we can
+        # still post a comment and surface the result.
+        set +e
+        litescope ${{ inputs.args }} 2>&1 | tee "$out_file"
+        code=${PIPESTATUS[0]}
+        set -e
+
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        {
+          echo "output<<__LS_EOF__"
+          cat "$out_file"
+          echo "__LS_EOF__"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### Litescope"
+          echo ""
+          echo "\`litescope ${{ inputs.args }}\` → exit $code"
+          echo ""
+          echo '```'
+          cat "$out_file"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        echo "LS_EXIT=$code" >> "$GITHUB_ENV"
+
+    - name: Comment on pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        marker="<!-- litescope-action -->"
+        pr=${{ github.event.pull_request.number }}
+        repo="${{ github.repository }}"
+        out_file="$RUNNER_TEMP/litescope-output.txt"
+
+        verdict="✅ clean"
+        if [ "${LS_EXIT:-0}" != "0" ]; then verdict="⚠️ needs attention (exit ${LS_EXIT})"; fi
+
+        body="$marker
+        ## Litescope — $verdict
+
+        \`litescope ${{ inputs.args }}\`
+
+        \`\`\`
+        $(cat "$out_file")
+        \`\`\`"
+
+        # Update an existing sticky comment if present, otherwise create one.
+        existing=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
+          --jq "map(select(.body | contains(\"$marker\"))) | .[0].id // empty")
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$repo/issues/comments/$existing" -f body="$body" >/dev/null
+        else
+          gh api -X POST "repos/$repo/issues/$pr/comments" -f body="$body" >/dev/null
+        fi
+
+    - name: Propagate exit code
+      shell: bash
+      run: |
+        code="${{ steps.run.outputs.exit-code }}"
+        if [ "$code" != "0" ]; then
+          echo "::error::Litescope reported findings (exit $code)"
+          exit "$code"
+        fi

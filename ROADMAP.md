@@ -114,13 +114,18 @@ Open follow-ups before moving to depth & reach:
 
 Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
 
-### Phase G — Platform & distribution ← next
+### Phase G — Platform & distribution ← in progress
 
-- **`wrangler` plugin** — `wrangler d1` users get Litescope ops without a separate install.
-- **GitHub Action** — migration CI: diff, lint, blast-radius comment on PRs.
+- ✅ **GitHub Action** — `uses: croc100/Litescope@v1` runs any Litescope command
+  in CI (lint, diff, doctor), fails the check on findings, and posts a sticky
+  blast-radius comment on the PR. See `action.yml` and
+  `examples/github-actions/`.
+- ✅ **Commercial licensing** — dual-license path documented (`COMMERCIAL.md`):
+  AGPL-3.0 open core + commercial exception/support, plus the live hosted
+  dashboard subscription.
+- **`wrangler` plugin / npm wrapper** — let `wrangler d1` / JS users invoke
+  Litescope via `npx` without a separate install. *(next)*
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
-- **Commercial license** — enterprise self-host / hosting / support on top of the
-  AGPL-3.0 open core.
 
 ---
 
