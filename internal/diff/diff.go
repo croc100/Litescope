@@ -131,17 +131,17 @@ func diffTable(name string, old, new schema.Table) *TableDiff {
 }
 
 func diffData(oldPath, newPath string, oldSchema, newSchema *schema.Schema) ([]DataDiff, error) {
-	oldDB, err := sql.Open("sqlite", oldPath)
+	// Open the new database and ATTACH the old one as schema "old" so both sides
+	// are reachable from a single connection — cross-row comparisons must run in
+	// the same SQLite instance.
+	db, err := sql.Open("sqlite", newPath)
 	if err != nil {
 		return nil, err
 	}
-	defer oldDB.Close()
-
-	newDB, err := sql.Open("sqlite", newPath)
-	if err != nil {
-		return nil, err
+	defer db.Close()
+	if _, err := db.Exec("ATTACH DATABASE ? AS old", oldPath); err != nil {
+		return nil, fmt.Errorf("attach old database: %w", err)
 	}
-	defer newDB.Close()
 
 	oldMap := oldSchema.TableMap()
 	newMap := newSchema.TableMap()
@@ -151,11 +151,11 @@ func diffData(oldPath, newPath string, oldSchema, newSchema *schema.Schema) ([]D
 		oldTable, exists := oldMap[name]
 		if !exists {
 			var count int64
-			newDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", name)).Scan(&count)
+			db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM main.%q", name)).Scan(&count)
 			diffs = append(diffs, DataDiff{Table: name, Added: count})
 			continue
 		}
-		dd, err := diffTableData(oldDB, newDB, oldTable, newTable)
+		dd, err := diffTableData(db, oldTable, newTable)
 		if err != nil {
 			continue
 		}
@@ -167,7 +167,7 @@ func diffData(oldPath, newPath string, oldSchema, newSchema *schema.Schema) ([]D
 	for name := range oldMap {
 		if _, exists := newMap[name]; !exists {
 			var count int64
-			oldDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", name)).Scan(&count)
+			db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM old.%q", name)).Scan(&count)
 			diffs = append(diffs, DataDiff{Table: name, Removed: count})
 		}
 	}
@@ -175,39 +175,37 @@ func diffData(oldPath, newPath string, oldSchema, newSchema *schema.Schema) ([]D
 	return diffs, nil
 }
 
-func diffTableData(oldDB, newDB *sql.DB, old, new schema.Table) (DataDiff, error) {
-	dd := DataDiff{Table: old.Name}
+// diffTableData compares the row sets of main.<table> (new) and old.<table>,
+// reachable on the same connection via ATTACH. When the table has a single PK it
+// counts inserted/deleted rows by key; otherwise it falls back to a count delta.
+func diffTableData(db *sql.DB, old, new schema.Table) (DataDiff, error) {
+	dd := DataDiff{Table: new.Name}
 
 	pk := pkColumn(new.Columns)
-	if pk == "" {
+	if pk == "" || pkColumn(old.Columns) != pk {
 		var oldCount, newCount int64
-		oldDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", old.Name)).Scan(&oldCount)
-		newDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", new.Name)).Scan(&newCount)
-		diff := newCount - oldCount
-		if diff > 0 {
-			dd.Added = diff
+		db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM old.%q", old.Name)).Scan(&oldCount)
+		db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM main.%q", new.Name)).Scan(&newCount)
+		if d := newCount - oldCount; d > 0 {
+			dd.Added = d
 		} else {
-			dd.Removed = -diff
+			dd.Removed = -d
 		}
 		return dd, nil
 	}
 
-	var oldCount, newCount int64
-	oldDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", old.Name)).Scan(&oldCount)
-	newDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %q", new.Name)).Scan(&newCount)
-
-	newDB.QueryRow(fmt.Sprintf(
-		"SELECT COUNT(*) FROM %q WHERE %q NOT IN (SELECT %q FROM main.%q)",
+	// Rows whose PK is in new but not old = inserted.
+	db.QueryRow(fmt.Sprintf(
+		"SELECT COUNT(*) FROM main.%q WHERE %q NOT IN (SELECT %q FROM old.%q)",
 		new.Name, pk, pk, old.Name,
 	)).Scan(&dd.Added)
 
-	newDB.QueryRow(fmt.Sprintf(
-		"SELECT COUNT(*) FROM %q WHERE %q NOT IN (SELECT %q FROM main.%q)",
+	// Rows whose PK is in old but not new = deleted.
+	db.QueryRow(fmt.Sprintf(
+		"SELECT COUNT(*) FROM old.%q WHERE %q NOT IN (SELECT %q FROM main.%q)",
 		old.Name, pk, pk, new.Name,
 	)).Scan(&dd.Removed)
 
-	_ = oldCount
-	_ = newCount
 	return dd, nil
 }
 

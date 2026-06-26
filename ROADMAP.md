@@ -64,7 +64,10 @@ databases without hand-written glue and without footguns.
 
 **Fleet & data**
 - `fleet` — parallel ops across hundreds of databases (health, fingerprint, migrate canary)
-- `serve` — local web dashboard (fleet topology + health)
+- **`serve` — local web dashboard: fleet topology + health, interactive ERD,
+  read-only data browser (paginated/sortable + visual query builder), drag-drop
+  import, and a visual schema/data diff panel — compare any two databases to
+  review table/column/index changes and row-count deltas before applying** ✨ updated
 - `metrics` — Prometheus/OpenMetrics exporter
 - `import` / `export` / `dump` — CSV/TSV/JSON/XLSX ↔ SQLite, portable SQL
 
@@ -109,17 +112,9 @@ Open follow-ups before moving to depth & reach:
 
 ## Next — depth & reach
 
-Phase E (MCP protocol depth — Prompts, Resources, token budgeting) has shipped.
+Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
 
-### Phase F — Exploration UI ← next
-
-Reach the non-developer / CSV-wrangling user the CLI doesn't serve today.
-
-- **Data browsing** — browse and filter tables in the local dashboard
-  (Datasette-style), not just fleet topology.
-- **Visual diff & migration review** — see schema/data changes before applying.
-
-### Phase G — Platform & distribution
+### Phase G — Platform & distribution ← next
 
 - **`wrangler` plugin** — `wrangler d1` users get Litescope ops without a separate install.
 - **GitHub Action** — migration CI: diff, lint, blast-radius comment on PRs.

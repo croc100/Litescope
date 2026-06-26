@@ -125,6 +125,50 @@ type SchemaFingerprint struct {
 // disabled.
 type SchemaFn func(dbName string) (*SchemaGraph, error)
 
+// DiffColumnChange records a column whose definition changed between two
+// databases.
+type DiffColumnChange struct {
+	Name    string `json:"name"`
+	OldType string `json:"old_type,omitempty"`
+	NewType string `json:"new_type,omitempty"`
+}
+
+// DiffTable is one table's worth of schema change between the old and new
+// database. Status is "added", "removed", or "changed".
+type DiffTable struct {
+	Name           string             `json:"name"`
+	Status         string             `json:"status"`
+	AddedColumns   []string           `json:"added_columns,omitempty"`
+	RemovedColumns []string           `json:"removed_columns,omitempty"`
+	ChangedColumns []DiffColumnChange `json:"changed_columns,omitempty"`
+	AddedIndexes   []string           `json:"added_indexes,omitempty"`
+	RemovedIndexes []string           `json:"removed_indexes,omitempty"`
+}
+
+// DiffData is the row-count delta for one table between the two databases.
+type DiffData struct {
+	Table   string `json:"table"`
+	Added   int64  `json:"added"`
+	Removed int64  `json:"removed"`
+	Changed int64  `json:"changed"`
+}
+
+// DiffResult is the full comparison rendered in the dashboard's diff panel —
+// "see what changes before you apply it".
+type DiffResult struct {
+	Old        string      `json:"old"`
+	New        string      `json:"new"`
+	Schema     []DiffTable `json:"schema"`
+	Data       []DiffData  `json:"data"`
+	Identical  bool        `json:"identical"`
+	DataSkipped bool       `json:"data_skipped"` // true for remote sources (schema-only)
+}
+
+// DiffFn compares two databases by fleet name (old → new) and returns the
+// curated diff. The CLI supplies it so this package stays decoupled from DSN
+// resolution and the diff engine; when nil, the diff panel is disabled.
+type DiffFn func(oldDB, newDB string) (*DiffResult, error)
+
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
 // browser is disabled.
@@ -146,6 +190,7 @@ type Server struct {
 	queryFn  QueryFn
 	browseFn BrowseFn
 	schemaFn SchemaFn
+	diffFn   DiffFn
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -167,6 +212,9 @@ func (s *Server) SetTableBrowser(fn BrowseFn) { s.browseFn = fn }
 
 // SetSchemaProvider enables the interactive ERD.
 func (s *Server) SetSchemaProvider(fn SchemaFn) { s.schemaFn = fn }
+
+// SetDiffProvider enables the visual schema/data diff panel.
+func (s *Server) SetDiffProvider(fn DiffFn) { s.diffFn = fn }
 
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
@@ -195,7 +243,23 @@ func (s *Server) Handler() http.Handler {
 			"data":   s.tablesFn != nil && s.queryFn != nil,
 			"browse": s.browseFn != nil,
 			"schema": s.schemaFn != nil,
+			"diff":   s.diffFn != nil,
 		})
+	})
+
+	// Compares two databases (old → new) and returns the curated schema/data diff.
+	mux.HandleFunc("/api/diff", func(w http.ResponseWriter, r *http.Request) {
+		if s.diffFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "diff is disabled"})
+			return
+		}
+		q := r.URL.Query()
+		res, err := s.diffFn(q.Get("old"), q.Get("new"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	// Returns the ERD graph (tables, columns, foreign keys) of a database.

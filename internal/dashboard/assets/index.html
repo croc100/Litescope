@@ -218,6 +218,22 @@
   .fp-legend .sw { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:middle; }
   .erd-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:var(--dim); font-size:13px; }
+  .diffarrow { color:var(--dim); font-size:18px; padding:0 4px; }
+  .diff-tbl { border:1px solid var(--border); border-radius:8px; margin:10px 0; overflow:hidden; }
+  .diff-tbl-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--panel2,#161b22); font-weight:600; }
+  .diff-tbl-body { padding:6px 12px 10px; font-size:13px; }
+  .diff-line { padding:2px 0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .diff-add { color:#4ec9b0; }
+  .diff-del { color:#f48771; }
+  .diff-chg { color:#dcdcaa; }
+  .dtag { font-size:11px; font-weight:600; padding:1px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:.04em; }
+  .dtag.added { background:rgba(78,201,176,.16); color:#4ec9b0; }
+  .dtag.removed { background:rgba(244,135,113,.16); color:#f48771; }
+  .dtag.changed { background:rgba(220,220,170,.16); color:#dcdcaa; }
+  .diff-data { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
+  .diff-data th, .diff-data td { text-align:left; padding:6px 12px; border-bottom:1px solid var(--border); }
+  .diff-data th { color:var(--dim); font-weight:600; }
+  .diff-ident { color:#4ec9b0; padding:14px 0; }
 </style>
 </head>
 <body>
@@ -295,6 +311,21 @@
     <div class="erd-canvas" id="erdCanvas">
       <svg id="erdSvg"><g id="erdViewport"><g id="erdEdges"></g><g id="erdNodes"></g></g></svg>
     </div>
+  </section>
+</div>
+
+<div class="wrap" id="diffPanel" style="display:none">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Diff — review before you apply</div><h2>Compare two databases</h2>
+    <p class="sub">Pick an old and a new database to see exactly what schema and data changes between them — added/removed tables and columns, type changes, and row-count deltas.</p>
+    <div class="data-bar">
+      <select id="diffOld" class="select"></select>
+      <span class="diffarrow">→</span>
+      <select id="diffNew" class="select"></select>
+      <button class="run" id="diffRun">Compare ▸</button>
+      <span class="runinfo" id="diffHint"></span>
+    </div>
+    <div id="diffResult"></div>
   </section>
 </div>
 
@@ -483,6 +514,7 @@ async function load() {
     render();
     syncDataPanel();
     syncErdPanel();
+    syncDiffPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -1139,12 +1171,79 @@ function initErdInteractions() {
 $("#erdSelect")?.addEventListener("change", loadErd);
 $("#erdReset")?.addEventListener("click", () => loadErd());
 
+// ── Diff panel ──────────────────────────────────────────────────────────────
+let DIFF_ENABLED = false;
+
+function syncDiffPanel() {
+  if (!DIFF_ENABLED || !STATE) return;
+  const names = (STATE.health?.results || []).map(r => ({ name: r.database, remote: !!r.report?.remote }));
+  const sig = names.map(n => n.name).join("");
+  for (const id of ["#diffOld", "#diffNew"]) {
+    const sel = $(id);
+    if (sel.dataset.sig === sig) continue;
+    const prev = sel.value;
+    sel.innerHTML = names.map(n =>
+      `<option value="${esc(n.name)}"${n.remote ? " disabled" : ""}>${esc(n.name)}${n.remote ? " (remote — n/a)" : ""}</option>`).join("");
+    sel.dataset.sig = sig;
+    if (prev && names.some(n => n.name === prev && !n.remote)) sel.value = prev;
+  }
+}
+
+async function runDiff() {
+  const oldDb = $("#diffOld").value, newDb = $("#diffNew").value;
+  const hint = $("#diffHint"), out = $("#diffResult");
+  if (!oldDb || !newDb) return;
+  if (oldDb === newDb) { hint.textContent = "pick two different databases"; out.innerHTML = ""; return; }
+  hint.textContent = "comparing…"; out.innerHTML = "";
+  try {
+    const res = await fetch(`/api/diff?old=${encodeURIComponent(oldDb)}&new=${encodeURIComponent(newDb)}`);
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+    renderDiff(d);
+    const tn = (d.schema || []).length, dn = (d.data || []).length;
+    hint.textContent = d.identical ? "identical" : `${tn} schema change${tn === 1 ? "" : "s"} · ${dn} table${dn === 1 ? "" : "s"} with data deltas`;
+  } catch (e) {
+    hint.textContent = e.message;
+  }
+}
+
+function renderDiff(d) {
+  const out = $("#diffResult");
+  if (d.identical) { out.innerHTML = `<div class="diff-ident">✓ No schema or data differences.</div>`; return; }
+  let html = "";
+  for (const t of (d.schema || [])) {
+    html += `<div class="diff-tbl"><div class="diff-tbl-head"><span class="dtag ${t.status}">${t.status}</span> ${esc(t.name)}</div><div class="diff-tbl-body">`;
+    if (t.status === "added") html += `<div class="diff-line diff-add">+ new table</div>`;
+    if (t.status === "removed") html += `<div class="diff-line diff-del">− table dropped</div>`;
+    for (const c of (t.added_columns || [])) html += `<div class="diff-line diff-add">+ column ${esc(c)}</div>`;
+    for (const c of (t.removed_columns || [])) html += `<div class="diff-line diff-del">− column ${esc(c)}</div>`;
+    for (const c of (t.changed_columns || [])) html += `<div class="diff-line diff-chg">~ column ${esc(c.name)}: ${esc(c.old_type || "?")} → ${esc(c.new_type || "?")}</div>`;
+    for (const ix of (t.added_indexes || [])) html += `<div class="diff-line diff-add">+ index ${esc(ix)}</div>`;
+    for (const ix of (t.removed_indexes || [])) html += `<div class="diff-line diff-del">− index ${esc(ix)}</div>`;
+    html += `</div></div>`;
+  }
+  if ((d.data || []).length) {
+    html += `<table class="diff-data"><thead><tr><th>Table</th><th class="diff-add">+ rows</th><th class="diff-del">− rows</th><th class="diff-chg">~ changed</th></tr></thead><tbody>`;
+    for (const r of d.data) {
+      html += `<tr><td>${esc(r.table)}</td><td class="diff-add">${r.added || ""}</td><td class="diff-del">${r.removed || ""}</td><td class="diff-chg">${r.changed || ""}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  } else if ((d.schema || []).length) {
+    html += `<div class="sub" style="margin-top:10px">No row-count changes in tables present on both sides.</div>`;
+  }
+  out.innerHTML = html;
+}
+
+$("#diffRun")?.addEventListener("click", runDiff);
+
 fetch("/api/capabilities").then(r => r.json()).then(c => {
   IMPORT_ENABLED = !!c.import;
   DATA_ENABLED = !!c.data;
   SCHEMA_ENABLED = !!c.schema;
+  DIFF_ENABLED = !!c.diff;
   if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); renderHistory(); }
   if (SCHEMA_ENABLED) { $("#erdPanel").style.display = ""; initErdInteractions(); syncErdPanel(); }
+  if (DIFF_ENABLED) { $("#diffPanel").style.display = ""; syncDiffPanel(); }
 }).catch(() => {});
 
 load();

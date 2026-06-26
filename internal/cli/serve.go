@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/croc100/litescope/internal/dashboard"
+	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/importer"
 	"github.com/croc100/litescope/internal/license"
@@ -159,6 +160,18 @@ Examples:
 				annotateSchemaFingerprint(g, name, fleet.Fingerprint(currentDBs(), 0))
 				return g, nil
 			})
+			// Visual schema/data diff between any two databases in the fleet.
+			srv.SetDiffProvider(func(oldName, newName string) (*dashboard.DiffResult, error) {
+				oldDSN, err := resolveDSN(oldName)
+				if err != nil {
+					return nil, err
+				}
+				newDSN, err := resolveDSN(newName)
+				if err != nil {
+					return nil, err
+				}
+				return diffDatabases(oldDSN, newDSN)
+			})
 
 			url := "http://" + addr
 
@@ -281,6 +294,71 @@ func schemaGraph(dsn string) (*dashboard.SchemaGraph, error) {
 		g.Tables = append(g.Tables, st)
 	}
 	return g, nil
+}
+
+// diffDatabases compares two local databases (old → new) and curates the result
+// for the dashboard's diff panel. Remote sources are rejected (the data diff
+// needs direct file access). oldDSN/newDSN are resolved fleet DSNs.
+func diffDatabases(oldDSN, newDSN string) (*dashboard.DiffResult, error) {
+	oldPath, err := localDSNPath(oldDSN)
+	if err != nil {
+		return nil, fmt.Errorf("diff supports local SQLite only (old database is remote)")
+	}
+	newPath, err := localDSNPath(newDSN)
+	if err != nil {
+		return nil, fmt.Errorf("diff supports local SQLite only (new database is remote)")
+	}
+
+	res, err := diff.Compare(oldPath, newPath)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &dashboard.DiffResult{Old: oldPath, New: newPath}
+	for _, t := range res.Schema {
+		dt := dashboard.DiffTable{Name: t.Name}
+		switch {
+		case t.Added:
+			dt.Status = "added"
+		case t.Removed:
+			dt.Status = "removed"
+		default:
+			dt.Status = "changed"
+		}
+		for _, c := range t.AddedColumns {
+			dt.AddedColumns = append(dt.AddedColumns, c.Name)
+		}
+		for _, c := range t.RemovedColumns {
+			dt.RemovedColumns = append(dt.RemovedColumns, c.Name)
+		}
+		for _, c := range t.ChangedColumns {
+			cc := dashboard.DiffColumnChange{Name: c.Name}
+			if c.Old != nil {
+				cc.OldType = c.Old.Type
+			}
+			if c.New != nil {
+				cc.NewType = c.New.Type
+			}
+			dt.ChangedColumns = append(dt.ChangedColumns, cc)
+		}
+		for _, ix := range t.AddedIndexes {
+			dt.AddedIndexes = append(dt.AddedIndexes, ix.Name)
+		}
+		for _, ix := range t.RemovedIndexes {
+			dt.RemovedIndexes = append(dt.RemovedIndexes, ix.Name)
+		}
+		out.Schema = append(out.Schema, dt)
+	}
+	for _, d := range res.Data {
+		if d.Added == 0 && d.Removed == 0 && d.Changed == 0 {
+			continue
+		}
+		out.Data = append(out.Data, dashboard.DiffData{
+			Table: d.Table, Added: d.Added, Removed: d.Removed, Changed: d.Changed,
+		})
+	}
+	out.Identical = len(out.Schema) == 0 && len(out.Data) == 0
+	return out, nil
 }
 
 // annotateSchemaFingerprint overlays the fleet fingerprint onto a single
