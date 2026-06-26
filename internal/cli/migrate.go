@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/croc100/litescope/internal/audit"
+	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/migrate"
@@ -19,27 +20,23 @@ func cmdMigrate() *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "migrate <before.db> <after.db>",
-		Short: "Generate and apply schema migrations",
+		Use:   "migrate <before> <after>",
+		Short: "Generate and apply schema migrations (supports D1)",
 		Long: `Generate SQLite migration SQL by diffing two databases.
+Both arguments accept local file paths or D1 DSNs (d1://DB_UUID).
 
 Handles:
   - New tables     → CREATE TABLE
   - Removed tables → DROP TABLE (with warning)
   - Added columns  → ALTER TABLE ... ADD COLUMN
-  - Removed columns / type changes → table rebuild pattern (CREATE + INSERT + DROP + RENAME)
+  - Removed columns / type changes → table rebuild pattern
   - Indexes        → CREATE INDEX / DROP INDEX
 
-SQLite does not support DROP COLUMN or column type changes directly.
-Litescope uses the standard rebuild pattern for those cases.
-
-Destructive changes are analyzed against the source database so warnings
-report the actual number of rows affected.
-
 Examples:
-  litescope migrate before.db after.db
-  litescope migrate before.db after.db --output migration.sql
-  litescope migrate before.db after.db --output migration.sql --force
+  litescope migrate local.db new.db
+  litescope migrate local.db d1://PROD_UUID --output migration.sql
+  litescope migrate d1://STAGING_UUID d1://PROD_UUID
+  litescope migrate apply d1://PROD_UUID migration.sql
   litescope migrate apply prod.db migration.sql --dry-run`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -302,29 +299,33 @@ litescope_schema_migrations table. Stops at the first failure.`,
 	return cmd
 }
 
-func runMigrateGen(oldPath, newPath, output string, force bool) error {
-	d, err := diff.Compare(oldPath, newPath)
+func runMigrateGen(oldSrc, newSrc, output string, force bool) error {
+	oldSchema, err := loadSchemaFromSource(oldSrc)
 	if err != nil {
-		return err
+		return fmt.Errorf("load %s: %w", oldSrc, err)
 	}
+	newSchema, err := loadSchemaFromSource(newSrc)
+	if err != nil {
+		return fmt.Errorf("load %s: %w", newSrc, err)
+	}
+
+	d := diff.CompareSchemas(oldSchema, newSchema)
 
 	if len(d.Schema) == 0 {
 		fmt.Println("  No schema changes detected. Nothing to migrate.")
 		return nil
 	}
 
-	newSchema, err := schema.Load(newPath)
-	if err != nil {
-		return fmt.Errorf("loading new schema: %w", err)
-	}
-
 	migration := migrate.Generate(d, newSchema)
 	sql := migration.SQL()
 
-	// ── Blast-radius analysis ─────────────────────────────────────────────
-	ops, err := migrate.AnalyzeAll(d, oldPath)
-	if err != nil {
-		ops = nil
+	// ── Blast-radius analysis (local files only — D1 has no row count API) ──
+	var ops []migrate.Operation
+	if !isRemoteDSN(oldSrc) {
+		ops, err = migrate.AnalyzeAll(d, oldSrc)
+		if err != nil {
+			ops = nil
+		}
 	}
 
 	printBlastRadius(ops)
@@ -403,29 +404,33 @@ func cmdMigrateApply() *cobra.Command {
 	var verify string
 
 	cmd := &cobra.Command{
-		Use:   "apply <target.db> <migration.sql>",
-		Short: "Apply a migration with backup, verification, and automatic rollback (Pro)",
-		Long: `Apply migration SQL to a local SQLite database safely.
+		Use:   "apply <target> <migration.sql>",
+		Short: "Apply a migration to a local SQLite or D1 database",
+		Long: `Apply migration SQL to a SQLite database. The target can be a local file
+or a Cloudflare D1 DSN (d1://DB_UUID).
 
-Safety sequence:
+Local SQLite safety sequence:
   1. Pre-flight integrity check — corrupt databases are refused
   2. Automatic backup via VACUUM INTO (point-in-time consistent)
-  3. All statements run inside a single transaction
-  4. Foreign key + integrity verification before commit
-  5. Any failure rolls back; a failed commit restores the backup
+  3. All statements inside a single transaction; any failure rolls back
+
+D1:
+  Statements are executed sequentially via the D1 HTTP API. D1 does not
+  support interactive transactions over REST — already-applied statements
+  are NOT rolled back on failure. Use 'litescope rewind' to restore if
+  something goes wrong.
 
 Examples:
-  litescope migrate apply prod.db migration.sql --dry-run
   litescope migrate apply prod.db migration.sql
-  litescope migrate apply prod.db migration.sql --backup-dir ./backups
-  litescope migrate apply prod.db migration.sql --verify staging.db`,
+  litescope migrate apply d1://PROD_UUID migration.sql
+  litescope migrate apply prod.db migration.sql --dry-run`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := license.RequirePro(); err != nil {
 				return err
 			}
 
-			dbPath, sqlPath := args[0], args[1]
+			target, sqlPath := args[0], args[1]
 
 			sqlText, err := os.ReadFile(sqlPath)
 			if err != nil {
@@ -438,8 +443,37 @@ Examples:
 				mode = "dry-run"
 			}
 			fmt.Printf("\n  %s  %s → %s (%d statements)\n",
-				styleDim.Render("·"), mode, dbPath, len(stmts))
+				styleDim.Render("·"), mode, target, len(stmts))
 
+			// ── D1 path ───────────────────────────────────────────────────────
+			if isRemoteDSN(target) {
+				if dryRun {
+					return fmt.Errorf("--dry-run is not supported for D1 (no interactive transactions over HTTP)")
+				}
+				conn, cerr := connector.Open(target)
+				if cerr != nil {
+					return cerr
+				}
+				defer conn.Close()
+				exec, ok := connector.AsExecutor(conn)
+				if !ok {
+					return fmt.Errorf("connector for %q does not support execution", target)
+				}
+				if aerr := exec.Exec(stmts, false); aerr != nil {
+					audit.Record(audit.Entry{Action: "migrate.apply", Target: target,
+						Summary: fmt.Sprintf("%d statements", len(stmts)), Outcome: "error", Detail: aerr.Error()})
+					return aerr
+				}
+				audit.Record(audit.Entry{Action: "migrate.apply", Target: target,
+					Summary: fmt.Sprintf("%d statements applied", len(stmts))})
+				fmt.Printf("\n  %s  Applied %d statement(s) to %s\n\n", styleOK.Render("✓"), len(stmts), target)
+				fmt.Printf("  %s  Tip: run 'litescope rewind %s --to \"just now\"' if you need to roll back.\n\n",
+					styleDim.Render("·"), target)
+				return nil
+			}
+
+			// ── Local SQLite path ─────────────────────────────────────────────
+			dbPath := target
 			if !dryRun {
 				if perr := guardWrite(dbPath); perr != nil {
 					audit.Record(audit.Entry{Action: "migrate.apply", Target: dbPath,
