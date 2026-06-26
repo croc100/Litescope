@@ -61,17 +61,35 @@ Then ask Claude things like:
 | `litescope_check` | Verify a backup against a reference database |
 | `litescope_fingerprint` | Cluster a fleet by schema fingerprint |
 | `litescope_fleet_health` | Triage faults across a whole fleet |
+| `litescope_locks` | Diagnose `database is locked` / SQLITE_BUSY (static + live) |
+| `litescope_snapshot_list` | List point-in-time snapshots for a local database |
+
+`litescope_query` enforces **token budgeting** — `max_rows` cap + `columns`
+projection + truncation reporting — so a large table never blows the agent's
+context window.
 
 ### Write tools (`--allow-writes`)
 
 | Tool | What it does |
 |---|---|
+| `litescope_query_write` | Mutating SQL — **dry-run by default**: measures exact rows affected, auto-snapshots before applying, returns lock-doctor remediation on failure |
+| `litescope_migrate_apply` | Apply a migration — dry-run by default, pre-migration snapshot, structured errors |
+| `litescope_autopilot` | Self-driving optimization (ANALYZE, indexes, VACUUM) — dry-run by default |
+| `litescope_snapshot` | Take a point-in-time backup of a local database |
+| `litescope_restore` | Restore a local database from a snapshot |
 | `litescope_rewind` | Restore a D1 database to a point in time (Time Travel) |
 | `litescope_d1_pull` | Download a D1 database to a local SQLite file |
-| `litescope_query_write` | Execute INSERT / UPDATE / DELETE / DDL on D1 or local |
-| `litescope_migrate_apply` | Apply a SQL migration to D1 or local SQLite |
 | `litescope_d1_create` | Create a new D1 database |
 | `litescope_d1_delete` | Delete a D1 database (irreversible) |
+
+### Prompts & Resources
+
+Beyond tools, the MCP server exposes **prompts** — canned workflows like
+`diagnose_locked_database`, `review_migration`, `safe_optimize`, and
+`health_checkup` that chain the tools above into a safe plan — and
+**resources**: a database's schema and a data dictionary, readable by the agent
+without spending a tool call. Bind one with `litescope mcp ./app.db`, or address
+any source via `litescope://schema/{source}` and `litescope://dictionary/{source}`.
 
 ---
 
@@ -140,6 +158,47 @@ litescope doctor app.db --format html -o report.html
 ```
 
 Combines integrity check, WAL/fragmentation health, index advisor, and schema lint in one command. Exits **1** when attention is needed — use it as a CI quality gate.
+
+### `snapshot` / `restore` — point-in-time backups
+
+```bash
+litescope snapshot app.db                     # consistent VACUUM INTO copy
+litescope snapshot app.db --label before-migration
+litescope snapshot app.db --keep 7            # retain only the 7 newest
+litescope snapshot list app.db
+litescope restore app.db                      # restore the newest snapshot
+litescope restore app.db --from <snapshot.db>
+```
+
+Snapshots live in a sibling `.litescope-snapshots/` directory. Restore is
+integrity-checked and takes a pre-restore safety snapshot first — the same
+"did you back up?" safety net that D1 gets from Time Travel, for local and Turso.
+
+### `autopilot` — self-driving optimization
+
+```bash
+litescope autopilot app.db                    # dry-run: show the plan
+litescope autopilot app.db --apply            # apply the safe actions
+litescope autopilot app.db --apply --aggressive
+litescope autopilot --fleet litescope.fleet.yaml --apply
+```
+
+Runs `ANALYZE` + `PRAGMA optimize`, adds missing foreign-key indexes, and
+(with `--aggressive`) VACUUMs and drops redundant indexes — each explained in
+plain language. Dry-run by default; every real change is preceded by an
+automatic snapshot.
+
+### `locks` — diagnose "database is locked"
+
+```bash
+litescope locks app.db                        # static config diagnosis
+litescope locks app.db --live                 # is a writer holding the lock now?
+litescope locks app.db --watch                # stream lock-state changes
+```
+
+Inspects journal mode, `busy_timeout`, locking mode, and WAL bloat, and
+prescribes the exact PRAGMA/DSN fix. `--live` identifies the process holding
+the lock right now.
 
 ### `diff` — schema and data diff
 
@@ -210,7 +269,10 @@ litescope serve                   # opens http://127.0.0.1:7575
 litescope serve --config litescope.fleet.yaml
 ```
 
-Fleet topology map, health triage, schema fingerprinting, data browser, and SQL console — entirely local, no account required.
+Fleet topology map, health triage, schema fingerprinting, interactive ERD, a
+paginated data browser with a visual query builder, drag-drop import, and a
+**visual diff panel** — pick any two databases to review schema and row-count
+changes before applying. Entirely local, no account required.
 
 ---
 

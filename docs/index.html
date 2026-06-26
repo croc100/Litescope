@@ -512,6 +512,24 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <p>Point it at a database and get a single checkup — integrity, health, index advice, and schema lint — with a shareable, self-contained HTML report.</p>
       </div>
       <div class="card">
+        <span class="card-icon">🔓</span>
+        <div class="cmd-name">locks <span class="tier-tag tier-free">free</span></div>
+        <h3>Fix "database is locked"</h3>
+        <p>Diagnose <code>SQLITE_BUSY</code> — the #1 SQLite production failure. Inspects journal mode, <code>busy_timeout</code>, and WAL bloat with the exact PRAGMA fix; <code>--live</code> finds the process holding the lock right now.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">⏪</span>
+        <div class="cmd-name">snapshot <span class="tier-tag tier-free">free</span></div>
+        <h3>Point-in-time backups</h3>
+        <p>Consistent <code>VACUUM INTO</code> snapshots for local and Turso SQLite, with retention and an integrity-checked <code>restore</code> — the same "did you back up?" safety net D1 gets from Time Travel.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">🛩️</span>
+        <div class="cmd-name">autopilot <span class="tier-tag tier-free">free</span></div>
+        <h3>Self-driving DBA</h3>
+        <p>ANALYZE, <code>PRAGMA optimize</code>, auto-add missing foreign-key indexes, and (with <code>--aggressive</code>) VACUUM and redundant-index cleanup — each explained in plain language. Dry-run by default, auto-snapshot before applying.</p>
+      </div>
+      <div class="card">
         <span class="card-icon">🔍</span>
         <div class="cmd-name">diff <span class="tier-tag tier-free">free</span></div>
         <h3>See what changed</h3>
@@ -575,7 +593,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">🤖</span>
         <div class="cmd-name">mcp <span class="tier-tag tier-free">free</span></div>
         <h3>Let your AI drive it</h3>
-        <p>An MCP server so Claude or any agent can call Litescope as read-only tools — and inspect the database it just built. Diagnose freely; a human commits the fix.</p>
+        <p>A full MCP server — tools, prompts, and resources. Claude inspects, queries, and (with <code>--allow-writes</code>) mutates safely: writes are <b>dry-run by default</b>, report exact rows affected, and auto-snapshot before applying. Canned prompts like <em>diagnose_locked_database</em> chain the tools into a safe plan.</p>
       </div>
       <div class="card">
         <span class="card-icon">⚡</span>
@@ -605,7 +623,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <span class="card-icon">📊</span>
         <div class="cmd-name">serve <span class="tier-tag tier-free">free</span></div>
         <h3>Your fleet in a browser</h3>
-        <p>One command — <code>litescope serve</code> — opens a local web dashboard: topology map colored by health, worst-first faults, and a schema-drift fingerprint. Plus a read-only data browser and SQL console — click a table to preview rows, or run any <code>SELECT</code>. Runs on your machine or your own server. No cloud, no account, no telemetry.</p>
+        <p>One command — <code>litescope serve</code> — opens a local web dashboard: topology map colored by health, worst-first faults, a schema-drift fingerprint, and an interactive ERD. Browse and query tables, drag-drop a CSV to import, and use the <b>visual diff panel</b> to review schema and row-count changes between any two databases before you apply. Runs on your machine — no cloud, no account, no telemetry.</p>
       </div>
     </div>
   </div>
@@ -726,7 +744,11 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         </li>
         <li>
           <span class="spot-icon">✏️</span>
-          <div><b>Opt-in writes</b> <span><code>litescope mcp --allow-writes</code> unlocks <code>litescope_query_write</code>, <code>litescope_migrate_apply</code>, <code>litescope_d1_create</code>, <code>litescope_d1_delete</code>.</span></div>
+          <div><b>Opt-in writes, guarded</b> <span><code>litescope mcp --allow-writes</code> unlocks <code>query_write</code>, <code>migrate_apply</code>, <code>autopilot</code>, <code>snapshot</code>/<code>restore</code>, and D1 lifecycle tools. Writes are <b>dry-run by default</b> — they report exact rows affected and auto-snapshot before applying.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">📚</span>
+          <div><b>Prompts &amp; resources</b> <span>Canned workflows (<em>diagnose_locked_database</em>, <em>review_migration</em>) and readable schema + data-dictionary resources, so the agent gets context without spending a tool call.</span></div>
         </li>
         <li>
           <span class="spot-icon">⏪</span>
@@ -839,7 +861,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
   <div class="wrap">
     <div class="center" style="margin-top:48px;max-width:680px;margin-left:auto;margin-right:auto;">
-      <div class="eyebrow">Hosted dashboard · early access</div>
+      <div class="eyebrow">Hosted dashboard</div>
       <h3 style="margin-top:10px">One thing we'll host for you</h3>
       <p class="section-sub" style="margin-top:10px">
         The only paid offering runs <em>beside</em> the open-source tool, never
@@ -864,7 +886,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <li><span class="check">✓</span>Fault &amp; drift alerts</li>
           <li><span class="check">✓</span>Metadata only — never your data</li>
         </ul>
-        <a class="btn btn-primary" href="mailto:dl_litescope@crode.net?subject=Litescope%20hosted%20dashboard%20early%20access">Get early access →</a>
+        <a class="btn btn-primary" href="https://crode.lemonsqueezy.com/checkout/buy/30cb1e13-6a50-4124-a408-283f6afc301d" target="_blank" rel="noopener">Subscribe →</a>
       </div>
       <div class="plan">
         <div class="plan-tier" style="color:var(--head)">Scale</div>
@@ -876,11 +898,11 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
           <li><span class="check">✓</span>Self-host option (your cloud / on-prem)</li>
           <li><span class="check">✓</span>Priority support</li>
         </ul>
-        <a class="btn btn-ghost" href="mailto:dl_litescope@crode.net?subject=Litescope%20Scale%20early%20access">Get early access →</a>
+        <a class="btn btn-ghost" href="https://crode.lemonsqueezy.com/checkout/buy/30cb1e13-6a50-4124-a408-283f6afc301d" target="_blank" rel="noopener">Subscribe →</a>
       </div>
     </div>
     <p class="section-sub center" style="margin-top:18px;font-size:13px;opacity:.7;max-width:680px;margin-left:auto;margin-right:auto;">
-      In early access — <a href="mailto:dl_litescope@crode.net">email us</a> to get on the list. The CLI, local dashboard, and self-hosting stay free forever. See the <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">roadmap</a>.
+      Pick your tier at checkout. The CLI, local dashboard, and self-hosting stay free forever. Questions? <a href="mailto:dl_litescope@crode.net">Email us</a> or see the <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">roadmap</a>.
     </p>
 
     <div class="center" style="margin-top:32px;max-width:920px;margin-left:auto;margin-right:auto;">

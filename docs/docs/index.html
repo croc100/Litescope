@@ -122,6 +122,9 @@
     <div class="sidebar-section">CLI Reference</div>
     <nav>
       <a href="#doctor">doctor</a>
+      <a href="#locks">locks</a>
+      <a href="#snapshot-cmd">snapshot / restore</a>
+      <a href="#autopilot">autopilot</a>
       <a href="#diff">diff</a>
       <a href="#schema">schema</a>
       <a href="#dump">dump</a>
@@ -306,6 +309,77 @@ litescope health app.db --deep</code></pre>
       <div class="callout">
         <strong>At fleet scale,</strong> use <a href="#fleet"><code>fleet health</code></a> to triage every database in parallel, then <a href="#fleet"><code>fleet recover</code></a> to restore the broken ones.
       </div>
+    </div>
+
+    <!-- locks -->
+    <div class="doc-section" id="locks">
+      <h2>locks <span class="tier tier-free">free</span></h2>
+      <p>Diagnose <code>database is locked</code> / <code>SQLITE_BUSY</code> — the single most common SQLite production failure. The static check inspects journal mode, <code>busy_timeout</code>, locking mode, and WAL bloat, and prescribes the exact PRAGMA or DSN change. The live probe (<code>--live</code>) tells you whether a writer is holding the lock <em>right now</em> and which process owns the file. Exits <code>1</code> when the database needs attention or is currently locked.</p>
+      <pre><code>litescope locks &lt;source&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--live</td><td>false</td><td>Probe the current lock state instead of static config (local files)</td></tr>
+          <tr><td>--watch</td><td>false</td><td>Stream live lock-state changes until interrupted</td></tr>
+          <tr><td>--interval</td><td>1s</td><td>Poll interval for <code>--watch</code></td></tr>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Static configuration diagnosis (local, D1, or Turso)
+litescope locks app.db
+
+# Is a writer holding the lock right now?
+litescope locks app.db --live</code></pre>
+    </div>
+
+    <!-- snapshot / restore -->
+    <div class="doc-section" id="snapshot-cmd">
+      <h2>snapshot / restore <span class="tier tier-free">free</span></h2>
+      <p>Point-in-time backups for local (and Turso) SQLite — the same "did you back up?" safety net that D1 gets from Time Travel. <code>snapshot</code> writes a consistent <code>VACUUM INTO</code> copy (safe even under WAL) into a sibling <code>.litescope-snapshots/</code> directory; <code>restore</code> integrity-checks the snapshot and takes a pre-restore safety snapshot before overwriting.</p>
+      <pre><code>litescope snapshot &lt;db&gt; [flags]
+litescope snapshot list &lt;db&gt;
+litescope restore &lt;db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--label</td><td>—</td><td>Optional label recorded in the snapshot name</td></tr>
+          <tr><td>--keep</td><td>0</td><td>Retention: keep only the N newest snapshots (0 = keep all)</td></tr>
+          <tr><td>--from</td><td>newest</td><td>(restore) Snapshot file to restore from</td></tr>
+          <tr><td>--no-safety-snapshot</td><td>false</td><td>(restore) Skip the pre-restore safety snapshot</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code>litescope snapshot app.db --label before-migration
+litescope snapshot app.db --keep 7
+litescope snapshot list app.db
+litescope restore app.db            # newest snapshot</code></pre>
+    </div>
+
+    <!-- autopilot -->
+    <div class="doc-section" id="autopilot">
+      <h2>autopilot <span class="tier tier-free">free</span></h2>
+      <p>The self-driving DBA. Derives safe maintenance and optimization actions — <code>ANALYZE</code>, <code>PRAGMA optimize</code>, missing foreign-key indexes, and (with <code>--aggressive</code>) VACUUM and redundant-index cleanup — and explains each in plain language. Dry-run by default; every real change is preceded by an automatic snapshot, so a run is one <a href="#snapshot-cmd"><code>restore</code></a> away from undo.</p>
+      <pre><code>litescope autopilot &lt;db&gt; [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--apply</td><td>false</td><td>Apply the safe actions (default: dry-run)</td></tr>
+          <tr><td>--aggressive</td><td>false</td><td>Also apply risky actions (VACUUM, drop redundant indexes)</td></tr>
+          <tr><td>--queries</td><td>—</td><td>File of SQL queries for EXPLAIN-based advice</td></tr>
+          <tr><td>--fleet</td><td>—</td><td>Run across every database in a fleet config</td></tr>
+          <tr><td>--format</td><td>terminal</td><td>Output format: <code>terminal</code>, <code>json</code></td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3>
+      <pre><code># Show the plan, change nothing
+litescope autopilot app.db
+
+# Apply the safe actions (snapshot taken first)
+litescope autopilot app.db --apply
+
+# Whole fleet
+litescope autopilot --fleet litescope.fleet.yaml --apply</code></pre>
     </div>
 
     <!-- advise -->
