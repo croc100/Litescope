@@ -51,6 +51,11 @@ databases without hand-written glue and without footguns.
 **File superpowers**
 - `rewind` — D1 Time Travel restore to any point in the last 30 days
 - `bisect` — binary-search Time Travel snapshots to find the breaking migration
+- **`snapshot` / `restore` — point-in-time backups for local (and Turso) SQLite:
+  consistent VACUUM INTO copies in a sibling `.litescope-snapshots/`, with
+  `list`, `--label`, `--keep N` retention, integrity-checked restore + automatic
+  pre-restore safety snapshot. `health` now flags databases with no backup.
+  Also `litescope_snapshot` / `_restore` / `_snapshot_list` MCP tools** ✨ new
 
 **Fleet & data**
 - `fleet` — parallel ops across hundreds of databases (health, fingerprint, migrate canary)
@@ -75,20 +80,14 @@ databases without hand-written glue and without footguns.
 ## Now — close the moats
 
 Moat #3 (lock doctor) is complete, static and live. Phase B (MCP write safety)
-has shipped — the agent moat now has guardrails *inside* the write. What remains
-is the file-superpower (local/Turso backup) and autopilot moats.
+and Phase C (local/Turso backup & restore) have shipped — every SQLite source
+now answers "did you back up?" and every agent write is guarded. What remains is
+the autopilot moat.
 
-### Phase C — Backup & point-in-time for local + Turso ← next
+Phase C follow-up (not yet built): **scheduled snapshots** — a retention/cron
+policy for local/Turso so backups happen unattended, full parity with D1.
 
-`rewind` only covers D1 Time Travel. Local and Turso SQLite have no backup/PITR —
-the first question of any ops tool ("did you back up?") goes unanswered.
-
-- **Snapshot / restore** — `litescope snapshot ./app.db` and `litescope restore`,
-  instant copy-on-write style snapshots of the file.
-- **`health` backup warning** — flag databases with no backup configured.
-- **Scheduled snapshots** — retention policy for local/Turso, parity with D1.
-
-### Phase D — Autopilot (DBA self-driving)
+### Phase D — Autopilot (DBA self-driving) ← next
 
 The third moat. Auto-apply safe optimizations across one DB or a whole fleet,
 explaining every action in plain language.

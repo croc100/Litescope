@@ -9,6 +9,9 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
+
+	"github.com/croc100/litescope/internal/snapshot"
 
 	_ "modernc.org/sqlite"
 )
@@ -64,6 +67,13 @@ type Report struct {
 	FreelistCount int64    `json:"freelist_count"`
 	JournalMode   string   `json:"journal_mode,omitempty"`
 	Error         string   `json:"error,omitempty"`
+
+	// Backup posture (local files only). HasBackup is false when no litescope
+	// snapshot exists for the database. These are informational and do not raise
+	// severity — a missing backup is a recommendation, not a fault.
+	HasBackup      bool       `json:"has_backup"`
+	LastBackupAt   *time.Time `json:"last_backup_at,omitempty"`
+	SnapshotCount  int        `json:"snapshot_count"`
 }
 
 // FragmentationPct returns reclaimable space as a percentage of the database.
@@ -136,6 +146,14 @@ func Inspect(path string, deep bool) *Report {
 		reclaim := r.FreelistCount * pageSize(r)
 		r.raise(SevWarning, fmt.Sprintf("%.0f%% bloat — %s reclaimable, VACUUM recommended",
 			r.FragmentationPct(), humanBytes(reclaim)))
+	}
+
+	// Backup posture — informational, never raises severity.
+	if snaps, err := snapshot.List(path); err == nil && len(snaps) > 0 {
+		r.HasBackup = true
+		r.SnapshotCount = len(snaps)
+		t := snaps[0].CreatedAt
+		r.LastBackupAt = &t
 	}
 
 	r.SeverityLabel = r.Severity.String()

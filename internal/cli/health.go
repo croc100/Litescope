@@ -90,6 +90,13 @@ func printHealth(r *health.Report) {
 			fragStr = styleWarn.Render(fragStr + "  (VACUUM candidate)")
 		}
 		row("fragmentation", fragStr)
+
+		if r.HasBackup && r.LastBackupAt != nil {
+			row("backup", fmt.Sprintf("%s  (%s, %d kept)",
+				styleOK.Render("yes"), agePhrase(*r.LastBackupAt), r.SnapshotCount))
+		} else {
+			row("backup", styleWarn.Render("none — run 'litescope snapshot "+r.Path+"'"))
+		}
 	}
 
 	if len(r.Issues) > 0 {

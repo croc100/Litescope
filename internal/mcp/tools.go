@@ -20,6 +20,7 @@ import (
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/safewrite"
 	"github.com/croc100/litescope/internal/schema"
+	"github.com/croc100/litescope/internal/snapshot"
 )
 
 // Tool is one callable operation exposed to an AI agent. The same registry
@@ -411,6 +412,34 @@ func Registry(allowWrites bool) []Tool {
 				return toJSON(r)
 			},
 		},
+		{
+			Name: "litescope_snapshot_list",
+			Description: "List point-in-time snapshots (local backups) for a local SQLite database, " +
+				"newest first. Snapshots are created with litescope_snapshot (requires --allow-writes). " +
+				"Use this to find a snapshot to restore, or to confirm a database has a backup before " +
+				"a risky write. Read-only; local files only.",
+			InputSchema: obj(props{
+				"source": strProp("Local SQLite file path."),
+			}, "source"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("snapshots are for local SQLite files; %q is remote", src)
+				}
+				snaps, err := snapshot.List(src)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"source":    src,
+					"count":     len(snaps),
+					"snapshots": snaps,
+				})
+			},
+		},
 	}
 
 	if allowWrites {
@@ -595,6 +624,82 @@ func writeTools() []Tool {
 					"ok":          true,
 					"database_id": id,
 					"warning":     "Database deleted permanently including all Time Travel history.",
+				})
+			},
+		},
+		{
+			Name: "litescope_snapshot",
+			Description: "Take a point-in-time snapshot (local backup) of a local SQLite database. " +
+				"Uses VACUUM INTO so the copy is consistent even under WAL, stored in a sibling " +
+				".litescope-snapshots/ directory and integrity-checked after creation. This is the " +
+				"local/Turso equivalent of D1 Time Travel — take one before any risky write. " +
+				"Only available with --allow-writes; local files only.",
+			InputSchema: obj(props{
+				"source": strProp("Local SQLite file path."),
+				"label":  strProp("Optional label recorded in the snapshot name (e.g. 'before-migration')."),
+				"keep": map[string]interface{}{
+					"type":        "number",
+					"description": "Retention: keep only the N newest snapshots (0 = keep all).",
+				},
+			}, "source"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("snapshots are for local SQLite files; %q is remote (use litescope_rewind for D1)", src)
+				}
+				label, _ := args["label"].(string)
+				keep := 0
+				if n, ok := args["keep"].(float64); ok && n > 0 {
+					keep = int(n)
+				}
+				snap, err := snapshot.Create(src, snapshot.CreateOptions{Label: label, Keep: keep})
+				if err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{"ok": true, "snapshot": snap})
+			},
+		},
+		{
+			Name: "litescope_restore",
+			Description: "Restore a local SQLite database from a point-in-time snapshot. With no " +
+				"'snapshot' argument the newest snapshot is restored. The snapshot is integrity-" +
+				"checked first, and the current database is itself snapshotted as a pre-restore " +
+				"safety net before being overwritten. Only available with --allow-writes; local " +
+				"files only. List options with litescope_snapshot_list.",
+			InputSchema: obj(props{
+				"source":   strProp("Local SQLite file path to restore into."),
+				"snapshot": strProp("Snapshot file path to restore from. Default: newest snapshot."),
+			}, "source"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("restore is for local SQLite files; %q is remote (use litescope_rewind for D1)", src)
+				}
+				snapPath, _ := args["snapshot"].(string)
+				if snapPath == "" {
+					latest, ok, err := snapshot.Latest(src)
+					if err != nil {
+						return "", err
+					}
+					if !ok {
+						return "", fmt.Errorf("no snapshots found for %s; create one with litescope_snapshot", src)
+					}
+					snapPath = latest.Path
+				}
+				if err := snapshot.Restore(src, snapPath, true); err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"ok":       true,
+					"source":   src,
+					"restored": snapPath,
+					"note":     "A pre-restore safety snapshot was taken before overwriting.",
 				})
 			},
 		},
