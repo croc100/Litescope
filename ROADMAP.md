@@ -39,6 +39,9 @@ databases without hand-written glue and without footguns.
 - `check` — backup integrity verification
 - **`locks` — lock doctor: diagnose `database is locked` / `SQLITE_BUSY`,
   prescribe WAL / `busy_timeout` / locking-mode fixes (local, D1, Turso)** ✨ new
+- **`locks --live` / `--watch` — live lock detection: probe whether a writer
+  holds the lock *right now* and identify the holding process (via `lsof`).
+  Also `live=true` on the `litescope_locks` MCP tool** ✨ new
 
 **Change management**
 - `migrate` — generate + apply migrations; blast-radius analysis
@@ -66,25 +69,13 @@ databases without hand-written glue and without footguns.
 
 ## Now — close the moats
 
-The three moats are partly built. These phases finish them and harden the MCP
-write path, which is where the agent-operations differentiation actually lives.
+Moat #3 (lock doctor) is complete, static and live. What remains is hardening
+the MCP write path — where the agent-operations differentiation actually lives —
+then finishing the file-superpower and autopilot moats.
 
-### Phase A — Lock doctor: live detection ✅ shipped
+### Phase B — MCP write safety (the agent moat) ← next
 
-`locks` now probes the *current* lock state, not just static PRAGMA config —
-this is the real `database is locked` debugging moment. Zero hosting cost;
-completes moat #3.
-
-- ✅ **Live lock probe** — `litescope locks app.db --live` attempts `BEGIN
-  IMMEDIATE` with a short timeout to detect whether a writer holds the lock
-  right now (FREE / LOCKED), with the wait time it took to resolve.
-- ✅ **Holder identification** — lists the processes (PID, command, access mode)
-  holding the database file open, via `lsof`, so you know *who* to fix.
-- ✅ **`locks --watch`** — streams lock-state changes as they happen.
-- ✅ **MCP** — `litescope_locks` accepts `live=true` so agents can diagnose a
-  live lock during an incident.
-
-### Phase B — MCP write safety (the agent moat)
+The next phase to build.
 
 `--allow-writes` gates writes, but an agent needs guardrails *inside* the write.
 This is the single biggest MCP differentiator we don't yet have.
