@@ -31,11 +31,14 @@ type rpcResponse struct {
 
 // Serve runs the MCP server over newline-delimited JSON-RPC on the given
 // streams until in reaches EOF. stdout carries only protocol messages.
-func Serve(in io.Reader, out io.Writer, version string) error {
+// When allowWrites is true, write-capable tools (litescope_query_write,
+// litescope_migrate_apply, litescope_d1_create, litescope_d1_delete) are
+// included; otherwise only read-only tools are exposed.
+func Serve(in io.Reader, out io.Writer, version string, allowWrites bool) error {
 	reader := bufio.NewReader(in)
 	writer := bufio.NewWriter(out)
 
-	tools := Registry()
+	tools := Registry(allowWrites)
 	byName := make(map[string]Tool, len(tools))
 	for _, t := range tools {
 		byName[t.Name] = t

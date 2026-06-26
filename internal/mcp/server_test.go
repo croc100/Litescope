@@ -16,7 +16,7 @@ func run(t *testing.T, requests ...string) map[float64]map[string]interface{} {
 	t.Helper()
 	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
 	var out bytes.Buffer
-	if err := Serve(in, &out, "test"); err != nil {
+	if err := Serve(in, &out, "test", false); err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	resps := map[float64]map[string]interface{}{}
@@ -87,7 +87,7 @@ func TestServe_Notification_NoResponse(t *testing.T) {
 	// A notification (no id) must not produce a response line.
 	in := strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n")
 	var out bytes.Buffer
-	if err := Serve(in, &out, "test"); err != nil {
+	if err := Serve(in, &out, "test", false); err != nil {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(out.String()) != "" {
