@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/croc100/litescope/internal/advisor"
+	"github.com/croc100/litescope/internal/autopilot"
 	"github.com/croc100/litescope/internal/check"
 	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/d1sync"
@@ -438,6 +439,45 @@ func Registry(allowWrites bool) []Tool {
 					"count":     len(snaps),
 					"snapshots": snaps,
 				})
+			},
+		},
+		{
+			Name: "litescope_autopilot",
+			Description: "Self-driving DBA for a local SQLite database. Derives safe maintenance and " +
+				"optimization actions — ANALYZE, PRAGMA optimize, missing foreign-key indexes, and " +
+				"(when fragmented) VACUUM / redundant-index cleanup — each explained in plain " +
+				"language.\n\n" +
+				"Dry-run by default (apply=false): returns the plan without changing anything. " +
+				"apply=true executes the safe actions and requires --allow-writes; a snapshot is " +
+				"taken first so the run is one litescope_restore away from undo. Risky actions " +
+				"(VACUUM, dropping indexes) only run with aggressive=true. Local files only.",
+			InputSchema: obj(props{
+				"source":     strProp("Local SQLite file path."),
+				"apply":      boolProp("Execute the safe actions. Default false (dry-run). Requires --allow-writes."),
+				"aggressive": boolProp("Also run risky actions (VACUUM, drop redundant indexes)."),
+			}, "source"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("autopilot is for local SQLite files; %q is remote", src)
+				}
+				apply, _ := args["apply"].(bool)
+				if apply && !allowWrites {
+					return "", fmt.Errorf("apply=true requires the MCP server to be started with --allow-writes")
+				}
+				aggressive, _ := args["aggressive"].(bool)
+				plan, err := autopilot.BuildPlan(src, nil)
+				if err != nil {
+					return "", err
+				}
+				res, err := autopilot.Run(src, plan, autopilot.RunOptions{Apply: apply, Aggressive: aggressive})
+				if err != nil {
+					return "", err
+				}
+				return toJSON(res)
 			},
 		},
 	}

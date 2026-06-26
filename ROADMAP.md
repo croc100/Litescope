@@ -44,6 +44,11 @@ databases without hand-written glue and without footguns.
   Also `live=true` on the `litescope_locks` MCP tool** ✨ new
 
 **Change management**
+- **`autopilot` — self-driving DBA: ANALYZE, PRAGMA optimize, auto-add missing
+  foreign-key indexes, and (with `--aggressive`) VACUUM + redundant-index
+  cleanup. Dry-run by default, auto-snapshot before applying, every action
+  explained in plain language. `--fleet` runs it across a whole fleet; also the
+  `litescope_autopilot` MCP tool** ✨ new
 - `migrate` — generate + apply migrations; blast-radius analysis
 - `validate` — snapshot-based migration locking for CI
 - `monitor` — continuous drift detection; webhook alerts
@@ -77,26 +82,20 @@ databases without hand-written glue and without footguns.
 
 ---
 
-## Now — close the moats
+## Now — moats complete
 
-Moat #3 (lock doctor) is complete, static and live. Phase B (MCP write safety)
-and Phase C (local/Turso backup & restore) have shipped — every SQLite source
-now answers "did you back up?" and every agent write is guarded. What remains is
-the autopilot moat.
+All three moats have shipped: the lock doctor (static + live), MCP write safety
+(Phase B), local/Turso backup & restore (Phase C), and autopilot (Phase D). Every
+SQLite source answers "did you back up?", every agent write is guarded, and
+routine tuning is one command — or one MCP call — away.
 
-Phase C follow-up (not yet built): **scheduled snapshots** — a retention/cron
-policy for local/Turso so backups happen unattended, full parity with D1.
+Open follow-ups before moving to depth & reach:
 
-### Phase D — Autopilot (DBA self-driving) ← next
-
-The third moat. Auto-apply safe optimizations across one DB or a whole fleet,
-explaining every action in plain language.
-
-- **`litescope autopilot`** — `PRAGMA optimize`, ANALYZE, index creation from
-  `advise`, and unused-index cleanup, applied with explanations.
-- **EXPLAIN QUERY PLAN analysis** — detect full scans and missing indexes from
-  real queries, not just schema shape.
-- **Fleet autopilot** — `litescope autopilot --fleet litescope.fleet.yaml`.
+- **Scheduled snapshots** — a retention/cron policy for local/Turso so backups
+  happen unattended, full parity with D1. (Phase C follow-up.)
+- **EXPLAIN-driven autopilot** — `autopilot --queries` already feeds a query log
+  through the advisor; next is turning recurring full-scans into proposed index
+  actions automatically rather than guidance-only. (Phase D follow-up.)
 
 ---
 
