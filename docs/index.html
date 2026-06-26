@@ -425,8 +425,9 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#d1">D1</a>
+      <a href="#ai">MCP</a>
       <a href="#fleet">Fleet</a>
-      <a href="#ai">AI / MCP</a>
       <a href="#pricing">Open source</a>
       <a href="#install">Install</a>
       <a href="/docs">Docs</a>
@@ -437,9 +438,9 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
 <header id="top">
   <div class="wrap">
-    <div class="badge"><span class="pulse"></span>The ops layer for the databases AI apps run on</div>
-    <h1>Your AI app runs on SQLite.<br/><span class="accent">Who's watching it?</span></h1>
-    <p class="hero-sub">Agents, RAG pipelines, and edge services all ship on SQLite — then drift, bloat, and corrupt in the dark. Litescope is the operations layer: see your schema, catch faults, and fix them — from one local file to a fleet of thousands.</p>
+    <div class="badge"><span class="pulse"></span>MCP-first ops tool for Cloudflare D1 and SQLite</div>
+    <h1>Ask Claude about<br/><span class="accent">your D1 database.</span></h1>
+    <p class="hero-sub">Litescope is the MCP server for Cloudflare D1 — let Claude inspect schemas, run queries, apply migrations, and rewind with Time Travel. Works on local SQLite too. One binary, zero cloud account required.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">Free &amp; open source</a>
@@ -448,18 +449,25 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
     <div class="terminal">
       <div class="term-bar">
         <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
-        <span class="term-title">litescope fleet health</span>
+        <span class="term-title">Claude Desktop — litescope MCP</span>
       </div>
-      <div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">litescope fleet health</span>
+      <div class="term-body"><span class="t-prompt">›</span> <span class="t-cmd">"list my D1 databases and show me the users table schema"</span>
 
-<span class="t-head">Fleet: production · 312 database(s) ·</span> <span class="t-err">1 critical</span> <span class="t-dim">·</span> <span class="t-warn">1 warning</span>
+<span class="t-dim">Claude calls</span> litescope_d1_list <span class="t-dim">→</span>
+<span class="t-ok">✓</span>  prod-users      <span class="t-dim">d1://a1b2c3d4  · 12 tables</span>
+<span class="t-ok">✓</span>  prod-analytics  <span class="t-dim">d1://e5f6g7h8  · 4 tables</span>
+<span class="t-ok">✓</span>  staging-users   <span class="t-dim">d1://i9j0k1l2  · 12 tables</span>
 
-<span class="t-err">✗</span>  tenant-0203   <span class="t-err">CORRUPT</span> — integrity_check failed (page 142)
-<span class="t-warn">⚠</span>  tenant-0148   <span class="t-warn">WAL 2.1GB</span> — checkpoint starved, reads degraded
-<span class="t-ok">●</span>  tenant-0001   <span class="t-dim">18.4MB · wal 1.2MB · wal</span>
-<span class="t-ok">●</span>  tenant-0002   <span class="t-dim">17.9MB · wal 0.9MB · wal</span>
+<span class="t-dim">Claude calls</span> litescope_schema <span class="t-dim">source=d1://a1b2c3d4 →</span>
+<span class="t-head">Table: users</span>
+  id         <span class="t-dim">INTEGER  PK</span>
+  email      <span class="t-dim">TEXT     NOT NULL</span>
+  created_at <span class="t-dim">TEXT</span>
+  plan       <span class="t-dim">TEXT     DEFAULT 'free'</span>
 
-<span class="t-dim">312 databases ·</span> <span class="t-ok">310 healthy</span> <span class="t-dim">·</span> <span class="t-warn">1 warning</span> <span class="t-dim">·</span> <span class="t-err">1 critical</span></div>
+<span class="t-prompt">›</span> <span class="t-cmd">"the email column is missing an index — add it"</span>
+<span class="t-dim">Claude calls</span> litescope_migrate_apply <span class="t-dim">source=d1://a1b2c3d4 →</span>
+<span class="t-ok">✓</span>  <span class="t-dim">Applied: CREATE INDEX idx_users_email ON users(email)</span></div>
     </div>
   </div>
 </header>
@@ -468,22 +476,22 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   <div class="wrap problem-grid">
     <div>
       <div class="eyebrow">The problem</div>
-      <h2>AI shipped on SQLite.<br/>Nobody's watching it.</h2>
-      <p>Every agent, RAG store, and AI app reaches for SQLite — it's the zero-config default. Then the schema drifts, the WAL bloats, a file corrupts, and the backup nobody tested can't be restored.</p>
-      <p>Postgres has a decade of tooling for this. SQLite — now running <strong>real production behind AI apps, Turso, and D1</strong> — has almost none. Litescope is that tooling.</p>
+      <h2>D1 has no ops tooling.<br/>Until now.</h2>
+      <p>Cloudflare D1 made SQLite a real production database — per-tenant, globally distributed, backed by 30 days of Time Travel. But <code>wrangler d1</code> stops at "execute a file." No schema diff, no pull-to-local, no bisect, no MCP.</p>
+      <p>Litescope is the ops layer D1 was missing: ask Claude to inspect your production database, diff schemas, apply migrations, and rewind to any point — from your editor or terminal.</p>
     </div>
     <div class="stack">
       <div class="stack-item">
         <span class="stack-icon">◆</span>
-        <div><b>AI apps &amp; agents</b> &nbsp;<span>LangChain, RAG stores, local-first AI, MCP servers</span></div>
+        <div><b>Cloudflare D1</b> &nbsp;<span>MCP server, pull/push, migrate apply, Time Travel, bisect</span></div>
       </div>
       <div class="stack-item">
         <span class="stack-icon">◆</span>
-        <div><b>Turso &amp; Cloudflare D1</b> &nbsp;<span>libSQL edge replicas, per-tenant databases at scale</span></div>
+        <div><b>AI apps &amp; agents</b> &nbsp;<span>Claude, Cursor, any MCP client — read-only or write with --allow-writes</span></div>
       </div>
       <div class="stack-item">
         <span class="stack-icon">◆</span>
-        <div><b>Local &amp; embedded</b> &nbsp;<span>app databases, CI fixtures, backups</span></div>
+        <div><b>Local &amp; Turso</b> &nbsp;<span>same CLI, same MCP tools — works on any SQLite source</span></div>
       </div>
     </div>
   </div>
@@ -708,17 +716,21 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 <section id="ai">
   <div class="wrap spot-grid">
     <div>
-      <div class="eyebrow">AI-native</div>
-      <h2>Your AI can drive it too.</h2>
-      <p class="section-sub">Litescope ships an <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" style="color:var(--teal)">MCP</a> server, so Claude, Cursor, or any agent can call it as a tool — and inspect the database it just built.</p>
+      <div class="eyebrow">MCP-first</div>
+      <h2>Claude speaks D1<br/>natively.</h2>
+      <p class="section-sub">Litescope is the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" style="color:var(--teal)">MCP</a> server built for Cloudflare D1. One config line and Claude can inspect, query, migrate, and rewind any D1 database — no API code, no dashboard.</p>
       <ul class="spot-list">
         <li>
-          <span class="spot-icon">🤖</span>
-          <div><b>One command</b> <span><code>litescope mcp</code> — point Claude Desktop at it and the tools appear.</span></div>
+          <span class="spot-icon">🔍</span>
+          <div><b>Read-only by default</b> <span><code>litescope mcp</code> — health, schema, diff, query, fleet fingerprint. Safe to give to any agent.</span></div>
         </li>
         <li>
-          <span class="spot-icon">🔒</span>
-          <div><b>Diagnose freely, treat with a human</b> <span>The agent gets read-only tools — health, diff, fingerprint, and migration <em>plans</em> with blast-radius. It can recommend a fix; a person commits it.</span></div>
+          <span class="spot-icon">✏️</span>
+          <div><b>Opt-in writes</b> <span><code>litescope mcp --allow-writes</code> unlocks <code>litescope_query_write</code>, <code>litescope_migrate_apply</code>, <code>litescope_d1_create</code>, <code>litescope_d1_delete</code>.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">⏪</span>
+          <div><b>Time Travel from chat</b> <span>Ask Claude to rewind a D1 database to any point in the last 30 days — no API call needed from your side.</span></div>
         </li>
       </ul>
     </div>
@@ -731,13 +743,85 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   <span class="t-cmd">"mcpServers"</span>: {
     <span class="t-cmd">"litescope"</span>: {
       <span class="t-cmd">"command"</span>: <span class="t-ok">"litescope"</span>,
-      <span class="t-cmd">"args"</span>: [<span class="t-ok">"mcp"</span>]
+      <span class="t-cmd">"args"</span>: [<span class="t-ok">"mcp"</span>, <span class="t-ok">"--allow-writes"</span>],
+      <span class="t-cmd">"env"</span>: {
+        <span class="t-cmd">"CLOUDFLARE_API_TOKEN"</span>: <span class="t-ok">"..."</span>,
+        <span class="t-cmd">"CLOUDFLARE_ACCOUNT_ID"</span>: <span class="t-ok">"..."</span>
+      }
     }
   }
 <span class="t-dim">}</span>
 
-<span class="t-prompt">›</span> <span class="t-cmd">"use litescope to health-check ./app.db"</span>
-<span class="t-ok">●</span> <span class="t-dim">Claude calls</span> litescope_health <span class="t-dim">→ reads the report</span></div>
+<span class="t-prompt">›</span> <span class="t-cmd">"list my D1 databases"</span>
+<span class="t-dim">→</span> litescope_d1_list
+
+<span class="t-prompt">›</span> <span class="t-cmd">"add an index on users.email in prod"</span>
+<span class="t-dim">→</span> litescope_migrate_apply <span class="t-ok">✓</span>
+
+<span class="t-prompt">›</span> <span class="t-cmd">"rewind prod to 2 hours ago"</span>
+<span class="t-dim">→</span> litescope_rewind  <span class="t-ok">✓  restored</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="d1" style="padding:80px 0">
+  <div class="wrap two-col" style="align-items:start;gap:64px">
+    <div>
+      <div class="eyebrow">Cloudflare D1</div>
+      <h2>Every D1 operation<br/>you actually need.</h2>
+      <p class="section-sub">Beyond the dashboard. Litescope fills the gaps that <code>wrangler d1</code> leaves open.</p>
+      <ul class="spot-list">
+        <li>
+          <span class="spot-icon">⬇️</span>
+          <div><b>Pull to local</b> <span><code>litescope d1 pull d1://DB_UUID ./local.db</code> — full schema + data in one command. Inspect, diff, or restore offline.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">⬆️</span>
+          <div><b>Push from local</b> <span><code>litescope d1 push ./seed.db d1://DB_UUID</code> — seed a fresh D1 or restore from a local snapshot.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">↔️</span>
+          <div><b>Schema diff → migration</b> <span><code>litescope migrate ./local.db d1://prod</code> diffs any two sources and generates ready-to-apply SQL.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">⏪</span>
+          <div><b>Time Travel</b> <span><code>litescope rewind d1://DB_UUID --to "2h ago"</code> — any point in 30 days, with human-readable durations.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">🔬</span>
+          <div><b>Bisect</b> <span><code>litescope bisect d1://DB_UUID --good "3d ago" --bad now --check "SELECT COUNT(*) FROM users" --expect "gt:0"</code> — binary-search Time Travel to pinpoint the breaking change.</span></div>
+        </li>
+      </ul>
+    </div>
+    <div class="terminal" style="margin-top:0">
+      <div class="term-bar">
+        <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
+        <span class="term-title">D1 workflow</span>
+      </div>
+      <div class="term-body"><span class="t-dim"># Diff local dev schema against production D1</span>
+<span class="t-prompt">$</span> <span class="t-cmd">litescope migrate ./dev.db d1://prod-uuid -o patch.sql</span>
+
+<span class="t-head">Blast radius analysis</span>
+<span class="t-ok">✓</span>  CREATE INDEX idx_users_email  <span class="t-dim">safe</span>
+<span class="t-warn">⚠</span>  ALTER TABLE orders ADD COLUMN <span class="t-dim">safe · 0 rows affected</span>
+
+<span class="t-ok">✓</span>  Migration written → patch.sql
+
+<span class="t-dim"># Apply directly to D1</span>
+<span class="t-prompt">$</span> <span class="t-cmd">litescope migrate apply d1://prod-uuid patch.sql</span>
+<span class="t-ok">✓</span>  Applied 2 statement(s) to d1://prod-uuid
+
+<span class="t-dim"># Something broke? Binary-search Time Travel</span>
+<span class="t-prompt">$</span> <span class="t-cmd">litescope bisect d1://prod-uuid \
+    --good "1d ago" --bad now \
+    --check "SELECT COUNT(*) FROM orders" \
+    --expect "gt:0"</span>
+
+  Step 1/10  Testing 2026-06-26T12:00:00Z … <span class="t-ok">GOOD</span>
+  Step 2/10  Testing 2026-06-26T18:00:00Z … <span class="t-err">BAD</span>
+  Step 3/10  Testing 2026-06-26T15:00:00Z … <span class="t-ok">GOOD</span>
+
+<span class="t-ok">✓</span>  Breaking change between 15:00 and 18:00 UTC</div>
     </div>
   </div>
 </section>
