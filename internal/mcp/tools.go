@@ -16,6 +16,7 @@ import (
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
+	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/schema"
 )
@@ -372,6 +373,29 @@ func Registry(allowWrites bool) []Tool {
 				}
 				deep, _ := args["deep"].(bool)
 				return toJSON(fleet.Health(dbs, deep, 0))
+			},
+		},
+		{
+			Name: "litescope_locks",
+			Description: "Diagnose \"database is locked\" / SQLITE_BUSY and writer-starvation " +
+				"problems — the most common SQLite production failure. Inspects journal mode, " +
+				"busy_timeout, locking mode, and WAL bloat for local files, and returns " +
+				"provider-specific guidance for D1 and Turso. Each finding includes the exact " +
+				"PRAGMA or DSN change to apply. Returns a JSON report with a verdict " +
+				"(ok / attention / critical). Read-only.",
+			InputSchema: obj(props{
+				"source": strProp(sourcePropDesc),
+			}, "source"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				r, err := locks.Diagnose(src)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(r)
 			},
 		},
 	}
