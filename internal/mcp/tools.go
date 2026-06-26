@@ -31,9 +31,11 @@ const sourcePropDesc = "Database source: a local file path (./app.db), a Cloudfl
 	"(d1://DB_ID when CLOUDFLARE_API_TOKEN+CLOUDFLARE_ACCOUNT_ID are set, or " +
 	"d1://TOKEN@ACCOUNT_ID/DB_ID), or a Turso DSN (turso://TOKEN@ORG/DB)."
 
-// Registry returns all tools the MCP server exposes. Read-only by design.
-func Registry() []Tool {
-	return []Tool{
+// Registry returns all MCP tools. When allowWrites is true, write-capable tools
+// are appended: litescope_query_write, litescope_migrate_apply,
+// litescope_d1_create, litescope_d1_delete.
+func Registry(allowWrites bool) []Tool {
+	tools := []Tool{
 		{
 			Name: "litescope_health",
 			Description: "Inspect a SQLite or D1 database for operational faults: corruption " +
@@ -325,6 +327,140 @@ func Registry() []Tool {
 			},
 		},
 	}
+
+	if allowWrites {
+		tools = append(tools, writeTools()...)
+	}
+	return tools
+}
+
+// writeTools returns tools that can mutate databases. Only included when the
+// MCP server is started with --allow-writes.
+func writeTools() []Tool {
+	return []Tool{
+		{
+			Name: "litescope_query_write",
+			Description: "Execute a SQL statement that modifies a database (INSERT, UPDATE, DELETE, " +
+				"CREATE TABLE, DROP TABLE, etc.). Only available when litescope mcp is started with " +
+				"--allow-writes. Works on local SQLite files and Cloudflare D1 (d1://DB_ID). " +
+				"Returns rows_affected and last_insert_id where applicable.",
+			InputSchema: obj(props{
+				"source": strProp(sourcePropDesc),
+				"sql":    strProp("SQL statement to execute. Must be a single statement."),
+			}, "source", "sql"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				sql, _ := args["sql"].(string)
+				if sql == "" {
+					return "", fmt.Errorf("sql is required")
+				}
+
+				conn, err := connector.Open(src)
+				if err != nil {
+					return "", err
+				}
+				defer conn.Close()
+
+				rows, err := connector.Query(conn, sql)
+				if err != nil {
+					return "", fmt.Errorf("executing SQL: %w", err)
+				}
+				return toJSON(map[string]interface{}{
+					"rows":    rows,
+					"count":   len(rows),
+					"warning": "This tool mutates the database. Use with care.",
+				})
+			},
+		},
+		{
+			Name: "litescope_migrate_apply",
+			Description: "Apply a SQL migration to a database. Wraps the migration in a transaction " +
+				"where possible (local SQLite). For D1, statements are executed sequentially. " +
+				"Only available when litescope mcp is started with --allow-writes.",
+			InputSchema: obj(props{
+				"source": strProp(sourcePropDesc),
+				"sql":    strProp("One or more SQL statements separated by semicolons."),
+			}, "source", "sql"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				sql, _ := args["sql"].(string)
+				if sql == "" {
+					return "", fmt.Errorf("sql is required")
+				}
+
+				conn, err := connector.Open(src)
+				if err != nil {
+					return "", err
+				}
+				defer conn.Close()
+
+				exec, ok := connector.AsExecutor(conn)
+				if !ok {
+					return "", fmt.Errorf("connector for %q does not support execution", src)
+				}
+				stmts := splitStatements(sql)
+				if err := exec.Exec(stmts, false); err != nil {
+					return "", fmt.Errorf("migration failed: %w", err)
+				}
+				return toJSON(map[string]interface{}{
+					"ok":         true,
+					"statements": len(stmts),
+					"source":     src,
+				})
+			},
+		},
+		{
+			Name: "litescope_d1_create",
+			Description: "Create a new Cloudflare D1 database in the account. Returns the UUID and " +
+				"DSN of the newly created database. Requires CLOUDFLARE_API_TOKEN and " +
+				"CLOUDFLARE_ACCOUNT_ID environment variables. Only available with --allow-writes.",
+			InputSchema: obj(props{
+				"name":     strProp("Name for the new D1 database."),
+				"location": strProp("Optional primary location hint (e.g. 'wnam', 'enam', 'weur', 'eeur', 'apac')."),
+			}, "name"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				name, _ := args["name"].(string)
+				if name == "" {
+					return "", fmt.Errorf("name is required")
+				}
+				location, _ := args["location"].(string)
+				db, err := connector.D1CreateDatabase(name, location)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(db)
+			},
+		},
+		{
+			Name: "litescope_d1_delete",
+			Description: "Permanently delete a Cloudflare D1 database. This is irreversible — " +
+				"Time Travel history is also removed. Requires CLOUDFLARE_API_TOKEN and " +
+				"CLOUDFLARE_ACCOUNT_ID environment variables. Only available with --allow-writes.",
+			InputSchema: obj(props{
+				"database_id": strProp("UUID of the D1 database to delete."),
+			}, "database_id"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				id, _ := args["database_id"].(string)
+				if id == "" {
+					return "", fmt.Errorf("database_id is required")
+				}
+				if err := connector.D1DeleteDatabase(id); err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"ok":          true,
+					"database_id": id,
+					"warning":     "Database deleted permanently including all Time Travel history.",
+				})
+			},
+		},
+	}
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -556,6 +692,20 @@ func idxNames(idxs []schema.Index) []string {
 	out := make([]string, 0, len(idxs))
 	for _, ix := range idxs {
 		out = append(out, ix.Name)
+	}
+	return out
+}
+
+// splitStatements splits a SQL string on semicolons, trimming whitespace and
+// skipping empty statements.
+func splitStatements(sql string) []string {
+	parts := strings.Split(sql, ";")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
 	}
 	return out
 }

@@ -60,17 +60,19 @@ Make D1 a first-class citizen in MCP tools. Today all MCP tools take a local
 
 ---
 
-## Phase 2 — D1-native operations
+## Phase 2 — D1-native operations ✅ shipped
 
 Features that only make sense because D1 is the primary target.
 
-- **D1 Time Travel integration** — `rewind` via Cloudflare's Time Travel API
-  (point-in-time restore without a local snapshot). `litescope rewind d1://DB_ID --to "2h ago"`
-- **D1 fleet from account** — `litescope fleet discover --d1` auto-generates a
-  fleet config from all databases in the account. No YAML hand-editing.
-- **MCP write tools (opt-in)** — `litescope_migrate_apply`, `litescope_query_write`
+- ✅ **D1 Time Travel integration** — `litescope rewind d1://DB_ID --to "2h ago"`.
+  Restore to any point in the last 30 days via Cloudflare's Time Travel API.
+  Accepts relative durations (`2h ago`, `3d ago`, `yesterday`) or RFC 3339.
+- ✅ **D1 fleet from account** — `litescope fleet discover d1` auto-generates a
+  fleet config from all databases in the account. Supports `--merge` to update
+  an existing config without losing baselines or tags.
+- ✅ **MCP write tools (opt-in)** — `litescope_migrate_apply`, `litescope_query_write`
   behind an explicit `--allow-writes` flag on `litescope mcp`. Off by default.
-- **`litescope_d1_create` / `litescope_d1_delete`** — lifecycle management from
+- ✅ **`litescope_d1_create` / `litescope_d1_delete`** — lifecycle management from
   MCP (create a D1 database, drop it). Useful for AI-driven test-fixture setup.
 
 ---

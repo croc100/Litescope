@@ -43,6 +43,11 @@ func openD1(dsn string) (Connector, error) {
 	}, nil
 }
 
+// ParseD1DSN is the exported form of parseD1DSN for use by CLI commands.
+func ParseD1DSN(dsn string) (token, accountID, databaseID string, err error) {
+	return parseD1DSN(dsn)
+}
+
 func parseD1DSN(dsn string) (token, accountID, databaseID string, err error) {
 	rest := strings.TrimPrefix(dsn, "d1://")
 
@@ -83,6 +88,198 @@ func parseD1DSN(dsn string) (token, accountID, databaseID string, err error) {
 		return "", "", "", fmt.Errorf("d1 DSN missing token, account_id, or database_id: %s", dsn)
 	}
 	return token, accountID, databaseID, nil
+}
+
+// D1TimeTravelResult holds the outcome of a Time Travel restore.
+type D1TimeTravelResult struct {
+	Bookmark  string `json:"bookmark"`
+	Timestamp string `json:"timestamp"`
+}
+
+// D1TimeTravel restores a D1 database to the given point in time using
+// Cloudflare's Time Travel API. Credentials are resolved from the environment
+// (CLOUDFLARE_API_TOKEN) if not embedded in the DSN.
+func D1TimeTravel(accountID, databaseID string, ts interface{ Unix() int64 }) (*D1TimeTravelResult, error) {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN must be set for Time Travel")
+	}
+
+	type restoreReq struct {
+		Timestamp int64 `json:"timestamp"`
+	}
+	body, err := json.Marshal(restoreReq{Timestamp: ts.Unix()})
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	url := fmt.Sprintf(
+		"https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/time_travel/restore",
+		accountID, databaseID,
+	)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("D1 Time Travel request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("D1 Time Travel HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Result struct {
+			Bookmark  string `json:"bookmark"`
+			Timestamp string `json:"timestamp"`
+		} `json:"result"`
+		Success bool      `json:"success"`
+		Errors  []d1Error `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decoding Time Travel response: %w", err)
+	}
+	if !result.Success {
+		msgs := make([]string, len(result.Errors))
+		for i, e := range result.Errors {
+			msgs[i] = fmt.Sprintf("[%d] %s", e.Code, e.Message)
+		}
+		return nil, fmt.Errorf("D1 Time Travel error: %s", strings.Join(msgs, "; "))
+	}
+
+	return &D1TimeTravelResult{
+		Bookmark:  result.Result.Bookmark,
+		Timestamp: result.Result.Timestamp,
+	}, nil
+}
+
+// D1CreateDatabase creates a new D1 database in the account.
+func D1CreateDatabase(name, location string) (*D1DatabaseInfo, error) {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if token == "" || accountID == "" {
+		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set")
+	}
+
+	type createReq struct {
+		Name            string `json:"name"`
+		PrimaryLocation string `json:"primary_location_hint,omitempty"`
+	}
+	body, err := json.Marshal(createReq{Name: name, PrimaryLocation: location})
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database", accountID)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("D1 create request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("D1 create HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Result struct {
+			UUID      string `json:"uuid"`
+			Name      string `json:"name"`
+			CreatedAt string `json:"created_at"`
+		} `json:"result"`
+		Success bool      `json:"success"`
+		Errors  []d1Error `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decoding D1 create response: %w", err)
+	}
+	if !result.Success {
+		msgs := make([]string, len(result.Errors))
+		for i, e := range result.Errors {
+			msgs[i] = fmt.Sprintf("[%d] %s", e.Code, e.Message)
+		}
+		return nil, fmt.Errorf("D1 create error: %s", strings.Join(msgs, "; "))
+	}
+
+	return &D1DatabaseInfo{
+		UUID:      result.Result.UUID,
+		Name:      result.Result.Name,
+		CreatedAt: result.Result.CreatedAt,
+		DSN:       fmt.Sprintf("d1://%s", result.Result.UUID),
+	}, nil
+}
+
+// D1DeleteDatabase deletes a D1 database permanently.
+func D1DeleteDatabase(databaseID string) error {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if token == "" || accountID == "" {
+		return fmt.Errorf("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf(
+		"https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s",
+		accountID, databaseID,
+	)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("D1 delete request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("D1 delete HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Success bool      `json:"success"`
+		Errors  []d1Error `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return fmt.Errorf("decoding D1 delete response: %w", err)
+	}
+	if !result.Success {
+		msgs := make([]string, len(result.Errors))
+		for i, e := range result.Errors {
+			msgs[i] = fmt.Sprintf("[%d] %s", e.Code, e.Message)
+		}
+		return fmt.Errorf("D1 delete error: %s", strings.Join(msgs, "; "))
+	}
+	return nil
 }
 
 // ListD1Databases returns all D1 databases for the account using credentials
