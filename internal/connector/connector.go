@@ -51,6 +51,20 @@ func AsExecutor(c Connector) (Executor, bool) {
 	return e, ok
 }
 
+// Querier can run arbitrary read-only SQL and return rows as a slice of maps.
+type Querier interface {
+	QueryRows(sql string) ([]map[string]interface{}, error)
+}
+
+// Query runs a read-only SQL statement on any connector that implements Querier.
+// For connectors that don't implement Querier directly, it returns an error.
+func Query(c Connector, sql string) ([]map[string]interface{}, error) {
+	if q, ok := c.(Querier); ok {
+		return q.QueryRows(sql)
+	}
+	return nil, fmt.Errorf("connector %T does not support arbitrary queries", c)
+}
+
 // Open parses a DSN and returns the appropriate Connector.
 //
 // Supported formats:
@@ -58,6 +72,8 @@ func AsExecutor(c Connector) (Executor, bool) {
 //	path/to/file.db                        — local SQLite file
 //	turso://TOKEN@ORG/DBNAME               — Turso (libSQL) database
 //	d1://TOKEN@ACCOUNT_ID/DATABASE_ID      — Cloudflare D1 database
+//	d1://ACCOUNT_ID/DATABASE_ID            — D1 with token from CLOUDFLARE_API_TOKEN
+//	d1://DATABASE_ID                       — D1 with token+account from env vars
 func Open(dsn string) (Connector, error) {
 	switch {
 	case strings.HasPrefix(dsn, "turso://"):

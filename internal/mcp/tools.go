@@ -1,19 +1,19 @@
 // Package mcp exposes Litescope as a Model Context Protocol server over stdio,
 // so an LLM agent (Claude Desktop, Claude Code, or any MCP client) can call
-// Litescope operations as tools. This first cut exposes read-only diagnostic
-// tools only — an AI can inspect databases freely, but cannot mutate them.
+// Litescope operations as tools. All tools are read-only by default.
 package mcp
 
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/croc100/litescope/internal/advisor"
 	"github.com/croc100/litescope/internal/check"
+	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
-	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/schema"
 )
@@ -27,41 +27,83 @@ type Tool struct {
 	Handler     func(args map[string]interface{}) (string, error)
 }
 
+const sourcePropDesc = "Database source: a local file path (./app.db), a Cloudflare D1 DSN " +
+	"(d1://DB_ID when CLOUDFLARE_API_TOKEN+CLOUDFLARE_ACCOUNT_ID are set, or " +
+	"d1://TOKEN@ACCOUNT_ID/DB_ID), or a Turso DSN (turso://TOKEN@ORG/DB)."
+
 // Registry returns all tools the MCP server exposes. Read-only by design.
 func Registry() []Tool {
 	return []Tool{
 		{
 			Name: "litescope_health",
-			Description: "Inspect a local SQLite database for operational faults: corruption " +
+			Description: "Inspect a SQLite or D1 database for operational faults: corruption " +
 				"(PRAGMA integrity check), WAL bloat from a starved checkpoint, freelist " +
 				"fragmentation, and reachability. Returns a JSON report with a severity " +
-				"(ok / warning / critical) and a list of issues. Read-only.",
+				"(ok / warning / critical) and a list of issues. Read-only.\n\n" +
+				"For D1: set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and use source=d1://DB_ID.",
 			InputSchema: obj(props{
-				"path": strProp("Absolute path to the SQLite database file"),
-				"deep": boolProp("Use the exhaustive integrity_check instead of the faster quick_check"),
-			}, "path"),
+				"source": strProp(sourcePropDesc),
+				"deep":   boolProp("Use the exhaustive integrity_check instead of the faster quick_check"),
+			}, "source"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				path, _ := args["path"].(string)
-				if path == "" {
-					return "", fmt.Errorf("path is required")
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
 				}
 				deep, _ := args["deep"].(bool)
-				return toJSON(health.Inspect(path, deep))
+				if isRemote(src) {
+					// Remote sources: reachability check via connector
+					c, err := connector.Open(src)
+					if err != nil {
+						return toJSON(map[string]interface{}{
+							"source": src, "reachable": false,
+							"severity": "critical", "issues": []string{err.Error()},
+						})
+					}
+					defer c.Close()
+					_, schErr := c.Schema()
+					if schErr != nil {
+						return toJSON(map[string]interface{}{
+							"source": src, "reachable": false,
+							"severity": "critical", "issues": []string{schErr.Error()},
+						})
+					}
+					return toJSON(map[string]interface{}{
+						"source": src, "reachable": true,
+						"severity": "ok", "issues": []string{},
+						"note": "Full PRAGMA checks require a local file; remote health shows reachability only.",
+					})
+				}
+				return toJSON(health.Inspect(src, deep))
 			},
 		},
 		{
 			Name: "litescope_schema",
-			Description: "Load the schema of a local SQLite database — tables, columns " +
-				"(name, type, not-null, primary key), and indexes. Returns JSON. Read-only.",
+			Description: "Load the schema of a SQLite or D1 database — tables, columns " +
+				"(name, type, not-null, primary key), and indexes. Returns JSON. Read-only.\n\n" +
+				"Works with local files, D1, and Turso. For D1: set CLOUDFLARE_API_TOKEN + " +
+				"CLOUDFLARE_ACCOUNT_ID and use source=d1://DB_ID.",
 			InputSchema: obj(props{
-				"path": strProp("Absolute path to the SQLite database file"),
-			}, "path"),
+				"source": strProp(sourcePropDesc),
+			}, "source"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				path, _ := args["path"].(string)
-				if path == "" {
-					return "", fmt.Errorf("path is required")
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
 				}
-				s, err := schema.Load(path)
+				if isRemote(src) {
+					c, err := connector.Open(src)
+					if err != nil {
+						return "", err
+					}
+					defer c.Close()
+					s, err := c.Schema()
+					if err != nil {
+						return "", err
+					}
+					return toJSON(shapeSchema(s))
+				}
+				s, err := schema.Load(src)
 				if err != nil {
 					return "", err
 				}
@@ -70,18 +112,19 @@ func Registry() []Tool {
 		},
 		{
 			Name: "litescope_diff",
-			Description: "Compare two local SQLite databases and return their schema and " +
-				"row-count differences as JSON. Use this to understand what a migration " +
-				"changed between a 'before' and 'after' database. Read-only.",
+			Description: "Compare two SQLite or D1 databases and return their schema and " +
+				"row-count differences as JSON. Works across any combination of local files, " +
+				"D1, and Turso — e.g. diff a local migration target against a live D1 database. " +
+				"Read-only.",
 			InputSchema: obj(props{
-				"old": strProp("Absolute path to the baseline ('before') database"),
-				"new": strProp("Absolute path to the changed ('after') database"),
+				"old": strProp("Baseline ('before') source — " + sourcePropDesc),
+				"new": strProp("Changed ('after') source — " + sourcePropDesc),
 			}, "old", "new"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				oldP, _ := args["old"].(string)
 				newP, _ := args["new"].(string)
 				if oldP == "" || newP == "" {
-					return "", fmt.Errorf("both 'old' and 'new' paths are required")
+					return "", fmt.Errorf("both 'old' and 'new' are required")
 				}
 				r, err := diff.Compare(oldP, newP)
 				if err != nil {
@@ -92,53 +135,101 @@ func Registry() []Tool {
 		},
 		{
 			Name: "litescope_migrate_plan",
-			Description: "Plan a migration from one SQLite database to another WITHOUT applying it. " +
+			Description: "Plan a migration between two SQLite or D1 databases WITHOUT applying it. " +
 				"Returns the migration SQL plus a blast-radius analysis: each operation classified " +
-				"safe / risky / destructive, with an estimated write-lock duration for table rebuilds " +
-				"(SQLite locks the whole file for DDL). Use this to judge whether a migration is safe " +
-				"before a human applies it. Read-only — never mutates a database.",
+				"safe / risky / destructive, with an estimated write-lock duration for table rebuilds. " +
+				"Use this before applying any migration to a D1 database. Read-only.",
 			InputSchema: obj(props{
-				"old": strProp("Absolute path to the current ('before') database"),
-				"new": strProp("Absolute path to the target ('after') database with the desired schema"),
+				"old": strProp("Current ('before') source — " + sourcePropDesc),
+				"new": strProp("Target ('after') source with the desired schema — " + sourcePropDesc),
 			}, "old", "new"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				oldP, _ := args["old"].(string)
 				newP, _ := args["new"].(string)
 				if oldP == "" || newP == "" {
-					return "", fmt.Errorf("both 'old' and 'new' paths are required")
+					return "", fmt.Errorf("both 'old' and 'new' are required")
 				}
 				d, err := diff.Compare(oldP, newP)
 				if err != nil {
 					return "", err
 				}
-				newSchema, err := schema.Load(newP)
-				if err != nil {
-					return "", err
+				var newSch *schema.Schema
+				if isRemote(newP) {
+					c, err := connector.Open(newP)
+					if err != nil {
+						return "", err
+					}
+					defer c.Close()
+					newSch, err = c.Schema()
+					if err != nil {
+						return "", err
+					}
+				} else {
+					newSch, err = schema.Load(newP)
+					if err != nil {
+						return "", err
+					}
 				}
-				m := migrate.Generate(d, newSchema)
+				m := migrate.Generate(d, newSch)
 				ops, _ := migrate.AnalyzeAll(d, oldP)
 				return toJSON(buildPlan(m, ops))
 			},
 		},
 		{
+			Name: "litescope_query",
+			Description: "Run a read-only SQL query on any SQLite or D1 database and return the " +
+				"results as JSON. Only SELECT statements and read-only PRAGMAs are allowed. " +
+				"This is the primary tool for an AI agent to explore data in a D1 database.\n\n" +
+				"For D1: set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and use source=d1://DB_ID.",
+			InputSchema: obj(props{
+				"source": strProp(sourcePropDesc),
+				"sql":    strProp("A read-only SQL query (SELECT or read-only PRAGMA). Mutations are rejected."),
+			}, "source", "sql"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				sql, _ := args["sql"].(string)
+				if sql == "" {
+					return "", fmt.Errorf("sql is required")
+				}
+				if err := rejectMutation(sql); err != nil {
+					return "", err
+				}
+				c, err := connector.Open(src)
+				if err != nil {
+					return "", err
+				}
+				defer c.Close()
+				rows, err := connector.Query(c, sql)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{"rows": rows, "count": len(rows)})
+			},
+		},
+		{
 			Name: "litescope_advise",
 			Description: "Analyze a local SQLite database for performance problems and recommend " +
-				"fixes: foreign keys with no index (a full scan on every join — SQLite does not " +
-				"auto-index FK columns), redundant indexes, and full table scans for any supplied " +
-				"queries (via EXPLAIN QUERY PLAN). Returns findings with runnable CREATE/DROP INDEX " +
-				"suggestions. Read-only — recommends, never alters the schema.",
+				"fixes: foreign keys with no index, redundant indexes, and full table scans for " +
+				"any supplied queries. Returns findings with runnable CREATE/DROP INDEX suggestions. " +
+				"Read-only — recommends, never alters the schema. (Local files only.)",
 			InputSchema: obj(props{
-				"path": strProp("Absolute path to the SQLite database file"),
+				"source": strProp("Local SQLite file path (advise requires direct file access)"),
 				"queries": map[string]interface{}{
 					"type":        "array",
 					"items":       map[string]interface{}{"type": "string"},
 					"description": "Optional SQL queries to check for full table scans",
 				},
-			}, "path"),
+			}, "source"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				path, _ := args["path"].(string)
-				if path == "" {
-					return "", fmt.Errorf("path is required")
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("litescope_advise requires a local file; use litescope_schema to inspect a D1 database's schema")
 				}
 				var queries []string
 				if raw, ok := args["queries"].([]interface{}); ok {
@@ -148,7 +239,7 @@ func Registry() []Tool {
 						}
 					}
 				}
-				r, err := advisor.Analyze(path, queries)
+				r, err := advisor.Analyze(src, queries)
 				if err != nil {
 					return "", err
 				}
@@ -157,27 +248,22 @@ func Registry() []Tool {
 		},
 		{
 			Name: "litescope_check",
-			Description: "Verify a SQLite backup. Runs a PRAGMA integrity check (free); if 'against' " +
-				"is given, also compares schema and row counts to a reference database (requires a Pro " +
-				"license). Returns a JSON report. Read-only.",
+			Description: "Verify a SQLite backup. Runs a PRAGMA integrity check; if 'against' " +
+				"is given, also compares schema and row counts to a reference database. " +
+				"Returns a JSON report. Read-only. (Local files only.)",
 			InputSchema: obj(props{
-				"path":    strProp("Absolute path to the backup database to verify"),
-				"against": strProp("Optional reference database to compare schema against (Pro)"),
-				"data":    boolProp("Also compare row counts per table (Pro)"),
-			}, "path"),
+				"source":  strProp("Local path to the backup database to verify"),
+				"against": strProp("Optional local reference database to compare schema against"),
+				"data":    boolProp("Also compare row counts per table"),
+			}, "source"),
 			Handler: func(args map[string]interface{}) (string, error) {
-				path, _ := args["path"].(string)
-				if path == "" {
-					return "", fmt.Errorf("path is required")
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
 				}
 				against, _ := args["against"].(string)
 				data, _ := args["data"].(bool)
-				if against != "" || data {
-					if err := license.RequirePro(); err != nil {
-						return "", err
-					}
-				}
-				r, err := check.Check(path, against, data)
+				r, err := check.Check(src, against, data)
 				if err != nil {
 					return "", err
 				}
@@ -185,10 +271,28 @@ func Registry() []Tool {
 			},
 		},
 		{
+			Name: "litescope_d1_list",
+			Description: "List all Cloudflare D1 databases in the account. Returns each database's " +
+				"UUID, name, creation date, table count, and the DSN to use with other litescope tools. " +
+				"Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables. Read-only.",
+			InputSchema: obj(props{}),
+			Handler: func(args map[string]interface{}) (string, error) {
+				dbs, err := connector.ListD1Databases()
+				if err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"databases": dbs,
+					"count":     len(dbs),
+					"tip":       "Use the 'dsn' field as the 'source' parameter in other litescope tools.",
+				})
+			},
+		},
+		{
 			Name: "litescope_fingerprint",
 			Description: "Cluster a fleet of SQLite databases by schema and report how many distinct " +
-				"schemas are actually running, with each cluster's drift from the canonical (largest) " +
-				"one. Reads a fleet config file (litescope.fleet.yaml). Requires a Pro license. Read-only.",
+				"schemas are running, with each cluster's drift from the canonical (largest) one. " +
+				"Reads a fleet config file (litescope.fleet.yaml). Read-only.",
 			InputSchema: obj(props{
 				"config": strProp("Path to the fleet config (default: litescope.fleet.yaml)"),
 				"tag":    strProp("Only include databases with this tag"),
@@ -205,7 +309,7 @@ func Registry() []Tool {
 			Name: "litescope_fleet_health",
 			Description: "Triage operational faults across a whole fleet of SQLite databases in " +
 				"parallel — corruption, WAL bloat, fragmentation, reachability — sorted worst-first. " +
-				"Reads a fleet config file (litescope.fleet.yaml). Requires a Pro license. Read-only.",
+				"Reads a fleet config file (litescope.fleet.yaml). Read-only.",
 			InputSchema: obj(props{
 				"config": strProp("Path to the fleet config (default: litescope.fleet.yaml)"),
 				"tag":    strProp("Only include databases with this tag"),
@@ -223,14 +327,37 @@ func Registry() []Tool {
 	}
 }
 
-// ── fleet + plan helpers ────────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────
 
-// fleetDBs loads the fleet config (Pro-gated) and returns the databases matching
-// an optional tag.
-func fleetDBs(args map[string]interface{}) ([]fleet.Database, error) {
-	if err := license.RequirePro(); err != nil {
-		return nil, err
+func requireSource(args map[string]interface{}) (string, error) {
+	// Accept "source" (new canonical name) or "path" (legacy) for backwards compat.
+	src, _ := args["source"].(string)
+	if src == "" {
+		src, _ = args["path"].(string)
 	}
+	if src == "" {
+		return "", fmt.Errorf("source is required (local path, d1://DB_ID, or turso://TOKEN@ORG/DB)")
+	}
+	return src, nil
+}
+
+func isRemote(src string) bool {
+	return strings.HasPrefix(src, "d1://") || strings.HasPrefix(src, "turso://")
+}
+
+// rejectMutation blocks SQL that would mutate the database.
+func rejectMutation(sql string) error {
+	upper := strings.ToUpper(strings.TrimSpace(sql))
+	for _, kw := range []string{"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "REPLACE", "TRUNCATE", "ATTACH"} {
+		if strings.HasPrefix(upper, kw) {
+			return fmt.Errorf("litescope_query is read-only; %q statements are not allowed", kw)
+		}
+	}
+	return nil
+}
+
+// fleetDBs loads the fleet config and returns the databases matching an optional tag.
+func fleetDBs(args map[string]interface{}) ([]fleet.Database, error) {
 	configPath, _ := args["config"].(string)
 	if configPath == "" {
 		configPath = fleet.DefaultConfigFile
@@ -319,9 +446,6 @@ func toJSON(v interface{}) (string, error) {
 }
 
 // ── LLM-friendly output shaping ─────────────────────────────────────────────
-// schema.Schema and diff.Result are internal structs; dumping them raw leaks
-// Go field casing and empty fields. These shapers emit concise, lowercase JSON
-// curated for a model to read.
 
 func shapeSchema(s *schema.Schema) map[string]interface{} {
 	tables := make([]map[string]interface{}, 0, len(s.Tables))
@@ -408,7 +532,7 @@ func shapeDiff(d *diff.Result) map[string]interface{} {
 	var data []map[string]interface{}
 	for _, dd := range d.Data {
 		if dd.Added == 0 && dd.Removed == 0 && dd.Changed == 0 {
-			continue // skip no-op entries — don't feed the model noise
+			continue
 		}
 		data = append(data, map[string]interface{}{
 			"table": dd.Table, "rows_added": dd.Added, "rows_removed": dd.Removed, "rows_changed": dd.Changed,

@@ -30,6 +30,42 @@ func (f *fileConnector) Capabilities() ExecCapabilities {
 // Exec runs the statements inside a single transaction, rolling back on any
 // failure (and always, when dryRun is set). Callers that need a backup should
 // use migrate.Apply, which wraps this with a VACUUM INTO backup.
+func (f *fileConnector) QueryRows(query string) ([]map[string]interface{}, error) {
+	db, err := sql.Open("sqlite", f.path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", f.path, err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	var out []map[string]interface{}
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		row := make(map[string]interface{}, len(cols))
+		for i, col := range cols {
+			row[col] = vals[i]
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (f *fileConnector) Exec(statements []string, dryRun bool) error {
 	db, err := sql.Open("sqlite", f.path)
 	if err != nil {

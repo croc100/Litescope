@@ -203,6 +203,39 @@ func (t *tursoConnector) execute(sql string) ([][]interface{}, error) {
 	return res.Response.Result.Rows, nil
 }
 
+func (t *tursoConnector) QueryRows(query string) ([]map[string]interface{}, error) {
+	return t.executeNamed(query)
+}
+
+// executeNamed runs a query and returns named-column maps.
+func (t *tursoConnector) executeNamed(sql string) ([]map[string]interface{}, error) {
+	body := pipelineRequest{
+		Requests: []pipelineStep{
+			{Type: "execute", Stmt: &sqlStmt{SQL: sql}},
+			{Type: "close"},
+		},
+	}
+	resp, err := t.pipeline("", body.Requests)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Results) == 0 || resp.Results[0].Response == nil || resp.Results[0].Response.Result == nil {
+		return nil, nil
+	}
+	result := resp.Results[0].Response.Result
+	out := make([]map[string]interface{}, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		m := make(map[string]interface{}, len(result.Cols))
+		for i, col := range result.Cols {
+			if i < len(row) {
+				m[col.Name] = row[i]
+			}
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 func (t *tursoConnector) Capabilities() ExecCapabilities {
 	return ExecCapabilities{Transactional: true, LocalBackup: false, Provider: "turso"}
 }
