@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -14,7 +15,11 @@ import (
 
 // d1Connector connects to a Cloudflare D1 database via the Workers API.
 //
-// DSN: d1://TOKEN@ACCOUNT_ID/DATABASE_ID
+// DSN forms:
+//
+//	d1://TOKEN@ACCOUNT_ID/DATABASE_ID   — explicit credentials
+//	d1://ACCOUNT_ID/DATABASE_ID         — token from CLOUDFLARE_API_TOKEN env var
+//	d1://DATABASE_ID                    — token+account from env vars
 type d1Connector struct {
 	dsn        string
 	accountID  string
@@ -42,23 +47,112 @@ func parseD1DSN(dsn string) (token, accountID, databaseID string, err error) {
 	rest := strings.TrimPrefix(dsn, "d1://")
 
 	atIdx := strings.Index(rest, "@")
-	if atIdx < 0 {
-		return "", "", "", fmt.Errorf("d1 DSN must be d1://TOKEN@ACCOUNT_ID/DATABASE_ID, got: %s", dsn)
+	if atIdx >= 0 {
+		// Full form: d1://TOKEN@ACCOUNT_ID/DATABASE_ID
+		token = rest[:atIdx]
+		rest = rest[atIdx+1:]
+	} else {
+		// Short form: resolve token from env
+		token = os.Getenv("CLOUDFLARE_API_TOKEN")
+		if token == "" {
+			return "", "", "", fmt.Errorf(
+				"d1 DSN has no token and CLOUDFLARE_API_TOKEN is not set; "+
+					"use d1://TOKEN@ACCOUNT_ID/DB_ID or set CLOUDFLARE_API_TOKEN",
+			)
+		}
 	}
-	token = rest[:atIdx]
-	rest = rest[atIdx+1:]
 
 	slashIdx := strings.Index(rest, "/")
-	if slashIdx < 0 {
-		return "", "", "", fmt.Errorf("d1 DSN must be d1://TOKEN@ACCOUNT_ID/DATABASE_ID, got: %s", dsn)
+	if slashIdx >= 0 {
+		// ACCOUNT_ID/DATABASE_ID
+		accountID = rest[:slashIdx]
+		databaseID = rest[slashIdx+1:]
+	} else {
+		// Only DATABASE_ID — resolve account from env
+		databaseID = rest
+		accountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+		if accountID == "" {
+			return "", "", "", fmt.Errorf(
+				"d1 DSN has no account_id and CLOUDFLARE_ACCOUNT_ID is not set; "+
+					"use d1://ACCOUNT_ID/DB_ID or set CLOUDFLARE_ACCOUNT_ID",
+			)
+		}
 	}
-	accountID = rest[:slashIdx]
-	databaseID = rest[slashIdx+1:]
 
 	if token == "" || accountID == "" || databaseID == "" {
 		return "", "", "", fmt.Errorf("d1 DSN missing token, account_id, or database_id: %s", dsn)
 	}
 	return token, accountID, databaseID, nil
+}
+
+// ListD1Databases returns all D1 databases for the account using credentials
+// from the environment (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID).
+func ListD1Databases() ([]D1DatabaseInfo, error) {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if token == "" || accountID == "" {
+		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database", accountID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("D1 list request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("D1 HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Result []struct {
+			UUID      string `json:"uuid"`
+			Name      string `json:"name"`
+			CreatedAt string `json:"created_at"`
+			NumTables int    `json:"num_tables"`
+		} `json:"result"`
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decoding D1 list response: %w", err)
+	}
+	if !result.Success {
+		return nil, fmt.Errorf("D1 list returned success=false")
+	}
+
+	dbs := make([]D1DatabaseInfo, len(result.Result))
+	for i, r := range result.Result {
+		dbs[i] = D1DatabaseInfo{
+			UUID:      r.UUID,
+			Name:      r.Name,
+			CreatedAt: r.CreatedAt,
+			NumTables: r.NumTables,
+			DSN:       fmt.Sprintf("d1://%s", r.UUID),
+		}
+	}
+	return dbs, nil
+}
+
+// D1DatabaseInfo describes one D1 database in an account.
+type D1DatabaseInfo struct {
+	UUID      string `json:"uuid"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+	NumTables int    `json:"num_tables"`
+	DSN       string `json:"dsn"`
 }
 
 func (d *d1Connector) DSN() string  { return d.dsn }
@@ -205,6 +299,10 @@ func (d *d1Connector) execute(sql string) ([]map[string]interface{}, error) {
 	}
 
 	return d1Resp.Result[0].Results, nil
+}
+
+func (d *d1Connector) QueryRows(query string) ([]map[string]interface{}, error) {
+	return d.execute(query)
 }
 
 func (d *d1Connector) Capabilities() ExecCapabilities {
