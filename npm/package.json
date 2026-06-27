@@ -1,6 +1,7 @@
 {
   "name": "litescope",
-  "version": "0.6.0",
+  "version": "0.6.1",
+  "mcpName": "io.github.croc100/litescope",
   "description": "SQLite & Cloudflare D1 operations: MCP server, schema diff, migrations, lint, backups, autopilot. Run with `npx litescope`.",
   "keywords": [
     "sqlite",
