@@ -37,6 +37,82 @@ func post(t *testing.T, url, session, body string) (*http.Response, map[string]i
 	return resp, decoded
 }
 
+// newHTTPTestServerOpts starts the transport with a custom auth configuration.
+func newHTTPTestServerOpts(t *testing.T, token string, origins ...string) *httptest.Server {
+	t.Helper()
+	om := map[string]bool{}
+	for _, o := range origins {
+		om[strings.ToLower(strings.TrimRight(o, "/"))] = true
+	}
+	h := &httpTransport{version: "test", token: token, origins: om, sessions: map[string]*httpSession{}}
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", h)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestHTTP_BearerTokenEnforced(t *testing.T) {
+	srv := newHTTPTestServerOpts(t, "s3cret")
+	init := `{"jsonrpc":"2.0","id":1,"method":"initialize"}`
+
+	// No token → 401.
+	resp, _ := post(t, srv.URL+"/mcp", "", init)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("missing token should be 401, got %d", resp.StatusCode)
+	}
+
+	// Wrong token → 401.
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(init))
+	req.Header.Set("Authorization", "Bearer nope")
+	r, _ := http.DefaultClient.Do(req)
+	r.Body.Close()
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Errorf("wrong token should be 401, got %d", r.StatusCode)
+	}
+
+	// Correct token → ok, session minted.
+	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(init))
+	req2.Header.Set("Authorization", "Bearer s3cret")
+	r2, _ := http.DefaultClient.Do(req2)
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusOK || r2.Header.Get("Mcp-Session-Id") == "" {
+		t.Errorf("correct token should mint a session, got %d", r2.StatusCode)
+	}
+}
+
+func TestHTTP_OriginRejected(t *testing.T) {
+	srv := newHTTPTestServerOpts(t, "", "https://app.example.com")
+	init := `{"jsonrpc":"2.0","id":1,"method":"initialize"}`
+
+	// Disallowed Origin → 403.
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(init))
+	req.Header.Set("Origin", "https://evil.example.com")
+	r, _ := http.DefaultClient.Do(req)
+	r.Body.Close()
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("disallowed origin should be 403, got %d", r.StatusCode)
+	}
+
+	// Allowlisted Origin → ok.
+	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(init))
+	req2.Header.Set("Origin", "https://app.example.com")
+	r2, _ := http.DefaultClient.Do(req2)
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusOK {
+		t.Errorf("allowlisted origin should be 200, got %d", r2.StatusCode)
+	}
+
+	// localhost Origin is always allowed.
+	req3, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(init))
+	req3.Header.Set("Origin", "http://localhost:3000")
+	r3, _ := http.DefaultClient.Do(req3)
+	r3.Body.Close()
+	if r3.StatusCode != http.StatusOK {
+		t.Errorf("localhost origin should be 200, got %d", r3.StatusCode)
+	}
+}
+
 func TestHTTP_InitializeMintsSession(t *testing.T) {
 	srv := newHTTPTestServer(t)
 	resp, body := post(t, srv.URL+"/mcp", "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)

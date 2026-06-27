@@ -11,6 +11,8 @@ func cmdMCP() *cobra.Command {
 	var allowWrites bool
 	var httpAddr string
 	var httpPath string
+	var httpToken string
+	var httpOrigins []string
 
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -76,8 +78,17 @@ available via resource templates.`,
 			}
 			if httpAddr != "" {
 				// Streamable HTTP transport — hosted / remote / multi-client.
+				token := httpToken
+				if token == "" {
+					token = os.Getenv("LITESCOPE_MCP_TOKEN")
+				}
+				if token == "" {
+					cmd.PrintErrln("WARNING: --http has no auth token; the endpoint is open. " +
+						"Set --http-token or LITESCOPE_MCP_TOKEN before exposing it publicly.")
+				}
 				cmd.PrintErrf("litescope MCP server (Streamable HTTP) listening on %s%s\n", httpAddr, httpPath)
-				return mcp.ServeHTTP(httpAddr, httpPath, version, allowWrites, defaultSource)
+				return mcp.ServeHTTP(httpAddr, httpPath, version, allowWrites, defaultSource,
+					mcp.HTTPOptions{Token: token, AllowedOrigins: httpOrigins})
 			}
 			return mcp.Serve(os.Stdin, os.Stdout, version, allowWrites, defaultSource)
 		},
@@ -89,5 +100,9 @@ available via resource templates.`,
 		"Serve over Streamable HTTP instead of stdio, e.g. --http :7577 (hosted/remote/multi-client)")
 	cmd.Flags().StringVar(&httpPath, "http-path", "/mcp",
 		"HTTP endpoint path for the Streamable HTTP transport")
+	cmd.Flags().StringVar(&httpToken, "http-token", "",
+		"Require this Bearer token on HTTP requests (or set LITESCOPE_MCP_TOKEN). Empty = open endpoint")
+	cmd.Flags().StringArrayVar(&httpOrigins, "http-origin", nil,
+		"Allowed browser Origin for HTTP (repeatable); localhost is always allowed")
 	return cmd
 }

@@ -2,11 +2,14 @@ package mcp
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -19,15 +22,34 @@ import (
 //     notifications (logging, resource updates) for the session.
 //   - DELETE — terminates the session.
 //
+// HTTPOptions configures the Streamable HTTP transport's auth layer.
+type HTTPOptions struct {
+	// Token, when non-empty, is required as "Authorization: Bearer <token>" on
+	// every request. Empty means no token is enforced (open endpoint).
+	Token string
+	// AllowedOrigins is the set of browser Origins permitted, for DNS-rebinding
+	// protection. localhost / 127.0.0.1 origins are always allowed; non-browser
+	// clients (no Origin header) are always allowed. Empty list means only those
+	// defaults are accepted.
+	AllowedOrigins []string
+}
+
 // initialize creates a session and returns its id in the Mcp-Session-Id
 // response header; every later request must echo that header. allowWrites and
 // defaultSource apply to every session, exactly as for the stdio transport.
-func ServeHTTP(addr, path, version string, allowWrites bool, defaultSource string) error {
+func ServeHTTP(addr, path, version string, allowWrites bool, defaultSource string, opts HTTPOptions) error {
 	if path == "" {
 		path = "/mcp"
 	}
+	origins := map[string]bool{}
+	for _, o := range opts.AllowedOrigins {
+		if o != "" {
+			origins[strings.ToLower(strings.TrimRight(o, "/"))] = true
+		}
+	}
 	h := &httpTransport{
 		version: version, allowWrites: allowWrites, defaultSource: defaultSource,
+		token: opts.Token, origins: origins,
 		sessions: map[string]*httpSession{},
 	}
 	mux := http.NewServeMux()
@@ -40,6 +62,8 @@ type httpTransport struct {
 	version       string
 	allowWrites   bool
 	defaultSource string
+	token         string          // required Bearer token; empty = open
+	origins       map[string]bool // allowed browser Origins (lowercased, no trailing /)
 
 	mu       sync.Mutex
 	sessions map[string]*httpSession
@@ -59,6 +83,9 @@ type httpSession struct {
 }
 
 func (h *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) {
+		return
+	}
 	switch r.Method {
 	case http.MethodPost:
 		h.handlePost(w, r)
@@ -70,6 +97,41 @@ func (h *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, POST, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// authorize enforces the Origin allowlist (DNS-rebinding protection) and the
+// Bearer token. It writes the error response and returns false on rejection.
+func (h *httpTransport) authorize(w http.ResponseWriter, r *http.Request) bool {
+	if origin := r.Header.Get("Origin"); origin != "" && !h.originAllowed(origin) {
+		http.Error(w, "forbidden origin", http.StatusForbidden)
+		return false
+	}
+	if h.token != "" {
+		const prefix = "Bearer "
+		got := r.Header.Get("Authorization")
+		if !strings.HasPrefix(got, prefix) ||
+			subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(got, prefix)), []byte(h.token)) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return false
+		}
+	}
+	return true
+}
+
+// originAllowed permits localhost origins and any explicitly allowlisted origin.
+func (h *httpTransport) originAllowed(origin string) bool {
+	norm := strings.ToLower(strings.TrimRight(origin, "/"))
+	if h.origins[norm] {
+		return true
+	}
+	if u, err := url.Parse(norm); err == nil {
+		switch host := u.Hostname(); host {
+		case "localhost", "127.0.0.1", "::1", "[::1]":
+			return true
+		}
+	}
+	return false
 }
 
 func (h *httpTransport) handlePost(w http.ResponseWriter, r *http.Request) {

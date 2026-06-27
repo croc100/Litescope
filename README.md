@@ -101,12 +101,18 @@ By default `litescope mcp` speaks stdio. For a hosted, remote, or multi-client
 setup, serve over the Streamable HTTP transport instead:
 
 ```bash
-litescope mcp --http :7577        # endpoint at http://host:7577/mcp
+litescope mcp --http :7577 --http-token "$LITESCOPE_MCP_TOKEN"
 ```
 
-POST a JSON-RPC message to the endpoint, or open a `GET` SSE stream for
-server notifications; each client gets its own session via the `Mcp-Session-Id`
-header.
+POST a JSON-RPC message to the endpoint (`/mcp` by default), or open a `GET` SSE
+stream for server notifications; each client gets its own session via the
+`Mcp-Session-Id` header.
+
+Before exposing it publicly, lock it down: `--http-token` (or the
+`LITESCOPE_MCP_TOKEN` env var) requires `Authorization: Bearer <token>` on every
+request, and `--http-origin` allowlists browser Origins (localhost is always
+allowed) for DNS-rebinding protection. Without a token the endpoint is open and
+the server prints a warning.
 
 ---
 
