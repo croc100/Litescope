@@ -27,10 +27,11 @@ import (
 // Tool is one callable operation exposed to an AI agent. The same registry
 // backs both the MCP server and (in future) a built-in BYOK agent.
 type Tool struct {
-	Name        string
-	Description string
-	InputSchema map[string]interface{} // JSON Schema for the arguments
-	Handler     func(args map[string]interface{}) (string, error)
+	Name         string
+	Description  string
+	InputSchema  map[string]interface{} // JSON Schema for the arguments
+	OutputSchema map[string]interface{} // optional JSON Schema for structuredContent (MCP 2025-06-18)
+	Handler      func(args map[string]interface{}) (string, error)
 }
 
 const sourcePropDesc = "Database source: a local file path (./app.db), a Cloudflare D1 DSN " +
@@ -53,6 +54,10 @@ func Registry(allowWrites bool) []Tool {
 				"source": strProp(sourcePropDesc),
 				"deep":   boolProp("Use the exhaustive integrity_check instead of the faster quick_check"),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"severity": {"type": "string", "enum": []string{"ok", "warning", "critical"}, "description": "Overall verdict."},
+				"issues":   {"type": "array", "description": "Detected problems (empty when healthy)."},
+			}, "severity"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -94,6 +99,9 @@ func Registry(allowWrites bool) []Tool {
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"tables": {"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "Tables with their columns and indexes."},
+			}, "tables"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -128,6 +136,11 @@ func Registry(allowWrites bool) []Tool {
 				"old": strProp("Baseline ('before') source — " + sourcePropDesc),
 				"new": strProp("Changed ('after') source — " + sourcePropDesc),
 			}, "old", "new"),
+			OutputSchema: outObj(props{
+				"summary":        {"type": "object", "description": "Counts of tables added/removed/modified."},
+				"schema_changes": {"type": "array", "description": "Per-table schema differences."},
+				"data_changes":   {"type": "array", "description": "Per-table row-count differences (present when data differs)."},
+			}, "summary", "schema_changes"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				oldP, _ := args["old"].(string)
 				newP, _ := args["new"].(string)
@@ -151,6 +164,12 @@ func Registry(allowWrites bool) []Tool {
 				"old": strProp("Current ('before') source — " + sourcePropDesc),
 				"new": strProp("Target ('after') source with the desired schema — " + sourcePropDesc),
 			}, "old", "new"),
+			OutputSchema: outObj(props{
+				"statements":  {"type": "integer", "description": "Number of SQL statements in the plan."},
+				"destructive": {"type": "boolean", "description": "True if any operation drops or rewrites data."},
+				"operations":  {"type": "array", "description": "Each operation classified safe/risky/destructive with lock estimate."},
+				"sql":         {"type": "string", "description": "The migration SQL."},
+			}, "statements", "destructive", "operations", "sql"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				oldP, _ := args["old"].(string)
 				newP, _ := args["new"].(string)
@@ -252,6 +271,12 @@ func Registry(allowWrites bool) []Tool {
 					"description": "Optional: keep only these columns in each row (projection) to save context.",
 				},
 			}, "source", "sql"),
+			OutputSchema: outObj(props{
+				"rows":       {"type": "array", "items": map[string]interface{}{"type": "object"}, "description": "The result rows."},
+				"count":      {"type": "integer", "description": "Rows returned after truncation."},
+				"total_rows": {"type": "integer", "description": "Rows the query produced before truncation."},
+				"truncated":  {"type": "boolean", "description": "True when total_rows exceeded max_rows."},
+			}, "rows", "count", "total_rows", "truncated"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -968,6 +993,21 @@ func buildPlan(m *migrate.Migration, ops []migrate.Operation) plan {
 type props map[string]map[string]interface{}
 
 func obj(p props, required ...string) map[string]interface{} {
+	properties := map[string]interface{}{}
+	for k, v := range p {
+		properties[k] = v
+	}
+	m := map[string]interface{}{"type": "object", "properties": properties}
+	if len(required) > 0 {
+		m["required"] = required
+	}
+	return m
+}
+
+// outObj builds a JSON Schema for a tool's structured output. additionalProperties
+// is left unset (defaults to true) so handlers may include extra fields (note,
+// tips, source echoes) without violating the declared schema.
+func outObj(p props, required ...string) map[string]interface{} {
 	properties := map[string]interface{}{}
 	for k, v := range p {
 		properties[k] = v

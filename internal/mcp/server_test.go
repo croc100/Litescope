@@ -160,6 +160,46 @@ func TestServe_ToolCall_Health(t *testing.T) {
 	}
 }
 
+func TestServe_ToolCall_StructuredContent(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/ok.db"
+	db, _ := sql.Open("sqlite", path)
+	db.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+	db.Close()
+
+	req := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"litescope_health","arguments":{"source":"` + path + `"}}}`
+	res := run(t, req)[3]["result"].(map[string]interface{})
+	sc, ok := res["structuredContent"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected structuredContent object, got: %v", res)
+	}
+	if sc["severity"] != "ok" {
+		t.Errorf("structuredContent.severity = %v, want ok", sc["severity"])
+	}
+}
+
+func TestServe_ToolsList_OutputSchema(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	tools := r[2]["result"].(map[string]interface{})["tools"].([]interface{})
+	for _, ti := range tools {
+		tm := ti.(map[string]interface{})
+		if tm["name"] == "litescope_query" {
+			if _, ok := tm["outputSchema"].(map[string]interface{}); !ok {
+				t.Errorf("litescope_query missing outputSchema: %v", tm)
+			}
+			return
+		}
+	}
+	t.Fatal("litescope_query not found in tools/list")
+}
+
+func TestServe_LoggingSetLevel(t *testing.T) {
+	r := run(t, `{"jsonrpc":"2.0","id":7,"method":"logging/setLevel","params":{"level":"info"}}`)
+	if _, ok := r[7]["result"].(map[string]interface{}); !ok {
+		t.Errorf("logging/setLevel should return an empty result, got: %v", r[7])
+	}
+}
+
 func TestServe_ToolCall_MissingArg_IsError(t *testing.T) {
 	r := run(t, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"litescope_health","arguments":{}}}`)
 	res := r[4]["result"].(map[string]interface{})

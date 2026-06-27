@@ -8,7 +8,7 @@ import (
 )
 
 // protocolVersion is the MCP revision this server implements.
-const protocolVersion = "2024-11-05"
+const protocolVersion = "2025-06-18"
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -106,12 +106,17 @@ func (s *server) handleLine(line []byte, w *bufio.Writer) {
 				"tools":     map[string]interface{}{},
 				"prompts":   map[string]interface{}{},
 				"resources": map[string]interface{}{},
+				"logging":   map[string]interface{}{},
 			},
 			"serverInfo": map[string]interface{}{"name": "litescope", "version": version},
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// notifications: no response
 	case "ping":
+		respond(w, req.ID, map[string]interface{}{})
+	case "logging/setLevel":
+		// We advertise the logging capability but do not emit log notifications;
+		// accept setLevel so clients that probe it succeed.
 		respond(w, req.ID, map[string]interface{}{})
 	case "tools/list":
 		respond(w, req.ID, map[string]interface{}{"tools": toolDescriptors(tools)})
@@ -156,6 +161,19 @@ func handleToolCall(w *bufio.Writer, req rpcRequest, byName map[string]Tool) {
 		return
 	}
 	respond(w, req.ID, toolResult(text, false))
+}
+
+// structuredOf parses a tool's JSON text output into an object for the
+// structuredContent field (MCP 2025-06-18). Every litescope tool emits a JSON
+// object via toJSON, so this lets clients consume results without re-parsing the
+// text block themselves. Returns nil (omitting structuredContent) when the text
+// is not a JSON object — e.g. an error string.
+func structuredOf(text string) map[string]interface{} {
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &obj); err != nil {
+		return nil
+	}
+	return obj
 }
 
 func (s *server) handlePromptGet(w *bufio.Writer, req rpcRequest) {
@@ -218,6 +236,9 @@ func toolDescriptors(tools []Tool) []map[string]interface{} {
 			"inputSchema": t.InputSchema,
 			"annotations": annotationsFor(t.Name),
 		}
+		if t.OutputSchema != nil {
+			d["outputSchema"] = t.OutputSchema
+		}
 		if title := annotationsFor(t.Name).Title; title != "" {
 			d["title"] = title
 		}
@@ -227,10 +248,18 @@ func toolDescriptors(tools []Tool) []map[string]interface{} {
 }
 
 func toolResult(text string, isErr bool) map[string]interface{} {
-	return map[string]interface{}{
+	res := map[string]interface{}{
 		"content": []map[string]interface{}{{"type": "text", "text": text}},
 		"isError": isErr,
 	}
+	// Mirror successful JSON output into structuredContent so agents can consume
+	// it directly instead of parsing the text block (MCP 2025-06-18).
+	if !isErr {
+		if obj := structuredOf(text); obj != nil {
+			res["structuredContent"] = obj
+		}
+	}
+	return res
 }
 
 func respond(w *bufio.Writer, id json.RawMessage, result interface{}) {
