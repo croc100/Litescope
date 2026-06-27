@@ -82,6 +82,14 @@ databases without hand-written glue and without footguns.
   (`litescope mcp ./app.db` binds concrete resources; `litescope://schema/{source}`
   templates work for any source). `litescope_query` enforces token budgeting —
   `max_rows` cap + `columns` projection + truncation reporting** ✨ new
+- **MCP spec 2025-06-18 — protocol upgraded from 2024-11-05, with machine-readable
+  tool annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint` /
+  `openWorldHint` + titles) so clients can gate risky tools, structured output
+  (`structuredContent` on every result + `outputSchema` on the core read tools)
+  so agents consume results without re-parsing text, argument completion
+  (`completion/complete` suggests known sources / D1 DSNs), resource subscriptions
+  (`resources/subscribe` emits change notifications when a local DB file changes),
+  and server logging (`notifications/message`, `logging/setLevel`)** ✨ new
 
 **D1 & MCP foundation**
 - Any-source DSN — every tool takes `source`: `./local.db`, `d1://DB_ID`, `turso://…`
@@ -135,6 +143,31 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
   installer (`npm/`) fetches the matching release binary on first run.
   **Published to npm** as [`litescope`](https://www.npmjs.com/package/litescope).
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
+
+### Phase I — SQLite supremacy ← next
+
+Being *the* SQLite tool means going deeper than any generic DB client can. Four
+fronts, in priority order:
+
+1. **MCP Streamable HTTP transport** ← in progress — today the MCP server is
+   stdio-only, so it can't be hosted, reached remotely, or shared by multiple
+   clients. Adding the Streamable HTTP transport (MCP 2025-06-18) unlocks hosted
+   / remote / web-client / multi-user access and is the foundation the hosted
+   dashboard and remote fleet actions build on.
+2. **Deeper moats** — push the three superpowers past parity:
+   - *Lock doctor*: live WAL-checkpoint monitoring, a `SQLITE_BUSY` event
+     time-series, and a multi-process contention timeline.
+   - *Autopilot*: workload-driven index recommendations from an actual query
+     log, partial / expression-index proposals, cache & page-size tuning.
+   - *File superpowers*: page-level diff visualization, automatic corruption
+     recovery (a `.recover` pipeline), and incremental backups.
+3. **Single-database depth** — close the generic-client gap: inline cell editing
+   in the browser, FTS5 full-text search tooling, trigger / view / virtual-table
+   inspection, `ATTACH` multi-database queries, and `EXPLAIN QUERY PLAN`
+   visualization.
+4. **Lint rule expansion** — grow the schema linter from a handful of rules
+   toward Bytebase-class coverage: naming conventions, index width, NULL
+   handling, type-affinity, reserved words, and migration-safety checks.
 
 ### Phase H — Fleet observability & alerting (hosted dashboard)
 
