@@ -128,6 +128,32 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
   npm is the only remaining step.
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
 
+### Phase H — Fleet observability & alerting (hosted dashboard)
+
+The differentiation thesis: generic Linux monitoring (Datadog, Grafana,
+Prometheus, Netdata) watches *servers*. SQLite is a *file*, scattered across
+apps, edge, devices, and per-tenant stores — invisible to those tools. No one
+treats a fleet of thousands of SQLite files as first-class operational objects
+**and acts on them**. That's the open ground, and it's only possible because of
+SQLite's unique physics (WAL, pages, locks, single-file integrity).
+
+- **Heartbeat / staleness detection** — a Cloudflare Cron Trigger scans for
+  databases that stopped pushing (dead-man's-switch, like a ping-fail monitor).
+  A DB silent past its expected interval flips to `unreachable`.
+- **Threshold alerts → email** — on push, when a database crosses a severity
+  threshold (corruption, WAL bloat, fragmentation, lock contention, schema
+  drift), the dashboard emails the org owner automatically (Resend).
+- **Fleet assertions (push-time verification)** — declare expectations in the
+  fleet config (e.g. `expect: schema == canonical`, `expect: integrity == ok`);
+  each scheduled push validates them pytest-style and fails/alerts on violation.
+- **Scheduled push, packaged** — first-class systemd timer / cron recipes so an
+  enterprise host self-reports every N minutes with one install step.
+- **Lock doctor for the fleet** — surface "database is locked" contention
+  across the fleet (build-order priority #1 of the SQLite moats).
+- **Remote actions (the real moat)** — move from *observe* to *act*: trigger
+  rewind / bisect / lock resolution from the dashboard. Monitoring tools alert;
+  LiteScope fixes.
+
 ---
 
 *Priority shifts based on ecosystem feedback. File issues or start a discussion
