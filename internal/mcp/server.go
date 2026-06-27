@@ -44,14 +44,42 @@ type server struct {
 	version       string
 	defaultSource string // optional database bound at startup for concrete resources
 
-	// mu guards all writes to w and the mutable fields below, so the resource
-	// watcher goroutine and the request loop can both emit messages safely.
-	mu       sync.Mutex
-	w        *bufio.Writer
-	logLevel string          // current minimum log level (RFC 5424 names)
-	subs     map[string]bool // subscribed resource URIs
-	watching bool            // true once the resource watcher goroutine is running
-	stop     chan struct{}   // closed when Serve returns, stopping the watcher
+	// mu guards the sinks and the mutable fields below, so the resource watcher
+	// goroutine and the request loop can both emit messages safely.
+	mu sync.Mutex
+	// respondSink receives JSON-RPC responses (replies to a request); notifySink
+	// receives server-initiated notifications (logging, resource updates). Over
+	// stdio both write to the same stream; over Streamable HTTP responses go back
+	// on the POST body while notifications go to the session's SSE stream.
+	respondSink func([]byte)
+	notifySink  func([]byte)
+	logLevel    string          // current minimum log level (RFC 5424 names)
+	subs        map[string]bool // subscribed resource URIs
+	watching    bool            // true once the resource watcher goroutine is running
+	stop        chan struct{}   // closed when the connection ends, stopping the watcher
+}
+
+// newServer builds a server with its tool/prompt registries populated. The
+// caller wires respondSink/notifySink for its transport (stdio or HTTP).
+func newServer(version string, allowWrites bool, defaultSource string) *server {
+	tools := Registry(allowWrites)
+	byName := make(map[string]Tool, len(tools))
+	for _, t := range tools {
+		byName[t.Name] = t
+	}
+	prompts := Prompts()
+	promptByName := make(map[string]Prompt, len(prompts))
+	for _, p := range prompts {
+		promptByName[p.Name] = p
+	}
+	return &server{
+		tools: tools, byName: byName,
+		prompts: prompts, promptByName: promptByName,
+		version: version, defaultSource: defaultSource,
+		logLevel: "info",
+		subs:     map[string]bool{},
+		stop:     make(chan struct{}),
+	}
 }
 
 // Serve runs the MCP server over newline-delimited JSON-RPC on the given
@@ -64,25 +92,15 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool, defaul
 	reader := bufio.NewReader(in)
 	writer := bufio.NewWriter(out)
 
-	tools := Registry(allowWrites)
-	byName := make(map[string]Tool, len(tools))
-	for _, t := range tools {
-		byName[t.Name] = t
+	s := newServer(version, allowWrites, defaultSource)
+	// Over stdio, responses and notifications share one newline-delimited stream.
+	line := func(b []byte) {
+		writer.Write(b)
+		writer.WriteByte('\n')
+		writer.Flush()
 	}
-	prompts := Prompts()
-	promptByName := make(map[string]Prompt, len(prompts))
-	for _, p := range prompts {
-		promptByName[p.Name] = p
-	}
-	s := &server{
-		tools: tools, byName: byName,
-		prompts: prompts, promptByName: promptByName,
-		version: version, defaultSource: defaultSource,
-		w:        writer,
-		logLevel: "info",
-		subs:     map[string]bool{},
-		stop:     make(chan struct{}),
-	}
+	s.respondSink = line
+	s.notifySink = line
 	defer close(s.stop)
 
 	for {
@@ -419,16 +437,16 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 // ── message writing (thread-safe) ───────────────────────────────────────────
 
 func (s *server) respond(id json.RawMessage, result interface{}) {
-	s.send(rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
+	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
 func (s *server) respondError(id json.RawMessage, code int, msg string) {
-	s.send(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
+	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
 }
 
 // notify writes a JSON-RPC notification (no id) to the client.
 func (s *server) notify(method string, params interface{}) {
-	s.send(map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params})
+	s.write(s.notifySink, map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params})
 }
 
 // log emits a notifications/message log record when level passes the client's
@@ -445,16 +463,18 @@ func (s *server) log(level string, data interface{}) {
 	})
 }
 
-func (s *server) send(v interface{}) {
+// write marshals v and hands it to the given sink under the server lock so the
+// watcher goroutine and the request loop never interleave on the same stream.
+func (s *server) write(sink func([]byte), v interface{}) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.w.Write(b)
-	s.w.WriteByte('\n')
-	s.w.Flush()
+	if sink != nil {
+		sink(b)
+	}
 }
 
 // logSeverity maps RFC 5424 syslog level names to their numeric severity, used

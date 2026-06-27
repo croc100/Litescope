@@ -91,6 +91,23 @@ Beyond tools, the MCP server exposes **prompts** — canned workflows like
 without spending a tool call. Bind one with `litescope mcp ./app.db`, or address
 any source via `litescope://schema/{source}` and `litescope://dictionary/{source}`.
 
+The server implements **MCP 2025-06-18**: tool annotations (read-only /
+destructive hints), structured output (`structuredContent` + `outputSchema`),
+argument completion, resource-change subscriptions, and server logging.
+
+### Remote / hosted (Streamable HTTP)
+
+By default `litescope mcp` speaks stdio. For a hosted, remote, or multi-client
+setup, serve over the Streamable HTTP transport instead:
+
+```bash
+litescope mcp --http :7577        # endpoint at http://host:7577/mcp
+```
+
+POST a JSON-RPC message to the endpoint, or open a `GET` SSE stream for
+server notifications; each client gets its own session via the `Mcp-Session-Id`
+header.
+
 ---
 
 ## D1 — CLI operations
