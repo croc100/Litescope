@@ -141,6 +141,11 @@
     <nav>
       <a href="#mcp">MCP server</a>
     </nav>
+    <div class="sidebar-section">Hosted</div>
+    <nav>
+      <a href="#hosted">Hosted dashboard</a>
+      <a href="#hosted">push</a>
+    </nav>
     <div class="sidebar-section">GUI</div>
     <nav>
       <a href="#gui">Desktop app</a>
@@ -729,6 +734,42 @@ litescope fleet recover</code></pre>
 
       <div class="callout">
         <strong>Diagnose freely, treat with a human.</strong> The MCP server intentionally exposes only read-only tools. Destructive operations (apply, converge, recover) stay behind the CLI/GUI with dry-run and approval, so an agent can recommend a fix but a person commits it.
+      </div>
+    </div>
+
+    <!-- Hosted dashboard -->
+    <div class="doc-section" id="hosted">
+      <h2>Hosted dashboard <span class="tier" style="background:rgba(0,212,170,.15);color:var(--teal)">subscription</span></h2>
+      <p>Everything above is free and runs on your machine, including the local dashboard (<a href="#serve" onclick="">litescope serve</a>). The <strong>hosted dashboard</strong> is the one paid offering: your entire fleet — thousands of databases — on one always-on, multi-user screen, with time-series drift history and alerts. It receives <em>metadata only</em> (health, schema fingerprint, drift); your rows never leave your machines.</p>
+
+      <h3>How onboarding works</h3>
+      <ol>
+        <li><strong>Subscribe</strong> on the <a href="/#pricing">pricing page</a> (Hosted or Scale — pick your tier at checkout).</li>
+        <li><strong>Check your email.</strong> Provisioning is automatic: you'll get a welcome email with a one-time <strong>sign-in link</strong> and your <strong>push API key</strong> (<code>lsk_…</code>, shown once — store it safely).</li>
+        <li><strong>Sign in</strong> at the link to open your dashboard. You can request a fresh sign-in link anytime from the login page.</li>
+        <li><strong>Connect the CLI</strong> on the machine(s) that can reach your databases, and push:
+          <pre><code>export LITESCOPE_CLOUD_URL=https://litescope-cloud.croc100.workers.dev
+export LITESCOPE_CLOUD_KEY=lsk_your_key_here
+litescope push                 # one-shot; preview with --dry-run</code></pre>
+        </li>
+        <li><strong>Schedule it.</strong> <code>push</code> sends a single snapshot — run it on a cron job or systemd timer (e.g. every 5&nbsp;minutes) to keep the dashboard current.</li>
+      </ol>
+
+      <h3>litescope push</h3>
+      <p>Collects each database's health report and schema fingerprint and POSTs the metadata to your hosted dashboard. Only metadata is transmitted — never customer rows.</p>
+      <pre><code>litescope push [flags]</code></pre>
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>--endpoint</td><td><code>$LITESCOPE_CLOUD_URL</code></td><td>Hosted dashboard base URL</td></tr>
+          <tr><td>--key</td><td><code>$LITESCOPE_CLOUD_KEY</code></td><td>API key (<code>lsk_…</code>) from your welcome email</td></tr>
+          <tr><td>--config</td><td>litescope.fleet.yaml</td><td>Fleet config to push</td></tr>
+          <tr><td>--tag</td><td>—</td><td>Only push databases matching this tag</td></tr>
+          <tr><td>--dry-run</td><td>false</td><td>Print the payload without sending</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>Larger or air-gapped?</strong> The same dashboard can be self-hosted on your own infrastructure. See <a href="https://github.com/croc100/Litescope/blob/main/COMMERCIAL.md" target="_blank" rel="noopener">COMMERCIAL.md</a>.
       </div>
     </div>
 
