@@ -106,11 +106,18 @@ func BuildPlan(path string, queries []string) (*Plan, error) {
 				Reason: f.Detail + " — dropping it reclaims write overhead, but verify no query depends on it",
 			})
 		case "full-scan":
-			// No runnable statement — surface as a proposal with guidance.
-			p.Actions = append(p.Actions, Action{
-				Kind: "create-index", Risk: RiskRisky, Table: f.Table, SQL: "",
-				Reason: f.Detail + " — " + f.Suggestion,
-			})
+			// EXPLAIN-driven: when the advisor could infer the predicate
+			// columns it returns a runnable CREATE INDEX; apply it only with
+			// --aggressive since a query-derived index can change plans. When
+			// columns couldn't be inferred, fall back to guidance-only.
+			act := Action{Kind: "create-index", Risk: RiskRisky, Table: f.Table}
+			if strings.HasPrefix(strings.ToUpper(f.Suggestion), "CREATE INDEX") {
+				act.SQL = f.Suggestion
+				act.Reason = f.Detail + " — adding this index lets the query seek instead of scanning"
+			} else {
+				act.Reason = f.Detail + " — " + f.Suggestion
+			}
+			p.Actions = append(p.Actions, act)
 		}
 	}
 

@@ -2,9 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/croc100/litescope/internal/audit"
+	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/snapshot"
 	"github.com/spf13/cobra"
 )
@@ -56,7 +60,136 @@ Each snapshot is integrity-checked after creation; a corrupt database is refused
 	cmd.Flags().StringVar(&label, "label", "", "Optional label recorded in the snapshot name")
 	cmd.Flags().IntVar(&keep, "keep", 0, "Retention: keep only the N newest snapshots (0 = keep all)")
 	cmd.AddCommand(cmdSnapshotList())
+	cmd.AddCommand(cmdSnapshotSchedule())
 	return cmd
+}
+
+// cmdSnapshotSchedule runs unattended snapshots on a fixed interval with
+// retention — the local/Turso parity for D1 Time Travel's automatic backups.
+// It snapshots a single database or every local database in a fleet config,
+// and is meant to be wrapped in a systemd timer / cron entry (or just left
+// running). Retention defaults on so the snapshot directory never grows
+// unbounded.
+func cmdSnapshotSchedule() *cobra.Command {
+	var (
+		interval  time.Duration
+		keep      int
+		label     string
+		fleetPath string
+		tag       string
+		once      bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "schedule [db.sqlite]",
+		Short: "Take snapshots unattended on an interval, with retention",
+		Long: `Run point-in-time snapshots on a schedule so local (and Turso) SQLite gets
+the same unattended backup safety net D1 has through Time Travel.
+
+Each tick snapshots the database and then prunes to the newest --keep copies, so
+the .litescope-snapshots/ directory never grows without bound. Run it against one
+database or every local database in a fleet config.
+
+  litescope snapshot schedule ./app.db --interval 1h --keep 24
+  litescope snapshot schedule --fleet litescope.fleet.yaml --interval 6h --keep 7
+  litescope snapshot schedule ./app.db --once          # one tick, for cron/systemd
+
+For an unattended host, pair --once with a systemd timer or cron entry, or leave
+the daemon running and let --interval drive the cadence.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if fleetPath == "" && len(args) != 1 {
+				return fmt.Errorf("a database path is required (or use --fleet)")
+			}
+			if fleetPath != "" && len(args) > 0 {
+				return fmt.Errorf("pass either a database path or --fleet, not both")
+			}
+
+			targets, err := scheduleTargets(fleetPath, tag, args)
+			if err != nil {
+				return err
+			}
+			if len(targets) == 0 {
+				return fmt.Errorf("no local databases to snapshot")
+			}
+
+			runTick := func() {
+				for _, path := range targets {
+					snap, err := snapshot.Create(path, snapshot.CreateOptions{Label: label, Keep: keep})
+					ts := time.Now().Format("15:04:05")
+					if err != nil {
+						fmt.Printf("  %s  %s  %s — %v\n", styleErr.Render("✗"), styleDim.Render(ts), path, err)
+						audit.Record(audit.Entry{Action: "snapshot.schedule", Target: path,
+							Outcome: "error", Detail: err.Error()})
+						continue
+					}
+					fmt.Printf("  %s  %s  %s  %s\n", styleOK.Render("✓"), styleDim.Render(ts),
+						path, styleDim.Render(humanBytes(snap.SizeBytes)))
+					audit.Record(audit.Entry{Action: "snapshot.schedule", Target: path,
+						Summary: fmt.Sprintf("%s (%s)", snap.Path, humanBytes(snap.SizeBytes))})
+				}
+			}
+
+			if once {
+				runTick()
+				return nil
+			}
+
+			fmt.Printf("\n  %s  Scheduling snapshots\n", styleOK.Render("◉"))
+			fmt.Printf("  %s  Targets:  %d database(s)\n", styleDim.Render("·"), len(targets))
+			fmt.Printf("  %s  Interval: %s\n", styleDim.Render("·"), interval)
+			if keep > 0 {
+				fmt.Printf("  %s  Retain:   newest %d per database\n", styleDim.Render("·"), keep)
+			}
+			fmt.Printf("\n  Press Ctrl+C to stop.\n\n")
+
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			sig := make(chan os.Signal, 1)
+			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+			runTick()
+			for {
+				select {
+				case <-ticker.C:
+					runTick()
+				case <-sig:
+					fmt.Printf("\n  Stopped.\n\n")
+					return nil
+				}
+			}
+		},
+	}
+
+	cmd.Flags().DurationVarP(&interval, "interval", "i", 1*time.Hour, "snapshot interval (e.g. 30m, 1h, 6h)")
+	cmd.Flags().IntVar(&keep, "keep", 24, "Retention: keep only the N newest snapshots per database (0 = keep all)")
+	cmd.Flags().StringVar(&label, "label", "scheduled", "Label recorded in each snapshot name")
+	cmd.Flags().StringVar(&fleetPath, "fleet", "", "Snapshot every local database in a fleet config")
+	cmd.Flags().StringVar(&tag, "tag", "", "With --fleet, only databases matching this tag")
+	cmd.Flags().BoolVar(&once, "once", false, "Take a single snapshot and exit (for cron/systemd)")
+	return cmd
+}
+
+// scheduleTargets resolves the local database paths to snapshot, from either a
+// single path argument or a fleet config (remote DSNs are skipped — snapshots
+// are local-file VACUUM INTO copies).
+func scheduleTargets(fleetPath, tag string, args []string) ([]string, error) {
+	if fleetPath == "" {
+		return []string{args[0]}, nil
+	}
+	cfg, err := fleet.Load(fleetPath)
+	if err != nil {
+		return nil, err
+	}
+	var targets []string
+	for _, db := range cfg.Filter(tag) {
+		if isRemoteDSN(db.DSN) {
+			fmt.Printf("  %s  %s — skipped (snapshots are local SQLite only)\n", styleDim.Render("·"), db.Name)
+			continue
+		}
+		targets = append(targets, db.DSN)
+	}
+	return targets, nil
 }
 
 func cmdSnapshotList() *cobra.Command {

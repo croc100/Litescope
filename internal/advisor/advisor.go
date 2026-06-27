@@ -7,6 +7,7 @@ package advisor
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -52,9 +53,7 @@ func Analyze(path string, queries []string) (*Report, error) {
 	}
 
 	for _, q := range queries {
-		if f, ok := scanFinding(db, q); ok {
-			r.Findings = append(r.Findings, f)
-		}
+		r.Findings = append(r.Findings, scanFindings(db, q)...)
 	}
 
 	return r, nil
@@ -161,10 +160,14 @@ func redundantFindings(db *sql.DB, table string, idxs []indexDef) []Finding {
 
 // ── rule: full table scan from a query ──────────────────────────────────────
 
-func scanFinding(db *sql.DB, query string) (Finding, bool) {
+// scanFindings runs EXPLAIN QUERY PLAN for one query and emits a full-scan
+// finding per table the planner scans without an index. When the predicate
+// columns for that table can be inferred from the query, the suggestion is a
+// runnable CREATE INDEX statement; otherwise it falls back to guidance.
+func scanFindings(db *sql.DB, query string) []Finding {
 	rows, err := db.Query("EXPLAIN QUERY PLAN " + query)
 	if err != nil {
-		return Finding{}, false
+		return nil
 	}
 	defer rows.Close()
 
@@ -173,22 +176,150 @@ func scanFinding(db *sql.DB, query string) (Finding, bool) {
 		var id, parent, notused int
 		var detail string
 		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
-			return Finding{}, false
+			return nil
 		}
 		// "SCAN <table>" is a full scan; "SEARCH ... USING INDEX" is fine.
 		if strings.HasPrefix(detail, "SCAN ") && !strings.Contains(detail, "USING") {
-			scanned = append(scanned, strings.TrimSpace(strings.TrimPrefix(detail, "SCAN")))
+			scanned = append(scanned, scanTable(detail))
 		}
 	}
-	if len(scanned) == 0 {
-		return Finding{}, false
+	if err := rows.Err(); err != nil || len(scanned) == 0 {
+		return nil
 	}
-	return Finding{
-		Rule:       "full-scan",
-		Severity:   "warning",
-		Detail:     fmt.Sprintf("query does a full table scan of: %s", strings.Join(scanned, ", ")),
-		Suggestion: fmt.Sprintf("add an index covering the WHERE/JOIN columns used in: %s", oneLine(query)),
-	}, true
+
+	var out []Finding
+	for _, table := range scanned {
+		f := Finding{
+			Rule:     "full-scan",
+			Severity: "warning",
+			Table:    table,
+			Detail:   fmt.Sprintf("query does a full table scan of %q: %s", table, oneLine(query)),
+		}
+		if cols := inferIndexColumns(db, table, query); len(cols) > 0 {
+			f.Suggestion = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %q(%s);",
+				table, strings.Join(cols, "_"), table, strings.Join(cols, ", "))
+		} else {
+			f.Suggestion = "add an index covering the WHERE/JOIN columns used in this query"
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// scanTable extracts the table name from an EXPLAIN QUERY PLAN "SCAN" line,
+// dropping any trailing "AS alias" or "USING ..." qualifiers.
+func scanTable(detail string) string {
+	rest := strings.TrimSpace(strings.TrimPrefix(detail, "SCAN"))
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return rest
+	}
+	return fields[0]
+}
+
+// identTok matches a column/table identifier, optionally table-qualified.
+var identTok = regexp.MustCompile(`(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)\s*(=|<|>|<=|>=|<>|!=|\bIN\b|\bLIKE\b|\bBETWEEN\b|\bIS\b)`)
+
+// inferIndexColumns parses the query's WHERE / JOIN ... ON predicates and
+// returns the columns of `table` that are filtered on, equality columns first
+// (the leftmost-prefix rule for composite indexes). It is deliberately
+// conservative: it only proposes columns that actually exist on the table and
+// are already not the leftmost column of an existing index.
+func inferIndexColumns(db *sql.DB, table, query string) []string {
+	cols := tableColumnSet(db, table)
+	if len(cols) == 0 {
+		return nil
+	}
+	covered := indexedLeftmost(db, table)
+
+	region := predicateRegion(query)
+	var eq, rng []string
+	seen := map[string]bool{}
+	for _, m := range identTok.FindAllStringSubmatch(region, -1) {
+		col := m[1]
+		op := strings.ToUpper(strings.TrimSpace(m[2]))
+		if !cols[col] || seen[col] || covered[strings.ToLower(col)] {
+			continue
+		}
+		seen[col] = true
+		if op == "=" || op == "IN" || op == "IS" {
+			eq = append(eq, col)
+		} else {
+			rng = append(rng, col)
+		}
+	}
+	// Equality columns lead; a single range column can follow usefully.
+	out := eq
+	if len(rng) > 0 {
+		out = append(out, rng[0])
+	}
+	return out
+}
+
+// predicateRegion returns the slice of the query that carries filter
+// predicates: everything from the first WHERE / ON keyword onward, stopped
+// before clauses that don't constrain rows (GROUP/ORDER/LIMIT).
+func predicateRegion(query string) string {
+	q := " " + strings.Join(strings.Fields(query), " ") + " "
+	lower := strings.ToLower(q)
+	start := len(q)
+	for _, kw := range []string{" where ", " on "} {
+		if i := strings.Index(lower, kw); i >= 0 && i < start {
+			start = i
+		}
+	}
+	if start == len(q) {
+		return ""
+	}
+	region := q[start:]
+	rl := strings.ToLower(region)
+	for _, kw := range []string{" group by ", " order by ", " limit ", " having "} {
+		if i := strings.Index(rl, kw); i >= 0 {
+			region = region[:i]
+			rl = rl[:i]
+		}
+	}
+	return region
+}
+
+// tableColumnSet returns the set of column names on a table.
+func tableColumnSet(db *sql.DB, table string) map[string]bool {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%q)", table))
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return out
+		}
+		out[name] = true
+	}
+	return out
+}
+
+// indexedLeftmost returns the set of columns (lowercased) that are already the
+// leftmost column of some index or the primary key — adding another index led
+// by them would be redundant.
+func indexedLeftmost(db *sql.DB, table string) map[string]bool {
+	out := map[string]bool{}
+	if pks := pkColumns(db, table); len(pks) > 0 {
+		out[strings.ToLower(pks[0])] = true
+	}
+	idxs, err := indexColumns(db, table)
+	if err != nil {
+		return out
+	}
+	for _, ix := range idxs {
+		if len(ix.cols) > 0 {
+			out[strings.ToLower(ix.cols[0])] = true
+		}
+	}
+	return out
 }
 
 // ── SQLite metadata helpers ─────────────────────────────────────────────────

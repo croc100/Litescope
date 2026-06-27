@@ -46,9 +46,11 @@ databases without hand-written glue and without footguns.
 **Change management**
 - **`autopilot` — self-driving DBA: ANALYZE, PRAGMA optimize, auto-add missing
   foreign-key indexes, and (with `--aggressive`) VACUUM + redundant-index
-  cleanup. Dry-run by default, auto-snapshot before applying, every action
-  explained in plain language. `--fleet` runs it across a whole fleet; also the
-  `litescope_autopilot` MCP tool** ✨ new
+  cleanup. With `--queries`, EXPLAIN-driven: infers the predicate columns behind
+  a full table scan and proposes a runnable `CREATE INDEX`. Dry-run by default,
+  auto-snapshot before applying, every action explained in plain language.
+  `--fleet` runs it across a whole fleet; also the `litescope_autopilot` MCP
+  tool** ✨ new
 - `migrate` — generate + apply migrations; blast-radius analysis
 - `validate` — snapshot-based migration locking for CI
 - `monitor` — continuous drift detection; webhook alerts
@@ -59,8 +61,10 @@ databases without hand-written glue and without footguns.
 - **`snapshot` / `restore` — point-in-time backups for local (and Turso) SQLite:
   consistent VACUUM INTO copies in a sibling `.litescope-snapshots/`, with
   `list`, `--label`, `--keep N` retention, integrity-checked restore + automatic
-  pre-restore safety snapshot. `health` now flags databases with no backup.
-  Also `litescope_snapshot` / `_restore` / `_snapshot_list` MCP tools** ✨ new
+  pre-restore safety snapshot, and `snapshot schedule` for unattended interval
+  backups with retention (single DB or `--fleet`, `--once` for cron/systemd).
+  `health` now flags databases with no backup. Also `litescope_snapshot` /
+  `_restore` / `_snapshot_list` MCP tools** ✨ new
 
 **Fleet & data**
 - `fleet` — parallel ops across hundreds of databases (health, fingerprint, migrate canary)
@@ -100,13 +104,17 @@ All three moats have shipped: the lock doctor (static + live), MCP write safety
 SQLite source answers "did you back up?", every agent write is guarded, and
 routine tuning is one command — or one MCP call — away.
 
-Open follow-ups before moving to depth & reach:
+Both Phase C/D follow-ups have now shipped:
 
-- **Scheduled snapshots** — a retention/cron policy for local/Turso so backups
-  happen unattended, full parity with D1. (Phase C follow-up.)
-- **EXPLAIN-driven autopilot** — `autopilot --queries` already feeds a query log
-  through the advisor; next is turning recurring full-scans into proposed index
-  actions automatically rather than guidance-only. (Phase D follow-up.)
+- ✅ **Scheduled snapshots** — `snapshot schedule` takes unattended snapshots on
+  an `--interval` with `--keep` retention (defaults on), for a single database or
+  every local DB in a `--fleet` config. `--once` makes it a clean systemd-timer /
+  cron unit. Local/Turso parity with D1 Time Travel's automatic backups.
+- ✅ **EXPLAIN-driven autopilot** — full-scan findings from `autopilot --queries`
+  are no longer guidance-only: the advisor infers the WHERE/JOIN predicate
+  columns (equality-first composite ordering, skipping already-indexed leading
+  columns) and emits a runnable `CREATE INDEX`. Autopilot applies it under
+  `--aggressive`, snapshotting first like any other write.
 
 ---
 

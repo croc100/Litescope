@@ -2,6 +2,7 @@ package advisor
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -110,6 +111,48 @@ func TestAnalyze_FullScanQuery(t *testing.T) {
 	r, _ := Analyze(path, []string{"SELECT * FROM orders WHERE total > 100"})
 	if rules(r)["full-scan"] != 1 {
 		t.Errorf("expected a full-scan finding, got %+v", r.Findings)
+	}
+}
+
+func TestAnalyze_FullScanInfersRunnableIndex(t *testing.T) {
+	path := build(t,
+		"CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, total INTEGER, status TEXT)",
+	)
+	r, _ := Analyze(path, []string{
+		"SELECT * FROM orders WHERE status = 'paid' AND total > 100",
+	})
+	var got *Finding
+	for i := range r.Findings {
+		if r.Findings[i].Rule == "full-scan" {
+			got = &r.Findings[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected a full-scan finding, got %+v", r.Findings)
+	}
+	if got.Table != "orders" {
+		t.Errorf("expected table=orders, got %q", got.Table)
+	}
+	// Equality column (status) must lead the composite index; the range
+	// column (total) follows.
+	want := `CREATE INDEX idx_orders_status_total ON "orders"(status, total);`
+	if got.Suggestion != want {
+		t.Errorf("inferred index mismatch:\n got: %s\nwant: %s", got.Suggestion, want)
+	}
+}
+
+func TestAnalyze_FullScanSkipsAlreadyIndexedColumn(t *testing.T) {
+	path := build(t,
+		"CREATE TABLE orders (id INTEGER PRIMARY KEY, status TEXT)",
+		"CREATE INDEX idx_status ON orders(status)",
+	)
+	// status is indexed but the planner may still scan for a non-sargable
+	// predicate; the inference must not re-propose a status-led index.
+	r, _ := Analyze(path, []string{"SELECT * FROM orders WHERE status LIKE '%x%'"})
+	for _, f := range r.Findings {
+		if f.Rule == "full-scan" && strings.HasPrefix(f.Suggestion, "CREATE INDEX") {
+			t.Errorf("should not propose an index led by an already-indexed column: %s", f.Suggestion)
+		}
 	}
 }
 
