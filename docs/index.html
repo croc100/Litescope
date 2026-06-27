@@ -429,6 +429,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
       <a href="#ai">MCP</a>
       <a href="#fleet">Fleet</a>
       <a href="#pricing">Open source</a>
+      <a href="#crode">CRODE</a>
       <a href="#install">Install</a>
       <a href="/docs">Docs</a>
       <a href="https://litescope-cloud.croc100.workers.dev" target="_blank" rel="noopener">Sign in</a>
@@ -441,7 +442,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   <div class="wrap">
     <div class="badge"><span class="pulse"></span>MCP-first ops tool for Cloudflare D1 and SQLite</div>
     <h1>Ask Claude about<br/><span class="accent">your D1 database.</span></h1>
-    <p class="hero-sub">Litescope is the MCP server for Cloudflare D1 — let Claude inspect schemas, run queries, apply migrations, and rewind with Time Travel. Works on local SQLite too. One binary, zero cloud account required.</p>
+    <p class="hero-sub">Litescope is the MCP server for Cloudflare D1 — let Claude inspect schemas, run queries, apply migrations, and rewind with Time Travel. Works on local SQLite too. One binary, zero cloud account required — every write is dry-run by default and verifiable.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">Free &amp; open source</a>
@@ -941,6 +942,33 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
   </div>
 </section>
 
+<section id="crode" style="border-top:1px solid var(--border);padding:64px 0;">
+  <div class="wrap center" style="max-width:760px;">
+    <div class="eyebrow">Part of CRODE</div>
+    <h2 style="margin-top:10px">Operational power, without surveillance</h2>
+    <p class="section-sub" style="margin-top:14px">
+      Litescope is part of <b>CRODE</b> — a family of secure, privacy-respecting
+      tools built on one principle: give you full power over your systems
+      <em>without</em> watching what you do with it. Every Litescope action is
+      <b>verifiable</b> and <b>data-minimal</b> by design.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:32px;text-align:left;">
+      <div class="plan" style="padding:22px;">
+        <div style="color:var(--teal);font-weight:600;font-size:14px;margin-bottom:6px;">Metadata only</div>
+        <p style="font-size:13.5px;line-height:1.55;">The hosted dashboard streams schema and health metadata — <b>never your rows</b>. Your data stays in your database.</p>
+      </div>
+      <div class="plan" style="padding:22px;">
+        <div style="color:var(--teal);font-weight:600;font-size:14px;margin-bottom:6px;">Dry-run by default</div>
+        <p style="font-size:13.5px;line-height:1.55;">Every write previews its exact blast radius — rows affected, auto-snapshot first. Nothing changes until you say so.</p>
+      </div>
+      <div class="plan" style="padding:22px;">
+        <div style="color:var(--teal);font-weight:600;font-size:14px;margin-bottom:6px;">Verifiable by design</div>
+        <p style="font-size:13.5px;line-height:1.55;">Open source under AGPL, audit the <code>--dry-run</code> payload yourself. Trust the tool because you can check it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
     <div class="foot-inner">
@@ -957,7 +985,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
         <a href="/privacy">Privacy</a>
       </div>
     </div>
-    <p class="foot-note">Litescope is free and open source under the GNU AGPL-3.0 — the entire CLI and GUI, no license key. A hosted dashboard and enterprise self-host with support are planned, separate, optional offerings that never gate the open-source tool. Questions: dl_litescope@crode.net. © 2026 Crode.</p>
+    <p class="foot-note">Litescope is free and open source under the GNU AGPL-3.0 — the entire CLI and GUI, no license key. A hosted dashboard and enterprise self-host with support are planned, separate, optional offerings that never gate the open-source tool. Part of <b>CRODE</b> — secure, privacy-respecting tools that give you operational power without surveillance. Questions: dl_litescope@crode.net. © 2026 Crode.</p>
   </div>
 </footer>
 
