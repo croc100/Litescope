@@ -123,8 +123,9 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
 - ✅ **Commercial licensing** — dual-license path documented (`COMMERCIAL.md`):
   AGPL-3.0 open core + commercial exception/support, plus the live hosted
   dashboard subscription.
-- **`wrangler` plugin / npm wrapper** — let `wrangler d1` / JS users invoke
-  Litescope via `npx` without a separate install. *(next)*
+- ✅ **npm wrapper** — `npx litescope …` for JS / `wrangler` users; a zero-dep
+  installer (`npm/`) fetches the matching release binary on first run. Publish to
+  npm is the only remaining step.
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
 
 ---

@@ -1,0 +1,35 @@
+{
+  "name": "litescope",
+  "version": "0.5.0",
+  "description": "SQLite & Cloudflare D1 operations: MCP server, schema diff, migrations, lint, backups, autopilot. Run with `npx litescope`.",
+  "keywords": [
+    "sqlite",
+    "cloudflare",
+    "d1",
+    "turso",
+    "mcp",
+    "migration",
+    "schema-diff",
+    "wrangler"
+  ],
+  "homepage": "https://litescope-site.pages.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/croc100/Litescope.git"
+  },
+  "license": "AGPL-3.0",
+  "bin": {
+    "litescope": "bin/litescope.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

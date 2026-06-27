@@ -331,6 +331,13 @@ for a full lint + diff workflow.
 brew install croc100/tap/litescope
 ```
 
+**npm / npx** — for JS and `wrangler` users, no separate install:
+
+```bash
+npx litescope doctor app.db
+npm install -g litescope
+```
+
 **Go install**
 
 ```bash
