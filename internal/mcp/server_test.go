@@ -35,6 +35,29 @@ func run(t *testing.T, requests ...string) map[float64]map[string]interface{} {
 	return resps
 }
 
+// runAll feeds requests through Serve and returns every decoded message in
+// order, including id-less notifications (which `run` drops).
+func runAll(t *testing.T, defaultSource string, requests ...string) []map[string]interface{} {
+	t.Helper()
+	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
+	var out bytes.Buffer
+	if err := Serve(in, &out, "test", false, defaultSource); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	var msgs []map[string]interface{}
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("bad response line %q: %v", line, err)
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs
+}
+
 func TestServe_Initialize(t *testing.T) {
 	r := run(t, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
 	res, ok := r[1]["result"].(map[string]interface{})
@@ -197,6 +220,82 @@ func TestServe_LoggingSetLevel(t *testing.T) {
 	r := run(t, `{"jsonrpc":"2.0","id":7,"method":"logging/setLevel","params":{"level":"info"}}`)
 	if _, ok := r[7]["result"].(map[string]interface{}); !ok {
 		t.Errorf("logging/setLevel should return an empty result, got: %v", r[7])
+	}
+}
+
+func TestServe_LoggingEmitsAtDebug(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/ok.db"
+	db, _ := sql.Open("sqlite", path)
+	db.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+	db.Close()
+
+	msgs := runAll(t, "",
+		`{"jsonrpc":"2.0","id":1,"method":"logging/setLevel","params":{"level":"debug"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"litescope_health","arguments":{"source":"`+path+`"}}}`,
+	)
+	var sawLog bool
+	for _, m := range msgs {
+		if m["method"] == "notifications/message" {
+			p := m["params"].(map[string]interface{})
+			if p["level"] == "debug" && p["logger"] == "litescope" {
+				sawLog = true
+			}
+		}
+	}
+	if !sawLog {
+		t.Errorf("expected a debug notifications/message after setLevel debug; messages: %v", msgs)
+	}
+}
+
+func TestServe_LoggingSuppressedAtInfo(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/ok.db"
+	db, _ := sql.Open("sqlite", path)
+	db.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+	db.Close()
+
+	// Default level is info, so the per-call debug log must NOT be emitted.
+	msgs := runAll(t, "",
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"litescope_health","arguments":{"source":"`+path+`"}}}`,
+	)
+	for _, m := range msgs {
+		if m["method"] == "notifications/message" {
+			t.Errorf("debug log leaked at default info level: %v", m)
+		}
+	}
+}
+
+func TestServe_Completion_Source(t *testing.T) {
+	// With a bound default source, completing "source" should suggest it.
+	msgs := runAll(t, "./bound.db",
+		`{"jsonrpc":"2.0","id":1,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"health_checkup"},"argument":{"name":"source","value":"./bo"}}}`,
+	)
+	var comp map[string]interface{}
+	for _, m := range msgs {
+		if m["id"] == float64(1) {
+			comp = m["result"].(map[string]interface{})["completion"].(map[string]interface{})
+		}
+	}
+	if comp == nil {
+		t.Fatalf("no completion result: %v", msgs)
+	}
+	vals := comp["values"].([]interface{})
+	if len(vals) != 1 || vals[0] != "./bound.db" {
+		t.Errorf("expected [./bound.db], got %v", vals)
+	}
+}
+
+func TestServe_Subscribe_AcceptsAndUnsubscribes(t *testing.T) {
+	r := run(t,
+		`{"jsonrpc":"2.0","id":1,"method":"resources/subscribe","params":{"uri":"litescope://schema/./app.db"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"resources/unsubscribe","params":{"uri":"litescope://schema/./app.db"}}`,
+	)
+	if _, ok := r[1]["result"].(map[string]interface{}); !ok {
+		t.Errorf("subscribe should return an empty result, got: %v", r[1])
+	}
+	if _, ok := r[2]["result"].(map[string]interface{}); !ok {
+		t.Errorf("unsubscribe should return an empty result, got: %v", r[2])
 	}
 }
 

@@ -85,6 +85,25 @@ func readResource(uri string) (text, mime string, err error) {
 	}
 }
 
+// resourceFilePath returns the local file backing a schema/dictionary resource
+// URI, or "" when the URI is remote (d1/turso) or unrecognized. Used by the
+// subscription watcher, which can only observe local files.
+func resourceFilePath(uri string) string {
+	var src string
+	switch {
+	case strings.HasPrefix(uri, schemaScheme):
+		src = strings.TrimPrefix(uri, schemaScheme)
+	case strings.HasPrefix(uri, dictScheme):
+		src = strings.TrimPrefix(uri, dictScheme)
+	default:
+		return ""
+	}
+	if src == "" || isRemote(src) {
+		return ""
+	}
+	return src
+}
+
 func loadSchema(src string) (*schema.Schema, error) {
 	if src == "" {
 		return nil, fmt.Errorf("resource URI is missing a source")

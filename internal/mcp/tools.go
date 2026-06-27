@@ -315,6 +315,10 @@ func Registry(allowWrites bool) []Tool {
 					"description": "Optional SQL queries to check for full table scans",
 				},
 			}, "source"),
+			OutputSchema: outObj(props{
+				"path":     {"type": "string", "description": "The analyzed database."},
+				"findings": {"type": "array", "description": "Issues with rule, severity, and a runnable suggestion."},
+			}, "findings"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -368,6 +372,10 @@ func Registry(allowWrites bool) []Tool {
 				"UUID, name, creation date, table count, and the DSN to use with other litescope tools. " +
 				"Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables. Read-only.",
 			InputSchema: obj(props{}),
+			OutputSchema: outObj(props{
+				"databases": {"type": "array", "description": "Each D1 database with uuid, name, table count, and dsn."},
+				"count":     {"type": "integer", "description": "Number of databases."},
+			}, "databases", "count"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				dbs, err := connector.ListD1Databases()
 				if err != nil {
@@ -389,6 +397,11 @@ func Registry(allowWrites bool) []Tool {
 				"config": strProp("Path to the fleet config (default: litescope.fleet.yaml)"),
 				"tag":    strProp("Only include databases with this tag"),
 			}),
+			OutputSchema: outObj(props{
+				"total":       {"type": "integer", "description": "Databases successfully fingerprinted."},
+				"clusters":    {"type": "array", "description": "Schema clusters, canonical first, with drift from canonical."},
+				"unreachable": {"type": "array", "description": "Databases that could not be read."},
+			}, "clusters"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				dbs, err := fleetDBs(args)
 				if err != nil {
@@ -407,6 +420,9 @@ func Registry(allowWrites bool) []Tool {
 				"tag":    strProp("Only include databases with this tag"),
 				"deep":   boolProp("Use the exhaustive integrity_check instead of quick_check"),
 			}),
+			OutputSchema: outObj(props{
+				"results": {"type": "array", "description": "Per-database health reports, worst-first."},
+			}, "results"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				dbs, err := fleetDBs(args)
 				if err != nil {
@@ -460,6 +476,11 @@ func Registry(allowWrites bool) []Tool {
 			InputSchema: obj(props{
 				"source": strProp("Local SQLite file path."),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"source":    {"type": "string", "description": "The database the snapshots belong to."},
+				"count":     {"type": "integer", "description": "Number of snapshots."},
+				"snapshots": {"type": "array", "description": "Snapshots, newest first, with path, label, and timestamp."},
+			}, "source", "count", "snapshots"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {

@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/croc100/litescope/internal/connector"
 )
 
 // protocolVersion is the MCP revision this server implements.
@@ -37,6 +43,15 @@ type server struct {
 	promptByName  map[string]Prompt
 	version       string
 	defaultSource string // optional database bound at startup for concrete resources
+
+	// mu guards all writes to w and the mutable fields below, so the resource
+	// watcher goroutine and the request loop can both emit messages safely.
+	mu       sync.Mutex
+	w        *bufio.Writer
+	logLevel string          // current minimum log level (RFC 5424 names)
+	subs     map[string]bool // subscribed resource URIs
+	watching bool            // true once the resource watcher goroutine is running
+	stop     chan struct{}   // closed when Serve returns, stopping the watcher
 }
 
 // Serve runs the MCP server over newline-delimited JSON-RPC on the given
@@ -63,12 +78,17 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool, defaul
 		tools: tools, byName: byName,
 		prompts: prompts, promptByName: promptByName,
 		version: version, defaultSource: defaultSource,
+		w:        writer,
+		logLevel: "info",
+		subs:     map[string]bool{},
+		stop:     make(chan struct{}),
 	}
+	defer close(s.stop)
 
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			s.handleLine(line, writer)
+			s.handleLine(line)
 		}
 		if err != nil {
 			if err == io.EOF {
@@ -79,10 +99,7 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool, defaul
 	}
 }
 
-func (s *server) handleLine(line []byte, w *bufio.Writer) {
-	version := s.version
-	tools := s.tools
-	byName := s.byName
+func (s *server) handleLine(line []byte) {
 	var req rpcRequest
 	if err := json.Unmarshal(line, &req); err != nil {
 		return // ignore malformed input
@@ -100,67 +117,84 @@ func (s *server) handleLine(line []byte, w *bufio.Writer) {
 		if json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
 			ver = p.ProtocolVersion
 		}
-		respond(w, req.ID, map[string]interface{}{
+		s.respond(req.ID, map[string]interface{}{
 			"protocolVersion": ver,
 			"capabilities": map[string]interface{}{
-				"tools":     map[string]interface{}{},
-				"prompts":   map[string]interface{}{},
-				"resources": map[string]interface{}{},
-				"logging":   map[string]interface{}{},
+				"tools":       map[string]interface{}{},
+				"prompts":     map[string]interface{}{},
+				"resources":   map[string]interface{}{"subscribe": true},
+				"logging":     map[string]interface{}{},
+				"completions": map[string]interface{}{},
 			},
-			"serverInfo": map[string]interface{}{"name": "litescope", "version": version},
+			"serverInfo": map[string]interface{}{"name": "litescope", "version": s.version},
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// notifications: no response
 	case "ping":
-		respond(w, req.ID, map[string]interface{}{})
+		s.respond(req.ID, map[string]interface{}{})
 	case "logging/setLevel":
-		// We advertise the logging capability but do not emit log notifications;
-		// accept setLevel so clients that probe it succeed.
-		respond(w, req.ID, map[string]interface{}{})
+		var p struct {
+			Level string `json:"level"`
+		}
+		if json.Unmarshal(req.Params, &p) == nil && logSeverity(p.Level) >= 0 {
+			s.mu.Lock()
+			s.logLevel = p.Level
+			s.mu.Unlock()
+		}
+		s.respond(req.ID, map[string]interface{}{})
 	case "tools/list":
-		respond(w, req.ID, map[string]interface{}{"tools": toolDescriptors(tools)})
+		// cursor is accepted for spec compliance; the full set fits in one page,
+		// so no nextCursor is returned.
+		s.respond(req.ID, map[string]interface{}{"tools": toolDescriptors(s.tools)})
 	case "tools/call":
-		handleToolCall(w, req, byName)
+		s.handleToolCall(req)
 	case "prompts/list":
-		respond(w, req.ID, map[string]interface{}{"prompts": promptDescriptors(s.prompts)})
+		s.respond(req.ID, map[string]interface{}{"prompts": promptDescriptors(s.prompts)})
 	case "prompts/get":
-		s.handlePromptGet(w, req)
+		s.handlePromptGet(req)
 	case "resources/list":
-		respond(w, req.ID, map[string]interface{}{"resources": concreteResources(s.defaultSource)})
+		s.respond(req.ID, map[string]interface{}{"resources": concreteResources(s.defaultSource)})
 	case "resources/templates/list":
-		respond(w, req.ID, map[string]interface{}{"resourceTemplates": resourceTemplates()})
+		s.respond(req.ID, map[string]interface{}{"resourceTemplates": resourceTemplates()})
 	case "resources/read":
-		handleResourceRead(w, req)
+		s.handleResourceRead(req)
+	case "resources/subscribe":
+		s.handleSubscribe(req, true)
+	case "resources/unsubscribe":
+		s.handleSubscribe(req, false)
+	case "completion/complete":
+		s.handleComplete(req)
 	default:
 		if !isNotification {
-			respondError(w, req.ID, -32601, "method not found: "+req.Method)
+			s.respondError(req.ID, -32601, "method not found: "+req.Method)
 		}
 	}
 }
 
-func handleToolCall(w *bufio.Writer, req rpcRequest, byName map[string]Tool) {
+func (s *server) handleToolCall(req rpcRequest) {
 	var params struct {
 		Name      string                 `json:"name"`
 		Arguments map[string]interface{} `json:"arguments"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		respondError(w, req.ID, -32602, "invalid params")
+		s.respondError(req.ID, -32602, "invalid params")
 		return
 	}
-	tool, ok := byName[params.Name]
+	tool, ok := s.byName[params.Name]
 	if !ok {
-		respondError(w, req.ID, -32602, "unknown tool: "+params.Name)
+		s.respondError(req.ID, -32602, "unknown tool: "+params.Name)
 		return
 	}
+	s.log("debug", map[string]interface{}{"event": "tool_call", "tool": params.Name})
 	text, err := tool.Handler(params.Arguments)
 	if err != nil {
 		// Tool-level errors are returned in the result with isError, not as a
 		// protocol error, so the model can read and react to them.
-		respond(w, req.ID, toolResult(fmt.Sprintf("Error: %v", err), true))
+		s.log("error", map[string]interface{}{"event": "tool_error", "tool": params.Name, "error": err.Error()})
+		s.respond(req.ID, toolResult(fmt.Sprintf("Error: %v", err), true))
 		return
 	}
-	respond(w, req.ID, toolResult(text, false))
+	s.respond(req.ID, toolResult(text, false))
 }
 
 // structuredOf parses a tool's JSON text output into an object for the
@@ -176,27 +210,27 @@ func structuredOf(text string) map[string]interface{} {
 	return obj
 }
 
-func (s *server) handlePromptGet(w *bufio.Writer, req rpcRequest) {
+func (s *server) handlePromptGet(req rpcRequest) {
 	var params struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		respondError(w, req.ID, -32602, "invalid params")
+		s.respondError(req.ID, -32602, "invalid params")
 		return
 	}
 	p, ok := s.promptByName[params.Name]
 	if !ok {
-		respondError(w, req.ID, -32602, "unknown prompt: "+params.Name)
+		s.respondError(req.ID, -32602, "unknown prompt: "+params.Name)
 		return
 	}
 	for _, a := range p.Arguments {
 		if a.Required && params.Arguments[a.Name] == "" {
-			respondError(w, req.ID, -32602, "missing required argument: "+a.Name)
+			s.respondError(req.ID, -32602, "missing required argument: "+a.Name)
 			return
 		}
 	}
-	respond(w, req.ID, map[string]interface{}{
+	s.respond(req.ID, map[string]interface{}{
 		"description": p.Description,
 		"messages": []map[string]interface{}{{
 			"role":    "user",
@@ -205,26 +239,146 @@ func (s *server) handlePromptGet(w *bufio.Writer, req rpcRequest) {
 	})
 }
 
-func handleResourceRead(w *bufio.Writer, req rpcRequest) {
+func (s *server) handleResourceRead(req rpcRequest) {
 	var params struct {
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		respondError(w, req.ID, -32602, "invalid params")
+		s.respondError(req.ID, -32602, "invalid params")
 		return
 	}
 	text, mime, err := readResource(params.URI)
 	if err != nil {
-		respondError(w, req.ID, -32602, err.Error())
+		s.respondError(req.ID, -32602, err.Error())
 		return
 	}
-	respond(w, req.ID, map[string]interface{}{
+	s.respond(req.ID, map[string]interface{}{
 		"contents": []map[string]interface{}{{
 			"uri":      params.URI,
 			"mimeType": mime,
 			"text":     text,
 		}},
 	})
+}
+
+// handleSubscribe records (or removes) a resource subscription and starts the
+// watcher goroutine on the first subscribe. The watcher emits
+// notifications/resources/updated when a local-file-backed resource changes.
+func (s *server) handleSubscribe(req rpcRequest, subscribe bool) {
+	var p struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil || p.URI == "" {
+		s.respondError(req.ID, -32602, "invalid params")
+		return
+	}
+	s.mu.Lock()
+	if subscribe {
+		s.subs[p.URI] = true
+	} else {
+		delete(s.subs, p.URI)
+	}
+	start := subscribe && !s.watching
+	if start {
+		s.watching = true
+	}
+	s.mu.Unlock()
+	if start {
+		go s.watchResources()
+	}
+	s.respond(req.ID, map[string]interface{}{})
+}
+
+// watchResources polls the mtime of every subscribed local-file resource and
+// emits notifications/resources/updated when one changes. Remote (d1/turso)
+// resources cannot be watched and are skipped. It exits when Serve returns.
+func (s *server) watchResources() {
+	mtimes := map[string]time.Time{}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			uris := make([]string, 0, len(s.subs))
+			for u := range s.subs {
+				uris = append(uris, u)
+			}
+			s.mu.Unlock()
+			for _, u := range uris {
+				path := resourceFilePath(u)
+				if path == "" {
+					continue // remote or unknown URI: not watchable
+				}
+				fi, err := os.Stat(path)
+				if err != nil {
+					continue
+				}
+				mt := fi.ModTime()
+				prev, seen := mtimes[u]
+				mtimes[u] = mt
+				if seen && mt.After(prev) {
+					s.notify("notifications/resources/updated", map[string]interface{}{"uri": u})
+				}
+			}
+		}
+	}
+}
+
+// handleComplete answers completion/complete for argument autocompletion. The
+// only argument we can meaningfully complete is a database "source" (also
+// exposed as old/new on diff/migrate tools): we suggest the bound default
+// source and, when Cloudflare credentials are present, the account's D1 DSNs.
+func (s *server) handleComplete(req rpcRequest) {
+	var p struct {
+		Argument struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"argument"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil {
+		s.respondError(req.ID, -32602, "invalid params")
+		return
+	}
+	var values []string
+	switch p.Argument.Name {
+	case "source", "old", "new":
+		values = s.completeSource(p.Argument.Value)
+	}
+	s.respond(req.ID, map[string]interface{}{
+		"completion": map[string]interface{}{
+			"values":  values,
+			"total":   len(values),
+			"hasMore": false,
+		},
+	})
+}
+
+func (s *server) completeSource(prefix string) []string {
+	out := []string{}
+	add := func(v string) {
+		if v != "" && strings.HasPrefix(v, prefix) {
+			out = append(out, v)
+		}
+	}
+	if s.defaultSource != "" {
+		add(s.defaultSource)
+	}
+	// Best-effort: list D1 databases when credentials are configured. Errors are
+	// swallowed so completion never fails the request.
+	if os.Getenv("CLOUDFLARE_API_TOKEN") != "" && os.Getenv("CLOUDFLARE_ACCOUNT_ID") != "" {
+		if dbs, err := connector.ListD1Databases(); err == nil {
+			for _, db := range dbs {
+				add(db.DSN)
+			}
+		}
+	}
+	if len(out) > 100 {
+		out = out[:100]
+	}
+	return out
 }
 
 func toolDescriptors(tools []Tool) []map[string]interface{} {
@@ -262,20 +416,69 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 	return res
 }
 
-func respond(w *bufio.Writer, id json.RawMessage, result interface{}) {
-	writeMsg(w, rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
+// ── message writing (thread-safe) ───────────────────────────────────────────
+
+func (s *server) respond(id json.RawMessage, result interface{}) {
+	s.send(rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-func respondError(w *bufio.Writer, id json.RawMessage, code int, msg string) {
-	writeMsg(w, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
+func (s *server) respondError(id json.RawMessage, code int, msg string) {
+	s.send(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
 }
 
-func writeMsg(w *bufio.Writer, v interface{}) {
+// notify writes a JSON-RPC notification (no id) to the client.
+func (s *server) notify(method string, params interface{}) {
+	s.send(map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params})
+}
+
+// log emits a notifications/message log record when level passes the client's
+// configured minimum (set via logging/setLevel; default "info").
+func (s *server) log(level string, data interface{}) {
+	s.mu.Lock()
+	min := s.logLevel
+	s.mu.Unlock()
+	if logSeverity(level) < logSeverity(min) {
+		return
+	}
+	s.notify("notifications/message", map[string]interface{}{
+		"level": level, "logger": "litescope", "data": data,
+	})
+}
+
+func (s *server) send(v interface{}) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return
 	}
-	w.Write(b)
-	w.WriteByte('\n')
-	w.Flush()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.w.Write(b)
+	s.w.WriteByte('\n')
+	s.w.Flush()
+}
+
+// logSeverity maps RFC 5424 syslog level names to their numeric severity, used
+// to compare a message's level against the configured minimum. Unknown names
+// return -1.
+func logSeverity(level string) int {
+	switch level {
+	case "debug":
+		return 0
+	case "info":
+		return 1
+	case "notice":
+		return 2
+	case "warning":
+		return 3
+	case "error":
+		return 4
+	case "critical":
+		return 5
+	case "alert":
+		return 6
+	case "emergency":
+		return 7
+	default:
+		return -1
+	}
 }
