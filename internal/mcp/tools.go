@@ -1161,3 +1161,59 @@ func splitStatements(sql string) []string {
 	}
 	return out
 }
+
+// ── tool annotations (MCP 2025-03-26+ behavioral hints) ─────────────────────
+//
+// Annotations are untrusted hints that let a client reason about a tool before
+// calling it — most importantly whether it only reads (readOnlyHint) or can
+// destroy data (destructiveHint), which lines up with Litescope's
+// read-only-by-default / guarded-write safety model. idempotentHint marks
+// tools that are safe to retry; openWorldHint marks tools that can reach a
+// remote provider (Cloudflare D1 / Turso) rather than only the local file.
+type toolAnnotations struct {
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    bool   `json:"readOnlyHint"`
+	DestructiveHint bool   `json:"destructiveHint"`
+	IdempotentHint  bool   `json:"idempotentHint"`
+	OpenWorldHint   bool   `json:"openWorldHint"`
+}
+
+// annotationsByName maps each tool to its behavioral hints. Read-only tools are
+// the default posture; only the write/mutating tools set readOnlyHint=false,
+// and the data-replacing ones set destructiveHint=true.
+var annotationsByName = map[string]toolAnnotations{
+	// Read-only diagnostics & inspection.
+	"litescope_health":        {Title: "Inspect database health", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_schema":        {Title: "Inspect schema", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_diff":          {Title: "Diff two databases", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_migrate_plan":  {Title: "Plan a migration (no apply)", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_migrate_diff":  {Title: "Generate migration SQL", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_query":         {Title: "Run a read-only query", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_advise":        {Title: "Recommend indexes", ReadOnlyHint: true, IdempotentHint: true},
+	"litescope_locks":         {Title: "Diagnose database locks", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+	"litescope_fingerprint":   {Title: "Fingerprint fleet schemas", ReadOnlyHint: true, IdempotentHint: true},
+	"litescope_fleet_health":  {Title: "Fleet health overview", ReadOnlyHint: true, IdempotentHint: true},
+	"litescope_check":         {Title: "Verify backup integrity", ReadOnlyHint: true, IdempotentHint: true},
+	"litescope_snapshot_list": {Title: "List snapshots", ReadOnlyHint: true, IdempotentHint: true},
+	"litescope_d1_list":       {Title: "List D1 databases", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true},
+
+	// Mutating but non-destructive (create artifacts / additive changes).
+	"litescope_snapshot":  {Title: "Create a snapshot", ReadOnlyHint: false, DestructiveHint: false},
+	"litescope_autopilot": {Title: "Self-driving optimize (dry-run default)", ReadOnlyHint: false, DestructiveHint: false},
+	"litescope_d1_pull":   {Title: "Pull D1 to a local copy", ReadOnlyHint: false, DestructiveHint: false, OpenWorldHint: true},
+	"litescope_d1_create": {Title: "Create a D1 database", ReadOnlyHint: false, DestructiveHint: false, OpenWorldHint: true},
+
+	// Destructive — replace or remove data.
+	"litescope_restore":       {Title: "Restore from a snapshot", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: false},
+	"litescope_rewind":        {Title: "Rewind via D1 Time Travel", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},
+	"litescope_query_write":   {Title: "Run a write query", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},
+	"litescope_migrate_apply": {Title: "Apply a migration", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},
+	"litescope_d1_delete":     {Title: "Delete a D1 database", ReadOnlyHint: false, DestructiveHint: true, IdempotentHint: true, OpenWorldHint: true},
+}
+
+// annotationsFor returns the behavioral hints for a tool. Unknown tools default
+// to the conservative posture (not read-only, not destructive) so a client
+// never assumes a tool is safe without an explicit hint.
+func annotationsFor(name string) toolAnnotations {
+	return annotationsByName[name]
+}

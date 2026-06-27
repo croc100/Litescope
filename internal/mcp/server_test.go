@@ -181,3 +181,38 @@ func TestServe_UnknownTool_Error(t *testing.T) {
 		t.Errorf("unknown tool should return a protocol error, got: %v", r[6])
 	}
 }
+
+// TestToolAnnotationsCoverage ensures every registered tool (read and write)
+// has an explicit behavioral-hint entry, and that the safety hints line up with
+// Litescope's model: write tools must not claim readOnlyHint, and the
+// data-replacing tools must be marked destructive.
+func TestToolAnnotationsCoverage(t *testing.T) {
+	mustDestructive := map[string]bool{
+		"litescope_restore":       true,
+		"litescope_rewind":        true,
+		"litescope_query_write":   true,
+		"litescope_migrate_apply": true,
+		"litescope_d1_delete":     true,
+	}
+	for _, tool := range Registry(true) {
+		a, ok := annotationsByName[tool.Name]
+		if !ok {
+			t.Errorf("tool %q has no annotations entry", tool.Name)
+			continue
+		}
+		if a.Title == "" {
+			t.Errorf("tool %q has no annotation title", tool.Name)
+		}
+		if mustDestructive[tool.Name] {
+			if a.ReadOnlyHint {
+				t.Errorf("destructive tool %q is marked readOnlyHint=true", tool.Name)
+			}
+			if !a.DestructiveHint {
+				t.Errorf("tool %q must be marked destructiveHint=true", tool.Name)
+			}
+		}
+		if a.ReadOnlyHint && a.DestructiveHint {
+			t.Errorf("tool %q cannot be both read-only and destructive", tool.Name)
+		}
+	}
+}

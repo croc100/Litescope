@@ -212,11 +212,16 @@ func handleResourceRead(w *bufio.Writer, req rpcRequest) {
 func toolDescriptors(tools []Tool) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(tools))
 	for _, t := range tools {
-		out = append(out, map[string]interface{}{
+		d := map[string]interface{}{
 			"name":        t.Name,
 			"description": t.Description,
 			"inputSchema": t.InputSchema,
-		})
+			"annotations": annotationsFor(t.Name),
+		}
+		if title := annotationsFor(t.Name).Title; title != "" {
+			d["title"] = title
+		}
+		out = append(out, d)
 	}
 	return out
 }
