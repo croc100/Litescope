@@ -132,8 +132,8 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
   AGPL-3.0 open core + commercial exception/support, plus the live hosted
   dashboard subscription.
 - ✅ **npm wrapper** — `npx litescope …` for JS / `wrangler` users; a zero-dep
-  installer (`npm/`) fetches the matching release binary on first run. Publish to
-  npm is the only remaining step.
+  installer (`npm/`) fetches the matching release binary on first run.
+  **Published to npm** as [`litescope`](https://www.npmjs.com/package/litescope).
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
 
 ### Phase H — Fleet observability & alerting (hosted dashboard)
