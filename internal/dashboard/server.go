@@ -228,6 +228,7 @@ type Server struct {
 	schemaFn SchemaFn
 	diffFn   DiffFn
 	locksFn  LocksFn
+	history  *History
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -256,6 +257,10 @@ func (s *Server) SetDiffProvider(fn DiffFn) { s.diffFn = fn }
 // SetLockDoctor enables the lock doctor panel.
 func (s *Server) SetLockDoctor(fn LocksFn) { s.locksFn = fn }
 
+// SetHistory enables the fleet-health timeline, persisting a snapshot on each
+// overview request to the given store.
+func (s *Server) SetHistory(h *History) { s.history = h }
+
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -273,7 +278,32 @@ func (s *Server) Handler() http.Handler {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		if s.history != nil {
+			_ = s.history.Record(ov) // best-effort; history must never break the view
+		}
 		writeJSON(w, http.StatusOK, ov)
+	})
+
+	// Returns the fleet-health timeline for the trend view. The optional `since`
+	// query parameter (unix milliseconds) bounds how far back to read.
+	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
+		if s.history == nil {
+			writeJSON(w, http.StatusOK, []Sample{})
+			return
+		}
+		var since int64
+		if v := r.URL.Query().Get("since"); v != "" {
+			since, _ = strconv.ParseInt(v, 10, 64)
+		}
+		samples, err := s.history.Series(since)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if samples == nil {
+			samples = []Sample{}
+		}
+		writeJSON(w, http.StatusOK, samples)
 	})
 
 	// Advertises which optional features are available to the frontend.

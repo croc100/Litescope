@@ -92,6 +92,10 @@
   .kpi .l { font-size:10.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
   .kpi .n { font-size:22px; font-weight:500; color:var(--head); font-family:var(--mono); line-height:1.3; }
   .kpi.crit .n { color:var(--danger); } .kpi.warn .n { color:var(--gold); } .kpi.ok .n { color:var(--ok); }
+  .kpi { position:relative; }
+  .kpi .spark { position:absolute; right:12px; bottom:10px; opacity:.7; pointer-events:none; }
+  .tlwrap { padding:10px 12px 4px; }
+  svg.tl { display:block; }
 
   /* Panel block */
   .block { border:1px solid var(--border-strong); border-radius:var(--r); margin-bottom:16px; overflow:hidden; background:var(--surface); }
@@ -458,6 +462,7 @@ let STATE = null;        // last loaded overview
 let FILTER = "";         // current database name filter
 let CLUSTER_OF = {};     // database name -> {id, is_canonical}
 let AUTO = null;         // auto-refresh interval handle
+let HISTORY = [];        // fleet-health timeline samples (oldest first)
 
 function buildClusterMap(clusters) {
   const m = {};
@@ -466,6 +471,58 @@ function buildClusterMap(clusters) {
 }
 
 const matches = (name) => !FILTER || name.toLowerCase().includes(FILTER);
+
+// sparkline renders a tiny inline line chart from a series of numbers. Returns
+// an empty string when there is too little history to be meaningful.
+function sparkline(vals, color, w = 96, h = 22) {
+  if (!vals || vals.length < 2) return "";
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0);
+  const span = (max - min) || 1;
+  const dx = w / (vals.length - 1);
+  const pts = vals.map((v, i) => `${(i * dx).toFixed(1)},${(h - 2 - ((v - min) / span) * (h - 4)).toFixed(1)}`);
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts.join(" ")}" />
+  </svg>`;
+}
+
+// timelineSVG renders the fleet-health trend: a stacked area of ok/warning/
+// critical counts over time. Width is fluid; height fixed.
+function timelineSVG(samples, h = 90) {
+  const n = samples.length;
+  if (n < 2) return `<div class="empty">Collecting history — the trend appears after a few refreshes.</div>`;
+  const w = 1000; // viewBox units; SVG scales to container width
+  const pad = 4;
+  const maxTotal = Math.max(...samples.map(s => s.total), 1);
+  const dx = w / (n - 1);
+  const y = (v) => pad + (h - 2 * pad) * (1 - v / maxTotal);
+  // Build stacked bands bottom-up: ok, then warning, then critical.
+  const band = (key, prevKey, fill) => {
+    const top = samples.map((s, i) => `${(i * dx).toFixed(1)},${y(stack(s, key)).toFixed(2)}`);
+    const bot = samples.map((s, i) => `${(i * dx).toFixed(1)},${y(prevKey ? stack(s, prevKey) : 0).toFixed(2)}`).reverse();
+    return `<polygon fill="${fill}" fill-opacity="0.85" stroke="none" points="${top.concat(bot).join(" ")}" />`;
+  };
+  // cumulative stack helpers
+  function stack(s, key) {
+    if (key === "ok") return s.ok;
+    if (key === "warning") return s.ok + s.warning;
+    return s.ok + s.warning + s.critical; // critical = total faults stack top
+  }
+  const bands =
+    band("ok", null, "var(--ok)") +
+    band("warning", "ok", "var(--gold)") +
+    band("critical", "warning", "var(--danger)");
+  return `<svg class="tl" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" width="100%" height="${h}">${bands}</svg>`;
+}
+
+function fmtSpan(samples) {
+  if (samples.length < 2) return "";
+  const ms = samples[samples.length - 1].ts - samples[0].ts;
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `last ${min}m`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 48) return `last ${hrs}h`;
+  return `last ${Math.round(hrs / 24)}d`;
+}
 
 function render() {
   const ov = STATE;
@@ -484,13 +541,28 @@ function render() {
     html += `<div class="note">Free preview — showing ${ov.preview_cap} of ${ov.full_total} databases. The full fleet unlocks with Pro.</div>`;
   }
 
-  // KPI strip — whole-fleet counts (not filtered)
+  // KPI strip — whole-fleet counts (not filtered), each with its own sparkline.
+  const sTotal = HISTORY.map(s => s.total);
+  const sOk = HISTORY.map(s => s.ok);
+  const sWarn = HISTORY.map(s => s.warning);
+  const sCrit = HISTORY.map(s => s.critical);
+  const kpi = (cls, label, n, vals, color) =>
+    `<div class="kpi ${cls}"><div class="l">${label}</div><div class="n">${n}</div>${sparkline(vals, color)}</div>`;
   html += `<div class="kpis">
-    <div class="kpi"><div class="l">databases</div><div class="n">${ov.total}</div></div>
-    <div class="kpi ok"><div class="l">healthy</div><div class="n">${c.ok}</div></div>
-    <div class="kpi warn"><div class="l">warning</div><div class="n">${c.warn}</div></div>
-    <div class="kpi crit"><div class="l">critical</div><div class="n">${c.crit}</div></div>
+    ${kpi("", "databases", ov.total, sTotal, "var(--accent)")}
+    ${kpi("ok", "healthy", c.ok, sOk, "var(--ok)")}
+    ${kpi("warn", "warning", c.warn, sWarn, "var(--gold)")}
+    ${kpi("crit", "critical", c.crit, sCrit, "var(--danger)")}
   </div>`;
+
+  // Fleet-health timeline — stacked ok/warning/critical over time.
+  html += `<div class="block"><div class="bhead">fleet health over time<span class="bmeta">${HISTORY.length ? fmtSpan(HISTORY) + " · " + HISTORY.length + " samples" : "no history yet"}</span></div>
+    <div class="bbody tlwrap">${timelineSVG(HISTORY)}</div>
+    <div class="legend" style="padding-top:0">
+      <span><i class="dot" style="background:var(--ok)"></i>healthy</span>
+      <span><i class="dot" style="background:var(--gold)"></i>warning</span>
+      <span><i class="dot" style="background:var(--danger)"></i>critical</span>
+    </div></div>`;
 
   // Topology heatmap
   html += `<div class="block"><div class="bhead">topology<span class="bmeta">${results.length} shown${FILTER ? " · filtered" : ""} · click a cell</span></div><div class="topo">`;
@@ -608,6 +680,10 @@ async function load() {
     if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
     STATE = data;
     CLUSTER_OF = buildClusterMap(data.fingerprint?.clusters || []);
+    try {
+      const hr = await fetch("/api/history");
+      if (hr.ok) { const h = await hr.json(); if (Array.isArray(h)) HISTORY = h; }
+    } catch (_) { /* timeline is best-effort */ }
     render();
     syncDataPanel();
     syncErdPanel();

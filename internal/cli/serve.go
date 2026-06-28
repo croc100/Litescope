@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -183,6 +184,17 @@ Examples:
 				return lockReport(dsn)
 			})
 
+			// Fleet-health timeline: persist a snapshot on each overview request
+			// so the dashboard can show trends across the session and beyond. The
+			// store is a local SQLite file; failure to open it just disables the
+			// timeline rather than blocking the dashboard.
+			if histPath, herr := historyPath(); herr == nil {
+				if hist, herr := dashboard.OpenHistory(histPath); herr == nil {
+					defer hist.Close()
+					srv.SetHistory(hist)
+				}
+			}
+
 			url := "http://" + addr
 
 			fmt.Printf("\n  %s  Litescope dashboard\n", styleOK.Render("◎"))
@@ -209,6 +221,20 @@ Examples:
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser automatically")
 	cmd.Flags().StringVar(&importDir, "import-dir", ".", "directory for databases created by drag-drop import")
 	return cmd
+}
+
+// historyPath returns the location of the dashboard's fleet-health timeline
+// store, under the user cache directory, creating the parent directory.
+func historyPath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	dir = filepath.Join(dir, "litescope")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "history.db"), nil
 }
 
 // importDropped ingests a file dropped on the dashboard into its own SQLite
