@@ -90,6 +90,13 @@ databases without hand-written glue and without footguns.
   (`completion/complete` suggests known sources / D1 DSNs), resource subscriptions
   (`resources/subscribe` emits change notifications when a local DB file changes),
   and server logging (`notifications/message`, `logging/setLevel`)** ✨ new
+- **MCP Streamable HTTP transport (MCP 2025-06-18) — the server is no longer
+  stdio-only: `litescope mcp --http :7577 [--http-path /mcp]` exposes a single
+  endpoint (POST = JSON-RPC, GET = SSE stream for server notifications, DELETE =
+  session end) keyed by `Mcp-Session-Id`. Bearer-token auth (`--http-token` /
+  `LITESCOPE_MCP_TOKEN`, constant-time) and an Origin allowlist (`--http-origin`,
+  DNS-rebinding protection) make it publicly hostable. This is the foundation the
+  hosted dashboard and remote fleet actions build on** ✨ new
 
 **D1 & MCP foundation**
 - Any-source DSN — every tool takes `source`: `./local.db`, `d1://DB_ID`, `turso://…`
@@ -146,28 +153,32 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
 
 ### Phase I — SQLite supremacy ← next
 
-Being *the* SQLite tool means going deeper than any generic DB client can. Four
-fronts, in priority order:
+Being *the* SQLite tool means going deeper than any generic DB client can. The
+MCP transport foundation now ships (see Shipped); what remains is depth. Three
+fronts, in priority order — each lands in the CLI first, then surfaces in the
+hosted dashboard (Phase H) so the paying screen reflects every moat.
 
-1. **MCP Streamable HTTP transport** ← in progress — today the MCP server is
-   stdio-only, so it can't be hosted, reached remotely, or shared by multiple
-   clients. Adding the Streamable HTTP transport (MCP 2025-06-18) unlocks hosted
-   / remote / web-client / multi-user access and is the foundation the hosted
-   dashboard and remote fleet actions build on.
-2. **Deeper moats** — push the three superpowers past parity:
+1. **Deeper moats** — push the three superpowers past parity:
    - *Lock doctor*: live WAL-checkpoint monitoring, a `SQLITE_BUSY` event
      time-series, and a multi-process contention timeline.
    - *Autopilot*: workload-driven index recommendations from an actual query
      log, partial / expression-index proposals, cache & page-size tuning.
    - *File superpowers*: page-level diff visualization, automatic corruption
      recovery (a `.recover` pipeline), and incremental backups.
-3. **Single-database depth** — close the generic-client gap: inline cell editing
+2. **Single-database depth** — close the generic-client gap: inline cell editing
    in the browser, FTS5 full-text search tooling, trigger / view / virtual-table
    inspection, `ATTACH` multi-database queries, and `EXPLAIN QUERY PLAN`
    visualization.
-4. **Lint rule expansion** — grow the schema linter from a handful of rules
+3. **Lint rule expansion** — grow the schema linter from a handful of rules
    toward Bytebase-class coverage: naming conventions, index width, NULL
    handling, type-affinity, reserved words, and migration-safety checks.
+
+**Dashboard surfacing (next concrete step).** The moats already shipped in the
+CLI (lock doctor, autopilot, snapshot/restore, bisect/rewind) are not all
+exposed in the hosted dashboard yet — only the diff panel is. Surfacing the
+existing moats on the paying screen is near-zero new code for a large product
+value jump, and the gaps it reveals (e.g. lock doctor needs a time-series view)
+become the priority order for the depth work above.
 
 ### Phase H — Fleet observability & alerting (hosted dashboard)
 
