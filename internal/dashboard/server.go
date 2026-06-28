@@ -217,18 +217,47 @@ type AutopilotAction struct {
 
 // AutopilotPlan is the DBA self-driving moat's verdict for one database: the set
 // of maintenance and indexing actions it would take, surfaced read-only so the
-// operator can see the plan before applying it from the CLI.
+// operator can see the plan before applying it from the CLI. Queries records how
+// many observed SQL console queries fed the EXPLAIN-based index advice.
 type AutopilotPlan struct {
 	Source  string            `json:"source"`
 	Actions []AutopilotAction `json:"actions"`
-	Safe    int               `json:"safe"`  // count of safe (auto-applied) actions
-	Risky   int               `json:"risky"` // count of risky (review-first) actions
+	Safe    int               `json:"safe"`    // count of safe (auto-applied) actions
+	Risky   int               `json:"risky"`   // count of risky (review-first) actions
+	Queries int               `json:"queries"` // observed queries fed to the advisor
 }
 
 // AutopilotFn builds the autopilot plan for the named database. The CLI supplies
 // it so this package stays decoupled from DSN resolution; when nil, the panel
 // hides.
 type AutopilotFn func(dbName string) (*AutopilotPlan, error)
+
+// SnapshotInfo is one stored point-in-time backup (mirrors snapshot.Snapshot).
+type SnapshotInfo struct {
+	Path      string    `json:"path"`
+	Label     string    `json:"label,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	SizeBytes int64     `json:"size_bytes"`
+}
+
+// BackupReport is the snapshot history for one database — the file-superpower
+// moat (point-in-time backups) surfaced in the dashboard.
+type BackupReport struct {
+	Source    string         `json:"source"`
+	Snapshots []SnapshotInfo `json:"snapshots"`
+}
+
+// SnapshotsFn lists the snapshots of the named database. The CLI supplies it so
+// this package stays decoupled from DSN resolution; when nil, the panel hides.
+type SnapshotsFn func(dbName string) (*BackupReport, error)
+
+// CreateSnapshotFn takes a new snapshot of the named database with an optional
+// label and returns the created snapshot.
+type CreateSnapshotFn func(dbName, label string) (*SnapshotInfo, error)
+
+// RestoreSnapshotFn overwrites the named database with one of its snapshots
+// (identified by path). A safety snapshot of the current state is taken first.
+type RestoreSnapshotFn func(dbName, snapshotPath string) error
 
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
@@ -245,16 +274,19 @@ type BrowseFn func(dbName, table, orderBy, dir string, limit, offset int) (*Brow
 
 // Server serves the embedded dashboard and its JSON API.
 type Server struct {
-	provider    Provider
-	importFn    ImportFn
-	tablesFn    TablesFn
-	queryFn     QueryFn
-	browseFn    BrowseFn
-	schemaFn    SchemaFn
-	diffFn      DiffFn
-	locksFn     LocksFn
-	autopilotFn AutopilotFn
-	history     *History
+	provider         Provider
+	importFn         ImportFn
+	tablesFn         TablesFn
+	queryFn          QueryFn
+	browseFn         BrowseFn
+	schemaFn         SchemaFn
+	diffFn           DiffFn
+	locksFn          LocksFn
+	autopilotFn      AutopilotFn
+	snapshotsFn      SnapshotsFn
+	createSnapshotFn CreateSnapshotFn
+	restoreFn        RestoreSnapshotFn
+	history          *History
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -285,6 +317,14 @@ func (s *Server) SetLockDoctor(fn LocksFn) { s.locksFn = fn }
 
 // SetAutopilot enables the DBA autopilot panel (read-only plan preview).
 func (s *Server) SetAutopilot(fn AutopilotFn) { s.autopilotFn = fn }
+
+// SetBackup enables the snapshot/restore (backup) panel. list is required;
+// create and restore enable the respective actions when non-nil.
+func (s *Server) SetBackup(list SnapshotsFn, create CreateSnapshotFn, restore RestoreSnapshotFn) {
+	s.snapshotsFn = list
+	s.createSnapshotFn = create
+	s.restoreFn = restore
+}
 
 // SetHistory enables the fleet-health timeline, persisting a snapshot on each
 // overview request to the given store.
@@ -338,13 +378,16 @@ func (s *Server) Handler() http.Handler {
 	// Advertises which optional features are available to the frontend.
 	mux.HandleFunc("/api/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{
-			"import":    s.importFn != nil,
-			"data":      s.tablesFn != nil && s.queryFn != nil,
-			"browse":    s.browseFn != nil,
-			"schema":    s.schemaFn != nil,
-			"diff":      s.diffFn != nil,
-			"locks":     s.locksFn != nil,
-			"autopilot": s.autopilotFn != nil,
+			"import":         s.importFn != nil,
+			"data":           s.tablesFn != nil && s.queryFn != nil,
+			"browse":         s.browseFn != nil,
+			"schema":         s.schemaFn != nil,
+			"diff":           s.diffFn != nil,
+			"locks":          s.locksFn != nil,
+			"autopilot":      s.autopilotFn != nil,
+			"backup":         s.snapshotsFn != nil,
+			"backup_create":  s.createSnapshotFn != nil,
+			"backup_restore": s.restoreFn != nil,
 		})
 	})
 
@@ -360,6 +403,72 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, res)
+	})
+
+	// Lists the snapshots (point-in-time backups) of one database.
+	mux.HandleFunc("/api/snapshots", func(w http.ResponseWriter, r *http.Request) {
+		if s.snapshotsFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "backups are disabled"})
+			return
+		}
+		res, err := s.snapshotsFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	})
+
+	// Takes a new snapshot of one database.
+	mux.HandleFunc("/api/snapshot", func(w http.ResponseWriter, r *http.Request) {
+		if s.createSnapshotFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "snapshot creation is disabled"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST to create a snapshot"})
+			return
+		}
+		var req struct {
+			DB    string `json:"db"`
+			Label string `json:"label"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		snap, err := s.createSnapshotFn(req.DB, req.Label)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, snap)
+	})
+
+	// Restores one database from a chosen snapshot (a safety snapshot of the
+	// current state is taken first by the CLI-supplied handler).
+	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
+		if s.restoreFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "restore is disabled"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST to restore"})
+			return
+		}
+		var req struct {
+			DB   string `json:"db"`
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.restoreFn(req.DB, req.Path); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	})
 
 	// Diagnoses lock health (static PRAGMA + live probe) for one database.

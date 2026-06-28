@@ -20,6 +20,7 @@ import (
 	"github.com/croc100/litescope/internal/license"
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/schema"
+	"github.com/croc100/litescope/internal/snapshot"
 	"github.com/spf13/cobra"
 	_ "modernc.org/sqlite"
 )
@@ -93,6 +94,33 @@ Examples:
 				}, nil
 			}
 
+			// queryLog records SELECTs run through the dashboard SQL console, per
+			// database name, so autopilot can recommend indexes for the full scans
+			// they trigger (EXPLAIN-based advice on real, observed traffic). Capped
+			// to the most recent queries per database.
+			const queryLogCap = 50
+			queryLog := map[string][]string{}
+			recordQuery := func(name, q string) {
+				mu.Lock()
+				defer mu.Unlock()
+				log := queryLog[name]
+				for _, existing := range log {
+					if existing == q {
+						return // dedupe; one finding per distinct query is enough
+					}
+				}
+				log = append(log, q)
+				if len(log) > queryLogCap {
+					log = log[len(log)-queryLogCap:]
+				}
+				queryLog[name] = log
+			}
+			queriesFor := func(name string) []string {
+				mu.Lock()
+				defer mu.Unlock()
+				return append([]string(nil), queryLog[name]...)
+			}
+
 			srv := dashboard.New(provider)
 			srv.SetImportHandler(func(filename string, data io.Reader) (string, error) {
 				name, dsn, table, err := importDropped(importDir, filename, data)
@@ -137,7 +165,11 @@ Examples:
 					if err != nil {
 						return nil, err
 					}
-					return runReadOnlyQuery(dsn, query)
+					res, err := runReadOnlyQuery(dsn, query)
+					if err == nil {
+						recordQuery(name, query) // feed autopilot's EXPLAIN-based advice
+					}
+					return res, err
 				},
 			)
 			srv.SetTableBrowser(func(name, table, orderBy, dir string, limit, offset int) (*dashboard.BrowseResult, error) {
@@ -191,8 +223,33 @@ Examples:
 				if err != nil {
 					return nil, err
 				}
-				return autopilotPlan(dsn)
+				return autopilotPlan(dsn, queriesFor(name))
 			})
+			// Snapshot/restore: the file-superpower moat. Listing and creating are
+			// always safe; restore overwrites the live file but snapshots it first.
+			srv.SetBackup(
+				func(name string) (*dashboard.BackupReport, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return snapshotList(dsn)
+				},
+				func(name, label string) (*dashboard.SnapshotInfo, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return snapshotCreate(dsn, label)
+				},
+				func(name, snapPath string) error {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return err
+					}
+					return snapshotRestore(dsn, snapPath)
+				},
+			)
 
 			// Fleet-health timeline: persist a snapshot on each overview request
 			// so the dashboard can show trends across the session and beyond. The
@@ -360,16 +417,16 @@ func lockReport(dsn string) (*dashboard.LockReport, error) {
 // maps it into the dashboard's transport type. Autopilot inspects the live file
 // (fragmentation, missing FK indexes, redundant indexes), so it is local-only;
 // remote sources (d1://, turso://) are rejected.
-func autopilotPlan(dsn string) (*dashboard.AutopilotPlan, error) {
+func autopilotPlan(dsn string, queries []string) (*dashboard.AutopilotPlan, error) {
 	path, err := localDSNPath(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("autopilot supports local SQLite only (this database is remote)")
 	}
-	plan, err := autopilot.BuildPlan(path, nil)
+	plan, err := autopilot.BuildPlan(path, queries)
 	if err != nil {
 		return nil, err
 	}
-	out := &dashboard.AutopilotPlan{Source: path}
+	out := &dashboard.AutopilotPlan{Source: path, Queries: len(queries)}
 	for _, a := range plan.Actions {
 		out.Actions = append(out.Actions, dashboard.AutopilotAction{
 			Kind: a.Kind, Risk: a.Risk, Table: a.Table, SQL: a.SQL, Reason: a.Reason,
@@ -381,6 +438,69 @@ func autopilotPlan(dsn string) (*dashboard.AutopilotPlan, error) {
 		}
 	}
 	return out, nil
+}
+
+// snapshotList returns the point-in-time backups of one resolved fleet DSN.
+// Snapshots are a local-file feature; remote sources are rejected.
+func snapshotList(dsn string) (*dashboard.BackupReport, error) {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("snapshots support local SQLite only (this database is remote)")
+	}
+	snaps, err := snapshot.List(path)
+	if err != nil {
+		return nil, err
+	}
+	out := &dashboard.BackupReport{Source: path}
+	for _, s := range snaps {
+		out.Snapshots = append(out.Snapshots, toDashSnapshot(s))
+	}
+	return out, nil
+}
+
+// snapshotCreate takes a new snapshot of one resolved fleet DSN.
+func snapshotCreate(dsn, label string) (*dashboard.SnapshotInfo, error) {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("snapshots support local SQLite only (this database is remote)")
+	}
+	snap, err := snapshot.Create(path, snapshot.CreateOptions{Label: label})
+	if err != nil {
+		return nil, err
+	}
+	s := toDashSnapshot(*snap)
+	return &s, nil
+}
+
+// snapshotRestore overwrites one resolved fleet DSN with a chosen snapshot. The
+// snapshot path is validated to be one of this database's own snapshots, so a
+// dashboard request can never overwrite the live file from an arbitrary path.
+func snapshotRestore(dsn, snapPath string) error {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return fmt.Errorf("restore supports local SQLite only (this database is remote)")
+	}
+	snaps, err := snapshot.List(path)
+	if err != nil {
+		return err
+	}
+	known := false
+	for _, s := range snaps {
+		if s.Path == snapPath {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return fmt.Errorf("unknown snapshot for this database")
+	}
+	return snapshot.Restore(path, snapPath, true)
+}
+
+func toDashSnapshot(s snapshot.Snapshot) dashboard.SnapshotInfo {
+	return dashboard.SnapshotInfo{
+		Path: s.Path, Label: s.Label, CreatedAt: s.CreatedAt, SizeBytes: s.SizeBytes,
+	}
 }
 
 // schemaGraph loads the ERD graph (tables, columns, foreign keys) of a local

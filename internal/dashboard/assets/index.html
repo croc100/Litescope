@@ -320,6 +320,7 @@
       <div class="item active" data-view="overview"><span class="ic">▦</span><span>Fleet</span></div>
       <div class="item disabled" data-view="locks" data-cap="locks"><span class="ic">◍</span><span>Lock doctor</span></div>
       <div class="item disabled" data-view="autopilot" data-cap="autopilot"><span class="ic">◎</span><span>Autopilot</span></div>
+      <div class="item disabled" data-view="backup" data-cap="backup"><span class="ic">⦿</span><span>Backups</span></div>
       <div class="item disabled" data-view="erd" data-cap="schema"><span class="ic">◈</span><span>Schema</span></div>
       <div class="item disabled" data-view="diff" data-cap="diff"><span class="ic">⇄</span><span>Diff</span></div>
       <div class="item disabled" data-view="data" data-cap="data"><span class="ic">▤</span><span>Data</span></div>
@@ -440,6 +441,20 @@
       <span class="runinfo" id="autopilotHint"></span>
     </div>
     <div id="autopilotResult"></div>
+  </section>
+</div>
+
+<div class="view" id="view-backup">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Backups — point-in-time snapshots</div><h2>Snapshot &amp; restore</h2>
+    <p class="sub">Snapshots are consistent <code>VACUUM INTO</code> copies (safe even under WAL), integrity-checked on write. Restore overwrites the live file — but a safety snapshot of the current state is taken first, so a restore is itself one snapshot from undo.</p>
+    <div class="data-bar">
+      <select id="backupDb" class="select"></select>
+      <input id="backupLabel" class="select" style="width:160px" placeholder="label (optional)">
+      <button class="run" id="backupCreate">Snapshot now ▸</button>
+      <span class="runinfo" id="backupHint"></span>
+    </div>
+    <div id="backupResult"></div>
   </section>
 </div>
 
@@ -704,6 +719,7 @@ async function load() {
     syncDiffPanel();
     syncLocksPanel();
     syncAutopilotPanel();
+    syncBackupPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -1500,7 +1516,8 @@ async function runAutopilot() {
     if (!res.ok) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(d.error || "failed")}</div>`; return; }
     hint.textContent = "";
     let html = "";
-    html += `<div class="data-bar" style="margin-top:10px"><span class="dtag ok">${d.safe} safe</span> <span class="dtag warn">${d.risky} review</span> <span class="runinfo">auto-applied actions are additive &amp; idempotent; review actions need <code>--aggressive</code></span></div>`;
+    const qnote = d.queries ? `${d.queries} observed quer${d.queries === 1 ? "y" : "ies"} from the SQL console fed the index advice` : `run SELECTs in the Data console to get query-driven index advice here`;
+    html += `<div class="data-bar" style="margin-top:10px"><span class="dtag ok">${d.safe} safe</span> <span class="dtag warn">${d.risky} review</span> <span class="runinfo">${qnote}</span></div>`;
     for (const a of (d.actions || [])) {
       const cls = a.risk === "risky" ? "warn" : "ok";
       const tbl = a.table ? ` · ${esc(a.table)}` : "";
@@ -1514,6 +1531,85 @@ async function runAutopilot() {
   } catch (e) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(String(e))}</div>`; }
 }
 $("#autopilotRun")?.addEventListener("click", runAutopilot);
+
+let BACKUP_ENABLED = false, BACKUP_CREATE = false, BACKUP_RESTORE = false;
+
+function syncBackupPanel() {
+  if (!BACKUP_ENABLED || !STATE) return;
+  const names = (STATE.health?.results || []).map(r => r.database);
+  const sig = names.join("");
+  const sel = $("#backupDb");
+  if (sel.dataset.sig === sig) return;
+  const prev = sel.value;
+  sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.dataset.sig = sig;
+  if (prev && names.includes(prev)) sel.value = prev;
+  if (!$("#backupResult").innerHTML) loadSnapshots();
+}
+
+function fmtTime(s) { try { return new Date(s).toLocaleString(); } catch (_) { return s; } }
+
+async function loadSnapshots() {
+  const db = $("#backupDb").value, out = $("#backupResult");
+  if (!db) return;
+  try {
+    const res = await fetch(`/api/snapshots?db=${encodeURIComponent(db)}`);
+    const d = await res.json();
+    if (!res.ok) { out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(d.error || "failed")}</div>`; return; }
+    const snaps = d.snapshots || [];
+    let html = `<div class="block" style="margin-top:12px"><div class="bhead">snapshots<span class="bmeta">${snaps.length} stored</span></div><div class="bbody">`;
+    if (!snaps.length) {
+      html += `<div class="diff-ident">No snapshots yet — take one above.</div>`;
+    } else {
+      for (const s of snaps) {
+        html += `<div class="diff-line" style="display:flex;align-items:center;gap:10px;justify-content:space-between">`;
+        html += `<span>${fmtTime(s.created_at)}${s.label ? ` · <b>${esc(s.label)}</b>` : ""} · ${bytes(s.size_bytes)}</span>`;
+        if (BACKUP_RESTORE) html += `<button class="run" data-restore="${esc(s.path)}" style="padding:2px 10px">Restore</button>`;
+        html += `</div>`;
+      }
+    }
+    html += `</div></div>`;
+    out.innerHTML = html;
+  } catch (e) { out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(String(e))}</div>`; }
+}
+
+async function createSnapshot() {
+  const db = $("#backupDb").value, hint = $("#backupHint");
+  if (!db) return;
+  hint.textContent = "snapshotting…";
+  try {
+    const res = await fetch("/api/snapshot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ db, label: $("#backupLabel").value }) });
+    const d = await res.json();
+    hint.textContent = "";
+    if (!res.ok) { toast(d.error || "snapshot failed", "err"); return; }
+    $("#backupLabel").value = "";
+    toast("snapshot created", "ok");
+    loadSnapshots();
+  } catch (e) { hint.textContent = ""; toast(String(e), "err"); }
+}
+
+async function restoreSnapshot(path) {
+  const db = $("#backupDb").value;
+  if (!db || !confirm(`Restore ${db} from this snapshot?\n\nThe current state is snapshotted first as a safety net.`)) return;
+  const hint = $("#backupHint");
+  hint.textContent = "restoring…";
+  try {
+    const res = await fetch("/api/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ db, path }) });
+    const d = await res.json();
+    hint.textContent = "";
+    if (!res.ok) { toast(d.error || "restore failed", "err"); return; }
+    toast("restored — a pre-restore snapshot was saved", "ok");
+    loadSnapshots();
+    load();
+  } catch (e) { hint.textContent = ""; toast(String(e), "err"); }
+}
+
+$("#backupCreate")?.addEventListener("click", createSnapshot);
+$("#backupDb")?.addEventListener("change", loadSnapshots);
+$("#backupResult")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-restore]");
+  if (b) restoreSnapshot(b.dataset.restore);
+});
 
 // View routing — sidebar nav switches the active view.
 function showView(name) {
@@ -1544,6 +1640,9 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   DIFF_ENABLED = !!c.diff;
   LOCKS_ENABLED = !!c.locks;
   AUTOPILOT_ENABLED = !!c.autopilot;
+  BACKUP_ENABLED = !!c.backup;
+  BACKUP_CREATE = !!c.backup_create;
+  BACKUP_RESTORE = !!c.backup_restore;
   // Enable a nav item only when its capability is present.
   for (const it of document.querySelectorAll(".nav .item[data-cap]")) {
     if (c[it.dataset.cap]) it.classList.remove("disabled");
@@ -1553,6 +1652,7 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   if (DIFF_ENABLED) { syncDiffPanel(); }
   if (LOCKS_ENABLED) { syncLocksPanel(); }
   if (AUTOPILOT_ENABLED) { syncAutopilotPanel(); }
+  if (BACKUP_ENABLED) { syncBackupPanel(); }
 }).catch(() => {});
 
 load();
