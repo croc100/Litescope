@@ -96,10 +96,15 @@ func TestServe_ResourcesList_BoundSource(t *testing.T) {
 func TestServe_ResourcesList_NoSource_Empty(t *testing.T) {
 	r := run(t, `{"jsonrpc":"2.0","id":7,"method":"resources/list"}`)
 	resources := r[7]["result"].(map[string]interface{})["resources"]
-	if resources != nil {
-		if arr, ok := resources.([]interface{}); ok && len(arr) != 0 {
-			t.Errorf("expected no concrete resources without a bound source, got %v", arr)
-		}
+	// The MCP spec requires resources/list to return a JSON array. A nil slice
+	// marshals to null, which spec-compliant clients (e.g. Glama) reject — so
+	// without a bound source the result must be an empty array, never null.
+	arr, ok := resources.([]interface{})
+	if !ok {
+		t.Fatalf("resources must be a JSON array (not null), got %T: %v", resources, resources)
+	}
+	if len(arr) != 0 {
+		t.Errorf("expected no concrete resources without a bound source, got %v", arr)
 	}
 }
 

@@ -44,8 +44,11 @@ func resourceTemplates() []map[string]interface{} {
 
 // concreteResources lists the two resources for a bound default source, or nil.
 func concreteResources(defaultSource string) []map[string]interface{} {
+	// Always return a non-nil slice: the MCP spec requires resources/list to
+	// return a JSON array, and a nil slice marshals to null (rejected by spec-
+	// compliant clients). When no source is bound the list is empty, not null.
 	if defaultSource == "" {
-		return nil
+		return []map[string]interface{}{}
 	}
 	return []map[string]interface{}{
 		{
