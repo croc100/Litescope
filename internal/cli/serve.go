@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/croc100/litescope/internal/autopilot"
 	"github.com/croc100/litescope/internal/dashboard"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
@@ -183,6 +184,15 @@ Examples:
 				}
 				return lockReport(dsn)
 			})
+			// DBA autopilot: surface the maintenance/indexing plan (read-only —
+			// applying it is a deliberate CLI action, not a dashboard click).
+			srv.SetAutopilot(func(name string) (*dashboard.AutopilotPlan, error) {
+				dsn, err := resolveDSN(name)
+				if err != nil {
+					return nil, err
+				}
+				return autopilotPlan(dsn)
+			})
 
 			// Fleet-health timeline: persist a snapshot on each overview request
 			// so the dashboard can show trends across the session and beyond. The
@@ -341,6 +351,33 @@ func lockReport(dsn string) (*dashboard.LockReport, error) {
 					PID: h.PID, Command: h.Command, Access: h.Access,
 				})
 			}
+		}
+	}
+	return out, nil
+}
+
+// autopilotPlan builds the DBA autopilot plan for one resolved fleet DSN and
+// maps it into the dashboard's transport type. Autopilot inspects the live file
+// (fragmentation, missing FK indexes, redundant indexes), so it is local-only;
+// remote sources (d1://, turso://) are rejected.
+func autopilotPlan(dsn string) (*dashboard.AutopilotPlan, error) {
+	path, err := localDSNPath(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("autopilot supports local SQLite only (this database is remote)")
+	}
+	plan, err := autopilot.BuildPlan(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := &dashboard.AutopilotPlan{Source: path}
+	for _, a := range plan.Actions {
+		out.Actions = append(out.Actions, dashboard.AutopilotAction{
+			Kind: a.Kind, Risk: a.Risk, Table: a.Table, SQL: a.SQL, Reason: a.Reason,
+		})
+		if a.Risk == autopilot.RiskRisky {
+			out.Risky++
+		} else {
+			out.Safe++
 		}
 	}
 	return out, nil
@@ -641,7 +678,7 @@ func browseTable(dsn, table, orderBy, dir string, limit, offset int) (*dashboard
 	if orderBy != "" {
 		res.Dir = dir
 	}
-	_ = db.QueryRow("SELECT count(*) FROM "+quoteIdent(table)).Scan(&res.Total)
+	_ = db.QueryRow("SELECT count(*) FROM " + quoteIdent(table)).Scan(&res.Total)
 
 	dataRows, err := db.Query(q, limit, offset)
 	if err != nil {

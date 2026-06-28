@@ -28,9 +28,9 @@ var assets embed.FS
 type Overview struct {
 	FleetName   string                   `json:"fleet_name"`
 	Total       int                      `json:"total"`
-	Preview     bool                     `json:"preview"`      // true when a Free preview cap is in effect
-	PreviewCap  int                      `json:"preview_cap"`  // databases shown under the cap
-	FullTotal   int                      `json:"full_total"`   // databases the fleet actually contains
+	Preview     bool                     `json:"preview"`     // true when a Free preview cap is in effect
+	PreviewCap  int                      `json:"preview_cap"` // databases shown under the cap
+	FullTotal   int                      `json:"full_total"`  // databases the fleet actually contains
 	Health      *fleet.HealthReport      `json:"health"`
 	Fingerprint *fleet.FingerprintReport `json:"fingerprint"`
 	GeneratedAt time.Time                `json:"generated_at"`
@@ -156,12 +156,12 @@ type DiffData struct {
 // DiffResult is the full comparison rendered in the dashboard's diff panel —
 // "see what changes before you apply it".
 type DiffResult struct {
-	Old        string      `json:"old"`
-	New        string      `json:"new"`
-	Schema     []DiffTable `json:"schema"`
-	Data       []DiffData  `json:"data"`
-	Identical  bool        `json:"identical"`
-	DataSkipped bool       `json:"data_skipped"` // true for remote sources (schema-only)
+	Old         string      `json:"old"`
+	New         string      `json:"new"`
+	Schema      []DiffTable `json:"schema"`
+	Data        []DiffData  `json:"data"`
+	Identical   bool        `json:"identical"`
+	DataSkipped bool        `json:"data_skipped"` // true for remote sources (schema-only)
 }
 
 // DiffFn compares two databases by fleet name (old → new) and returns the
@@ -188,22 +188,47 @@ type LockHolder struct {
 // LockReport is the lock doctor's verdict for one database — static PRAGMA
 // diagnosis plus, for local files, a live probe of who holds the lock right now.
 type LockReport struct {
-	Source    string            `json:"source"`
-	Provider  string            `json:"provider"` // "local" | "d1" | "turso"
-	Verdict   string            `json:"verdict"`  // "ok" | "attention" | "critical"
-	Pragmas   map[string]string `json:"pragmas,omitempty"`
-	WALBytes  int64             `json:"wal_bytes"`
-	Findings  []LockFinding     `json:"findings"`
-	LiveState string            `json:"live_state,omitempty"` // "free" | "locked" | "readable" | "error"
-	LiveDetail string           `json:"live_detail,omitempty"`
-	WaitMS    int64             `json:"wait_ms,omitempty"`
-	Holders   []LockHolder      `json:"holders,omitempty"`
-	Hint      string            `json:"hint,omitempty"`
+	Source     string            `json:"source"`
+	Provider   string            `json:"provider"` // "local" | "d1" | "turso"
+	Verdict    string            `json:"verdict"`  // "ok" | "attention" | "critical"
+	Pragmas    map[string]string `json:"pragmas,omitempty"`
+	WALBytes   int64             `json:"wal_bytes"`
+	Findings   []LockFinding     `json:"findings"`
+	LiveState  string            `json:"live_state,omitempty"` // "free" | "locked" | "readable" | "error"
+	LiveDetail string            `json:"live_detail,omitempty"`
+	WaitMS     int64             `json:"wait_ms,omitempty"`
+	Holders    []LockHolder      `json:"holders,omitempty"`
+	Hint       string            `json:"hint,omitempty"`
 }
 
 // LocksFn diagnoses lock health for the named database. The CLI supplies it so
 // this package stays decoupled from DSN resolution; when nil, the panel hides.
 type LocksFn func(dbName string) (*LockReport, error)
+
+// AutopilotAction is one optimization step autopilot would take (mirrors
+// autopilot.Action). Risk is "safe" (auto-applied) or "risky" (needs review).
+type AutopilotAction struct {
+	Kind   string `json:"kind"` // analyze | optimize | vacuum | create-index | drop-index
+	Risk   string `json:"risk"` // safe | risky
+	Table  string `json:"table,omitempty"`
+	SQL    string `json:"sql,omitempty"` // the statement autopilot would run (empty = guidance only)
+	Reason string `json:"reason"`        // plain-language explanation
+}
+
+// AutopilotPlan is the DBA self-driving moat's verdict for one database: the set
+// of maintenance and indexing actions it would take, surfaced read-only so the
+// operator can see the plan before applying it from the CLI.
+type AutopilotPlan struct {
+	Source  string            `json:"source"`
+	Actions []AutopilotAction `json:"actions"`
+	Safe    int               `json:"safe"`  // count of safe (auto-applied) actions
+	Risky   int               `json:"risky"` // count of risky (review-first) actions
+}
+
+// AutopilotFn builds the autopilot plan for the named database. The CLI supplies
+// it so this package stays decoupled from DSN resolution; when nil, the panel
+// hides.
+type AutopilotFn func(dbName string) (*AutopilotPlan, error)
 
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
@@ -220,15 +245,16 @@ type BrowseFn func(dbName, table, orderBy, dir string, limit, offset int) (*Brow
 
 // Server serves the embedded dashboard and its JSON API.
 type Server struct {
-	provider Provider
-	importFn ImportFn
-	tablesFn TablesFn
-	queryFn  QueryFn
-	browseFn BrowseFn
-	schemaFn SchemaFn
-	diffFn   DiffFn
-	locksFn  LocksFn
-	history  *History
+	provider    Provider
+	importFn    ImportFn
+	tablesFn    TablesFn
+	queryFn     QueryFn
+	browseFn    BrowseFn
+	schemaFn    SchemaFn
+	diffFn      DiffFn
+	locksFn     LocksFn
+	autopilotFn AutopilotFn
+	history     *History
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -256,6 +282,9 @@ func (s *Server) SetDiffProvider(fn DiffFn) { s.diffFn = fn }
 
 // SetLockDoctor enables the lock doctor panel.
 func (s *Server) SetLockDoctor(fn LocksFn) { s.locksFn = fn }
+
+// SetAutopilot enables the DBA autopilot panel (read-only plan preview).
+func (s *Server) SetAutopilot(fn AutopilotFn) { s.autopilotFn = fn }
 
 // SetHistory enables the fleet-health timeline, persisting a snapshot on each
 // overview request to the given store.
@@ -309,13 +338,28 @@ func (s *Server) Handler() http.Handler {
 	// Advertises which optional features are available to the frontend.
 	mux.HandleFunc("/api/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{
-			"import": s.importFn != nil,
-			"data":   s.tablesFn != nil && s.queryFn != nil,
-			"browse": s.browseFn != nil,
-			"schema": s.schemaFn != nil,
-			"diff":   s.diffFn != nil,
-			"locks":  s.locksFn != nil,
+			"import":    s.importFn != nil,
+			"data":      s.tablesFn != nil && s.queryFn != nil,
+			"browse":    s.browseFn != nil,
+			"schema":    s.schemaFn != nil,
+			"diff":      s.diffFn != nil,
+			"locks":     s.locksFn != nil,
+			"autopilot": s.autopilotFn != nil,
 		})
+	})
+
+	// Builds the DBA autopilot plan (read-only) for one database.
+	mux.HandleFunc("/api/autopilot", func(w http.ResponseWriter, r *http.Request) {
+		if s.autopilotFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "autopilot is disabled"})
+			return
+		}
+		res, err := s.autopilotFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	// Diagnoses lock health (static PRAGMA + live probe) for one database.

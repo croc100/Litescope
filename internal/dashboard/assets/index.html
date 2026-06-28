@@ -319,6 +319,7 @@
     <nav class="nav" id="nav">
       <div class="item active" data-view="overview"><span class="ic">▦</span><span>Fleet</span></div>
       <div class="item disabled" data-view="locks" data-cap="locks"><span class="ic">◍</span><span>Lock doctor</span></div>
+      <div class="item disabled" data-view="autopilot" data-cap="autopilot"><span class="ic">◎</span><span>Autopilot</span></div>
       <div class="item disabled" data-view="erd" data-cap="schema"><span class="ic">◈</span><span>Schema</span></div>
       <div class="item disabled" data-view="diff" data-cap="diff"><span class="ic">⇄</span><span>Diff</span></div>
       <div class="item disabled" data-view="data" data-cap="data"><span class="ic">▤</span><span>Data</span></div>
@@ -426,6 +427,19 @@
       <span class="runinfo" id="locksHint"></span>
     </div>
     <div id="locksResult"></div>
+  </section>
+</div>
+
+<div class="view" id="view-autopilot">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Autopilot — DBA self-driving</div><h2>See the maintenance plan</h2>
+    <p class="sub">Autopilot derives the safe maintenance and indexing actions a DBA would take — refresh planner stats, reclaim fragmented space, add missing foreign-key indexes — and explains each in plain language. This is a read-only preview; apply it with <code>litescope autopilot &lt;db&gt; --apply</code> (it snapshots first, so every run is one <code>restore</code> from undo).</p>
+    <div class="data-bar">
+      <select id="autopilotDb" class="select"></select>
+      <button class="run" id="autopilotRun">Plan ▸</button>
+      <span class="runinfo" id="autopilotHint"></span>
+    </div>
+    <div id="autopilotResult"></div>
   </section>
 </div>
 
@@ -689,6 +703,7 @@ async function load() {
     syncErdPanel();
     syncDiffPanel();
     syncLocksPanel();
+    syncAutopilotPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -1461,6 +1476,45 @@ async function runLocks() {
 }
 $("#locksRun")?.addEventListener("click", runLocks);
 
+let AUTOPILOT_ENABLED = false;
+
+function syncAutopilotPanel() {
+  if (!AUTOPILOT_ENABLED || !STATE) return;
+  const names = (STATE.health?.results || []).map(r => r.database);
+  const sig = names.join("");
+  const sel = $("#autopilotDb");
+  if (sel.dataset.sig === sig) return;
+  const prev = sel.value;
+  sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.dataset.sig = sig;
+  if (prev && names.includes(prev)) sel.value = prev;
+}
+
+async function runAutopilot() {
+  const db = $("#autopilotDb").value, hint = $("#autopilotHint"), out = $("#autopilotResult");
+  if (!db) return;
+  hint.textContent = "planning…"; out.innerHTML = "";
+  try {
+    const res = await fetch(`/api/autopilot?db=${encodeURIComponent(db)}`);
+    const d = await res.json();
+    if (!res.ok) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(d.error || "failed")}</div>`; return; }
+    hint.textContent = "";
+    let html = "";
+    html += `<div class="data-bar" style="margin-top:10px"><span class="dtag ok">${d.safe} safe</span> <span class="dtag warn">${d.risky} review</span> <span class="runinfo">auto-applied actions are additive &amp; idempotent; review actions need <code>--aggressive</code></span></div>`;
+    for (const a of (d.actions || [])) {
+      const cls = a.risk === "risky" ? "warn" : "ok";
+      const tbl = a.table ? ` · ${esc(a.table)}` : "";
+      html += `<div class="diff-tbl"><div class="diff-tbl-head"><span class="dtag ${cls}">${esc(a.risk)}</span> ${esc(a.kind)}${tbl}</div><div class="diff-tbl-body">`;
+      html += `<div class="diff-line">${esc(a.reason)}</div>`;
+      if (a.sql) html += `<div class="diff-line diff-add">${esc(a.sql)}</div>`;
+      html += `</div></div>`;
+    }
+    if (!(d.actions || []).length) html += `<div class="diff-ident">✓ Nothing to do — this database is already well-tuned.</div>`;
+    out.innerHTML = html;
+  } catch (e) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(String(e))}</div>`; }
+}
+$("#autopilotRun")?.addEventListener("click", runAutopilot);
+
 // View routing — sidebar nav switches the active view.
 function showView(name) {
   for (const v of document.querySelectorAll(".view")) v.classList.toggle("active", v.id === "view-" + name);
@@ -1489,6 +1543,7 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   SCHEMA_ENABLED = !!c.schema;
   DIFF_ENABLED = !!c.diff;
   LOCKS_ENABLED = !!c.locks;
+  AUTOPILOT_ENABLED = !!c.autopilot;
   // Enable a nav item only when its capability is present.
   for (const it of document.querySelectorAll(".nav .item[data-cap]")) {
     if (c[it.dataset.cap]) it.classList.remove("disabled");
@@ -1497,6 +1552,7 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   if (SCHEMA_ENABLED) { initErdInteractions(); syncErdPanel(); }
   if (DIFF_ENABLED) { syncDiffPanel(); }
   if (LOCKS_ENABLED) { syncLocksPanel(); }
+  if (AUTOPILOT_ENABLED) { syncAutopilotPanel(); }
 }).catch(() => {});
 
 load();
