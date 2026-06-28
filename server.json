@@ -8,13 +8,13 @@
     "url": "https://github.com/croc100/Litescope",
     "source": "github"
   },
-  "version": "0.6.3",
+  "version": "0.6.6",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "litescope",
-      "version": "0.6.3",
+      "version": "0.6.6",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
