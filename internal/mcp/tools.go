@@ -213,6 +213,10 @@ func Registry(allowWrites bool) []Tool {
 				"old": strProp("Current ('before') source — " + sourcePropDesc),
 				"new": strProp("Target ('after') source with the desired schema — " + sourcePropDesc),
 			}, "old", "new"),
+			OutputSchema: outObj(props{
+				"sql":        {"type": "string", "description": "The migration SQL that brings 'old' up to the 'new' schema."},
+				"statements": {"type": "integer", "description": "Number of SQL statements in the migration."},
+			}, "sql", "statements"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				oldP, _ := args["old"].(string)
 				newP, _ := args["new"].(string)
@@ -352,6 +356,12 @@ func Registry(allowWrites bool) []Tool {
 				"against": strProp("Optional local reference database to compare schema against"),
 				"data":    boolProp("Also compare row counts per table"),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"Path":            {"type": "string", "description": "The backup database that was verified."},
+				"IntegrityOK":     {"type": "boolean", "description": "True if PRAGMA integrity_check passed."},
+				"IntegrityErrors": {"type": "array", "description": "Integrity problems found (omitted when none)."},
+				"Passed":          {"type": "boolean", "description": "Overall pass/fail across every check performed."},
+			}, "Path", "IntegrityOK", "Passed"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -448,6 +458,14 @@ func Registry(allowWrites bool) []Tool {
 				"source": strProp(sourcePropDesc),
 				"live":   boolProp("Probe the live lock state right now instead of static PRAGMA config (local files only)"),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"Verdict":  {"type": "string", "description": "Static diagnosis verdict: ok, attention, or critical."},
+				"Provider": {"type": "string", "description": "Backend: local, d1, or turso."},
+				"Findings": {"type": "array", "description": "Lock-configuration issues, each with the exact PRAGMA/DSN fix."},
+				"Pragmas":  {"type": "object", "description": "Relevant PRAGMA values (local files)."},
+				"state":    {"type": "string", "description": "With live=true: current lock state — free, locked, readable, or error."},
+				"holders":  {"type": "array", "description": "With live=true: processes holding the database file open."},
+			}),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
@@ -515,6 +533,12 @@ func Registry(allowWrites bool) []Tool {
 				"apply":      boolProp("Execute the safe actions. Default false (dry-run). Requires --allow-writes."),
 				"aggressive": boolProp("Also run risky actions (VACUUM, drop redundant indexes)."),
 			}, "source"),
+			OutputSchema: outObj(props{
+				"path":    {"type": "string", "description": "The optimized database."},
+				"applied": {"type": "boolean", "description": "True if actions were executed (apply=true); false for a dry-run plan."},
+				"actions": {"type": "array", "description": "Each action with kind, risk, SQL, status, and a plain-language reason."},
+				"counts":  {"type": "object", "description": "Action counts by status: applied, proposed, skipped, failed."},
+			}, "path", "actions"),
 			Handler: func(args map[string]interface{}) (string, error) {
 				src, err := requireSource(args)
 				if err != nil {
