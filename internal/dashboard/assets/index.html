@@ -6,79 +6,151 @@
 <title>Litescope — Fleet</title>
 <style>
   :root {
-    --bg:#080b10; --surface:#111820; --surface-2:#161d27; --border:#1e2a38;
-    --text:#8b9ab1; --head:#e2eaf4; --dim:#4e6078;
-    --teal:#00d4aa; --gold:#e2c97e; --danger:#f87171; --ok:#4ade80;
+    --bg:#0c0e13; --surface:#13161d; --surface-2:#191d26; --surface-3:#1f2430;
+    --border:#252b36; --border-strong:#333a47;
+    --text:#98a2b3; --head:#e8edf4; --dim:#5e6878;
+    --accent:#2dd4bf; --accent-bg:rgba(45,212,191,0.1); --accent-bd:rgba(45,212,191,0.35);
+    --gold:#e3b341; --gold-bg:rgba(227,179,65,0.12);
+    --danger:#f0616d; --danger-bg:rgba(240,97,109,0.12);
+    --ok:#3fb950; --ok-bg:rgba(63,185,80,0.12);
+    --teal:var(--accent);
+    --r:3px; --r-sm:2px;
     --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
     --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   }
+  [data-theme="light"] {
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#f0f2f5; --surface-3:#e8ebef;
+    --border:#e1e4e9; --border-strong:#cbd0d8;
+    --text:#5a6473; --head:#11151c; --dim:#9099a6;
+    --accent:#0f9b87; --accent-bg:rgba(15,155,135,0.1); --accent-bd:rgba(15,155,135,0.35);
+    --gold:#9a6a00; --gold-bg:rgba(154,106,0,0.1);
+    --danger:#c8313f; --danger-bg:rgba(200,49,63,0.1);
+    --ok:#1a7f37; --ok-bg:rgba(26,127,55,0.1);
+  }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5; -webkit-font-smoothing:antialiased; }
-  a { color:var(--teal); text-decoration:none; }
-  .wrap { max-width:1100px; margin:0 auto; padding:0 24px; }
-  header { border-bottom:1px solid var(--border); background:rgba(8,11,16,0.9); position:sticky; top:0; z-index:5; backdrop-filter:blur(10px); }
-  .head-inner { display:flex; align-items:center; justify-content:space-between; height:60px; }
-  .logo { display:flex; align-items:center; gap:9px; font-weight:700; color:var(--head); font-size:16px; }
-  .logo .mark { color:var(--teal); font-size:20px; }
-  .meta { font-size:12.5px; color:var(--dim); font-family:var(--mono); }
-  .badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; border:1px solid rgba(0,212,170,0.3); color:var(--teal); background:rgba(0,212,170,0.08); }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5; -webkit-font-smoothing:antialiased; font-size:13px; }
+  a { color:var(--accent); text-decoration:none; }
+  code { font-family:var(--mono); }
 
-  section { padding:32px 0; }
-  .eyebrow { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin-bottom:6px; }
-  h2 { font-size:20px; font-weight:700; color:var(--head); letter-spacing:-0.01em; margin-bottom:4px; }
-  .sub { font-size:13.5px; color:var(--text); margin-bottom:20px; }
+  /* App shell */
+  .shell { display:flex; min-height:100vh; }
+  .sidebar { width:172px; flex:none; background:var(--surface); border-right:1px solid var(--border-strong);
+    display:flex; flex-direction:column; position:sticky; top:0; height:100vh; }
+  .sidebar .brand { display:flex; align-items:center; gap:8px; padding:13px 14px; border-bottom:1px solid var(--border);
+    font-weight:600; font-size:14px; color:var(--head); letter-spacing:.01em; }
+  .sidebar .brand .mark { color:var(--accent); font-size:17px; }
+  .nav { padding:7px 0; display:flex; flex-direction:column; }
+  .nav .item { display:flex; align-items:center; gap:9px; padding:7px 14px; font-size:12.5px; color:var(--text);
+    border-left:2px solid transparent; cursor:pointer; user-select:none; }
+  .nav .item .ic { width:15px; text-align:center; font-size:14px; color:var(--dim); }
+  .nav .item:hover { color:var(--head); background:var(--surface-2); }
+  .nav .item.active { color:var(--accent); border-left-color:var(--accent); background:var(--accent-bg); }
+  .nav .item.active .ic { color:var(--accent); }
+  .nav .item.disabled { opacity:.35; pointer-events:none; }
+  .sidebar .foot-v { margin-top:auto; padding:9px 14px; border-top:1px solid var(--border); font-family:var(--mono);
+    font-size:10.5px; color:var(--dim); }
+  .content { flex:1; min-width:0; display:flex; flex-direction:column; }
 
-  /* Summary cards */
-  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:8px; }
-  .stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
-  .stat .n { font-size:28px; font-weight:800; color:var(--head); letter-spacing:-0.02em; }
-  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; }
-  .stat.crit .n { color:var(--danger); } .stat.warn .n { color:var(--gold); } .stat.ok .n { color:var(--ok); }
-  @media (max-width:640px){ .summary{ grid-template-columns:repeat(2,1fr);} }
+  /* Top bar */
+  .topbar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border-strong);
+    background:var(--surface); position:sticky; top:0; z-index:5; }
+  .topbar .fleetsel { font-family:var(--mono); }
+  .topbar .search { position:relative; flex:1; max-width:240px; }
+  .topbar .search .si { position:absolute; left:8px; top:7px; font-size:13px; color:var(--dim); pointer-events:none; }
+  .meta { font-size:11.5px; color:var(--dim); font-family:var(--mono); }
+  .spacer { flex:1; }
+  .badge { display:none; }
 
-  /* Topology grid */
-  .topo { display:grid; grid-template-columns:repeat(auto-fill,minmax(34px,1fr)); gap:6px; }
-  .cell { aspect-ratio:1; border-radius:7px; border:1px solid var(--border); background:var(--surface-2); cursor:default; position:relative; transition:transform .1s; }
-  .cell:hover { transform:scale(1.18); z-index:2; border-color:var(--head); }
-  .cell.ok { background:rgba(74,222,128,0.22); border-color:rgba(74,222,128,0.4); }
-  .cell.warn { background:rgba(226,201,126,0.28); border-color:rgba(226,201,126,0.5); }
-  .cell.crit { background:rgba(248,113,113,0.32); border-color:rgba(248,113,113,0.6); }
-  .legend { display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--dim); }
+  /* Controls — sharp, dense */
+  .refresh, .savebtn, .icon-btn {
+    font-family:var(--sans); font-size:12px; font-weight:500; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--border-strong); border-radius:var(--r);
+    padding:6px 11px; cursor:pointer; height:28px; display:inline-flex; align-items:center; gap:6px; }
+  .refresh:hover, .savebtn:hover, .icon-btn:hover { border-color:var(--accent); color:var(--head); }
+  .icon-btn { width:28px; padding:0; justify-content:center; }
+  .filter { font-family:var(--sans); font-size:12px; color:var(--head); background:var(--surface-2);
+    border:1px solid var(--border-strong); border-radius:var(--r); padding:6px 10px 6px 26px; width:100%; outline:none; height:28px; }
+  .filter:focus { border-color:var(--accent); }
+  .auto { font-size:12px; color:var(--dim); display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
+  .auto input { accent-color:var(--accent); }
+
+  /* Views */
+  .view { display:none; padding:16px; }
+  .view.active { display:block; }
+  .viewhead { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .viewhead h2 { font-size:15px; font-weight:500; color:var(--head); }
+  .viewhead .desc { font-size:12px; color:var(--dim); }
+  section { padding:0 0 22px; }
+  .eyebrow { font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim); margin-bottom:8px; }
+  h2 { font-size:15px; font-weight:500; color:var(--head); margin-bottom:2px; }
+  .sub { font-size:12px; color:var(--dim); margin-bottom:14px; }
+
+  /* KPI strip — dense, divided, no rounded cards */
+  .kpis { display:flex; border:1px solid var(--border-strong); border-radius:var(--r); overflow:hidden; margin-bottom:16px; }
+  .kpi { flex:1; padding:10px 14px; border-right:1px solid var(--border); }
+  .kpi:last-child { border-right:none; }
+  .kpi .l { font-size:10.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
+  .kpi .n { font-size:22px; font-weight:500; color:var(--head); font-family:var(--mono); line-height:1.3; }
+  .kpi.crit .n { color:var(--danger); } .kpi.warn .n { color:var(--gold); } .kpi.ok .n { color:var(--ok); }
+
+  /* Panel block */
+  .block { border:1px solid var(--border-strong); border-radius:var(--r); margin-bottom:16px; overflow:hidden; background:var(--surface); }
+  .block > .bhead { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--surface-2);
+    border-bottom:1px solid var(--border); font-size:12px; font-weight:500; color:var(--head); }
+  .block > .bhead .bmeta { font-family:var(--mono); font-size:11px; color:var(--dim); font-weight:400; }
+  .block > .bbody { padding:12px; }
+
+  /* Topology heatmap — tight, square */
+  .topo { display:grid; grid-template-columns:repeat(auto-fill,minmax(20px,1fr)); gap:3px; padding:12px; }
+  .cell { aspect-ratio:1; border-radius:var(--r-sm); border:1px solid var(--border); background:var(--surface-2);
+    cursor:pointer; position:relative; transition:outline .08s; }
+  .cell:hover { outline:1.5px solid var(--head); z-index:2; }
+  .cell.ok { background:var(--ok); opacity:.8; border-color:transparent; }
+  .cell.warn { background:var(--gold); border-color:transparent; }
+  .cell.crit { background:var(--danger); border-color:transparent; }
+  .legend { display:flex; gap:16px; padding:0 12px 12px; font-size:11px; color:var(--dim); }
   .legend span { display:inline-flex; align-items:center; gap:6px; }
-  .dot { width:11px; height:11px; border-radius:3px; }
+  .dot { width:9px; height:9px; border-radius:var(--r-sm); }
 
-  /* Health list */
-  .row { display:flex; align-items:center; gap:14px; padding:11px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; background:var(--surface); }
-  .row .sev { width:7px; height:34px; border-radius:4px; flex-shrink:0; }
-  .row .name { font-family:var(--mono); font-size:13px; color:var(--head); min-width:160px; }
-  .row .issues { font-size:13px; color:var(--text); }
-  .row .ok-msg { font-size:13px; color:var(--ok); }
-  .pill { font-size:11px; font-family:var(--mono); color:var(--dim); margin-left:auto; white-space:nowrap; }
+  /* Worklist table */
+  .wtable { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .wtable th { text-align:left; font-weight:400; color:var(--dim); padding:7px 12px; background:var(--surface-2);
+    border-bottom:1px solid var(--border-strong); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .wtable td { padding:7px 12px; border-bottom:1px solid var(--border); font-family:var(--mono); }
+  .wtable tr:last-child td { border-bottom:none; }
+  .wtable tr.clickable { cursor:pointer; }
+  .wtable tr.clickable:hover td { background:var(--surface-2); }
+  .wtable tr[data-sev] td:first-child { border-left:2px solid transparent; }
+  .wtable tr.sev-crit td:first-child { border-left-color:var(--danger); }
+  .wtable tr.sev-warn td:first-child { border-left-color:var(--gold); }
+  .wtable tr.sev-ok td:first-child { border-left-color:var(--ok); }
+  .wtable .issues { font-family:var(--sans); color:var(--text); white-space:normal; }
+  .num { text-align:right; color:var(--text); }
+  /* Square status badge */
+  .sb { display:inline-block; font-size:10.5px; font-family:var(--mono); padding:1px 6px; border-radius:var(--r-sm); }
+  .sb.ok { background:var(--ok-bg); color:var(--ok); }
+  .sb.warn { background:var(--gold-bg); color:var(--gold); }
+  .sb.crit { background:var(--danger-bg); color:var(--danger); }
+  .sb.muted { color:var(--dim); }
 
-  /* Fingerprint clusters */
-  .cluster { border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; background:var(--surface); }
-  .cluster .bar { height:10px; border-radius:5px; background:rgba(0,212,170,0.25); margin:8px 0; }
-  .cluster.drift .bar { background:rgba(226,201,126,0.4); }
-  .cluster .h { display:flex; align-items:center; gap:10px; font-size:13px; }
+  /* Fingerprint clusters — sharp */
+  .cluster { border:1px solid var(--border); border-radius:var(--r); padding:11px 13px; margin-bottom:8px; background:var(--surface-2); }
+  .cluster .bar { height:6px; border-radius:var(--r-sm); background:var(--accent); opacity:.55; margin:7px 0; }
+  .cluster.drift .bar { background:var(--gold); }
+  .cluster .h { display:flex; align-items:center; gap:9px; font-size:12.5px; }
   .cluster .id { font-family:var(--mono); color:var(--head); }
-  .cluster .tag { font-size:10px; font-weight:600; text-transform:uppercase; padding:1px 7px; border-radius:999px; }
-  .cluster .tag.canon { background:rgba(0,212,170,0.15); color:var(--teal); }
-  .cluster .tag.drift { background:rgba(226,201,126,0.15); color:var(--gold); }
-  .cluster .drift-line { font-size:12px; color:var(--text); font-family:var(--mono); margin-top:2px; }
-  .cluster .members { font-size:11.5px; color:var(--dim); margin-top:6px; }
+  .cluster .tag { font-size:10px; font-weight:500; text-transform:uppercase; padding:1px 6px; border-radius:var(--r-sm); }
+  .cluster .tag.canon { background:var(--accent-bg); color:var(--accent); }
+  .cluster .tag.drift { background:var(--gold-bg); color:var(--gold); }
+  .cluster .drift-line { font-size:11.5px; color:var(--text); font-family:var(--mono); margin-top:2px; }
+  .cluster .members { font-size:11px; color:var(--dim); margin-top:6px; font-family:var(--mono); }
 
-  .note { background:rgba(226,201,126,0.08); border:1px solid rgba(226,201,126,0.3); border-radius:10px; padding:12px 16px; font-size:13px; color:var(--gold); margin-bottom:20px; }
-  .empty { color:var(--dim); font-size:14px; padding:24px 0; text-align:center; }
-  .err { color:var(--danger); font-family:var(--mono); font-size:13px; padding:20px; border:1px solid rgba(248,113,113,0.4); border-radius:10px; background:rgba(248,113,113,0.06); }
-  .foot { padding:28px 0 48px; font-size:12px; color:var(--dim); text-align:center; }
-  .refresh { font-family:var(--sans); font-size:12.5px; font-weight:600; color:var(--head); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 14px; cursor:pointer; }
-  .refresh:hover { border-color:var(--teal); }
-  .filter { font-family:var(--sans); font-size:13px; color:var(--head); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; width:180px; outline:none; }
-  .filter:focus { border-color:var(--teal); }
-  .auto { font-size:12.5px; color:var(--dim); display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
-  .auto input { accent-color:var(--teal); }
+  .note { background:var(--gold-bg); border:1px solid var(--gold); border-radius:var(--r); padding:10px 14px; font-size:12.5px; color:var(--gold); margin-bottom:16px; }
+  .empty { color:var(--dim); font-size:13px; padding:22px; text-align:center; }
+  .err { color:var(--danger); font-family:var(--mono); font-size:12.5px; padding:16px; border:1px solid var(--danger); border-radius:var(--r); background:var(--danger-bg); }
+  .foot { padding:22px 0 40px; font-size:11.5px; color:var(--dim); text-align:center; }
   .cell { cursor:pointer; }
-  @media (max-width:640px){ .filter{ width:120px; } .meta{ display:none; } }
+  @media (max-width:720px){ .sidebar{ width:52px; } .sidebar .brand span:not(.mark), .nav .item span:not(.ic), .sidebar .foot-v{ display:none; } }
 
   /* Detail drawer */
   .scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:20; opacity:0; pointer-events:none; transition:opacity .15s; }
@@ -237,23 +309,34 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap head-inner">
-    <div class="logo"><span class="mark">◎</span> Litescope <span class="badge" id="tierBadge">fleet</span></div>
-    <div style="display:flex; align-items:center; gap:12px;">
-      <input id="filter" class="filter" type="search" placeholder="Filter databases…" autocomplete="off" />
-      <label class="auto"><input type="checkbox" id="autoBtn" /> Auto</label>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="mark">◎</span><span>litescope</span></div>
+    <nav class="nav" id="nav">
+      <div class="item active" data-view="overview"><span class="ic">▦</span><span>Fleet</span></div>
+      <div class="item disabled" data-view="locks" data-cap="locks"><span class="ic">◍</span><span>Lock doctor</span></div>
+      <div class="item disabled" data-view="erd" data-cap="schema"><span class="ic">◈</span><span>Schema</span></div>
+      <div class="item disabled" data-view="diff" data-cap="diff"><span class="ic">⇄</span><span>Diff</span></div>
+      <div class="item disabled" data-view="data" data-cap="data"><span class="ic">▤</span><span>Data</span></div>
+    </nav>
+    <div class="foot-v" id="footV">no data leaves host</div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
       <span class="meta" id="meta">loading…</span>
-      <button class="refresh" id="refreshBtn">↻ Refresh</button>
+      <div class="spacer"></div>
+      <div class="search"><span class="si">⌕</span><input id="filter" class="filter" type="search" placeholder="filter databases" autocomplete="off" /></div>
+      <label class="auto"><input type="checkbox" id="autoBtn" /> auto</label>
+      <button class="refresh" id="refreshBtn">↻ refresh</button>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </header>
+
+    <div class="view active" id="view-overview">
+      <main id="app"><div class="empty">Loading fleet…</div></main>
     </div>
-  </div>
-</header>
 
-<main class="wrap" id="app">
-  <div class="empty">Loading fleet…</div>
-</main>
-
-<div class="wrap" id="dataPanel" style="display:none">
+<div class="view" id="view-data">
   <section style="border-top:1px solid var(--border)">
     <div class="eyebrow">Data — read-only</div><h2>Browse &amp; query your tables</h2>
     <p class="sub">Pick a database, click a table to preview, or run any read-only SQL. Writes are rejected at the engine level.</p>
@@ -298,7 +381,7 @@
   </section>
 </div>
 
-<div class="wrap" id="erdPanel" style="display:none">
+<div class="view" id="view-erd">
   <section style="border-top:1px solid var(--border)">
     <div class="eyebrow">Schema — ERD</div><h2>Entity-relationship diagram</h2>
     <p class="sub">Tables and their foreign-key relationships. Drag tables to rearrange, scroll to zoom, drag the canvas to pan.</p>
@@ -314,7 +397,7 @@
   </section>
 </div>
 
-<div class="wrap" id="diffPanel" style="display:none">
+<div class="view" id="view-diff">
   <section style="border-top:1px solid var(--border)">
     <div class="eyebrow">Diff — review before you apply</div><h2>Compare two databases</h2>
     <p class="sub">Pick an old and a new database to see exactly what schema and data changes between them — added/removed tables and columns, type changes, and row-count deltas.</p>
@@ -329,7 +412,7 @@
   </section>
 </div>
 
-<div class="wrap" id="locksPanel" style="display:none">
+<div class="view" id="view-locks">
   <section style="border-top:1px solid var(--border)">
     <div class="eyebrow">Lock doctor — "database is locked"</div><h2>Diagnose lock contention</h2>
     <p class="sub">SQLite has a single writer, so <code>SQLITE_BUSY</code> is the most common production failure. Pick a database to see its WAL / busy_timeout / locking-mode config, whether a writer holds the lock <em>right now</em>, and the exact fix.</p>
@@ -342,13 +425,14 @@
   </section>
 </div>
 
+  </div>
+</div>
+
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer"><button class="close" id="drawerClose">×</button><div id="drawerBody"></div></aside>
 
 <div class="dropmask" id="dropmask"><div class="box"><div class="big">⬇︎</div><div>Drop a CSV, TSV, JSON or Excel file</div><div class="sub">It becomes a new database in your fleet</div></div></div>
 <div class="toast" id="toast"></div>
-
-<div class="foot">Litescope · local dashboard · no data leaves this machine</div>
 
 <script>
 const $ = (sel) => document.querySelector(sel);
@@ -400,56 +484,56 @@ function render() {
     html += `<div class="note">Free preview — showing ${ov.preview_cap} of ${ov.full_total} databases. The full fleet unlocks with Pro.</div>`;
   }
 
-  // Summary (always whole-fleet counts, not filtered)
-  html += `<section style="padding-top:28px"><div class="summary">
-    <div class="stat"><div class="n">${ov.total}</div><div class="l">databases</div></div>
-    <div class="stat ok"><div class="n">${c.ok}</div><div class="l">healthy</div></div>
-    <div class="stat warn"><div class="n">${c.warn}</div><div class="l">warning</div></div>
-    <div class="stat crit"><div class="n">${c.crit}</div><div class="l">critical</div></div>
-  </div></section>`;
+  // KPI strip — whole-fleet counts (not filtered)
+  html += `<div class="kpis">
+    <div class="kpi"><div class="l">databases</div><div class="n">${ov.total}</div></div>
+    <div class="kpi ok"><div class="l">healthy</div><div class="n">${c.ok}</div></div>
+    <div class="kpi warn"><div class="l">warning</div><div class="n">${c.warn}</div></div>
+    <div class="kpi crit"><div class="l">critical</div><div class="n">${c.crit}</div></div>
+  </div>`;
 
-  // Topology map
-  html += `<section><div class="eyebrow">Topology${FILTER ? ` · filtered (${results.length})` : ""}</div><h2>Every tenant, one screen</h2>
-    <p class="sub">One cell per database, colored by health. Click for detail.</p><div class="topo">`;
+  // Topology heatmap
+  html += `<div class="block"><div class="bhead">topology<span class="bmeta">${results.length} shown${FILTER ? " · filtered" : ""} · click a cell</span></div><div class="topo">`;
   for (const r of results) {
     const s = r.report?.severity;
     const issues = (r.report?.issues || []).join(" · ") || (s === "ok" ? "healthy" : "");
     const title = `${r.database}\n${s}${issues ? " — " + issues : ""}`;
     html += `<div class="cell ${sevClass(s)}" data-name="${esc(r.database)}" title="${esc(title)}"></div>`;
   }
+  html += `</div>`;
   if (!results.length) html += `<div class="empty">No databases match "${esc(FILTER)}".</div>`;
-  html += `</div><div class="legend">
-    <span><i class="dot" style="background:rgba(74,222,128,0.5)"></i>healthy</span>
-    <span><i class="dot" style="background:rgba(226,201,126,0.6)"></i>warning</span>
-    <span><i class="dot" style="background:rgba(248,113,113,0.7)"></i>critical</span>
-  </div></section>`;
+  html += `<div class="legend">
+    <span><i class="dot" style="background:var(--ok)"></i>healthy</span>
+    <span><i class="dot" style="background:var(--gold)"></i>warning</span>
+    <span><i class="dot" style="background:var(--danger)"></i>critical</span>
+  </div></div>`;
 
-  // Health, worst-first
-  html += `<section><div class="eyebrow">Health — worst first</div><h2>Faults that need you</h2>
-    <p class="sub">Corruption, WAL bloat from a starved checkpoint, fragmentation, and reachability.</p>`;
+  // Worklist — worst first
   const faults = results.filter(r => r.report?.severity !== "ok");
-  const shown = faults.length ? faults : results.slice(0, 8);
+  const shown = faults.length ? faults : results.slice(0, 10);
+  html += `<div class="block"><div class="bhead">needs attention<span class="bmeta">order: severity desc</span></div>`;
   if (!results.length) {
     html += `<div class="empty">No databases match the filter.</div>`;
   } else {
-    if (!faults.length) html += `<div class="note" style="color:var(--ok);border-color:rgba(74,222,128,0.3);background:rgba(74,222,128,0.07)">All databases healthy. Showing a sample below.</div>`;
+    html += `<table class="wtable"><thead><tr><th>database</th><th style="width:88px">status</th><th>issues</th><th class="num" style="width:120px">size</th></tr></thead><tbody>`;
     for (const r of shown) {
       const rep = r.report || {};
       const sc = sevClass(rep.severity);
-      const sevColor = sc === "crit" ? "var(--danger)" : sc === "warn" ? "var(--gold)" : "var(--ok)";
-      const body = (rep.issues && rep.issues.length)
-        ? `<span class="issues">${esc(rep.issues.join(" · "))}</span>`
-        : `<span class="ok-msg">healthy</span>`;
-      const pill = rep.remote ? "remote" : `${bytes(rep.size_bytes)}${rep.wal_bytes ? " · wal " + bytes(rep.wal_bytes) : ""}`;
-      html += `<div class="row" data-name="${esc(r.database)}"><div class="sev" style="background:${sevColor}"></div>
-        <span class="name">${esc(r.database)}</span>${body}<span class="pill">${esc(pill)}</span></div>`;
+      const issues = (rep.issues && rep.issues.length) ? esc(rep.issues.join(" · ")) : (sc === "ok" ? "—" : "");
+      const size = rep.remote ? "remote" : `${bytes(rep.size_bytes)}${rep.wal_bytes ? " · wal " + bytes(rep.wal_bytes) : ""}`;
+      html += `<tr class="clickable sev-${sc}" data-sev="${sc}" data-name="${esc(r.database)}">
+        <td>${esc(r.database)}</td>
+        <td><span class="sb ${sc}">${esc(rep.severity || "—")}</span></td>
+        <td class="issues">${issues}</td>
+        <td class="num">${esc(size)}</td></tr>`;
     }
+    html += `</tbody></table>`;
+    if (!faults.length) html += `<div class="empty" style="padding:10px 12px;text-align:left;color:var(--ok)">All databases healthy — showing a sample.</div>`;
   }
-  html += `</section>`;
+  html += `</div>`;
 
-  // Fingerprint clusters (whole fleet — aggregate view)
-  html += `<section><div class="eyebrow">Schema fingerprint</div><h2>How many schemas do you really run?</h2>
-    <p class="sub">Identical schemas cluster together. The largest is canonical; the rest show how they drifted.</p>`;
+  // Schema fingerprint clusters
+  html += `<div class="block"><div class="bhead">schema fingerprint<span class="bmeta">${clusters.length} distinct schema${clusters.length === 1 ? "" : "s"}</span></div><div class="bbody">`;
   if (!clusters.length) {
     html += `<div class="empty">No schema data.</div>`;
   } else {
@@ -468,14 +552,14 @@ function render() {
       html += `<div class="cluster ${drift}">
         <div class="h"><span class="id">${esc(cl.id)}</span>
         <span class="tag ${cl.is_canonical ? "canon" : "drift"}">${cl.is_canonical ? "canonical" : "drift"}</span>
-        <span style="margin-left:auto;color:var(--head);font-weight:700">${cl.count}</span></div>
+        <span style="margin-left:auto;color:var(--head);font-family:var(--mono)">${cl.count}</span></div>
         <div class="bar" style="width:${pct}%"></div>
         ${driftLines}
         <div class="members">${esc((cl.members || []).slice(0,12).join(", "))}${(cl.members||[]).length > 12 ? " …" : ""}</div>
       </div>`;
     }
   }
-  html += `</section>`;
+  html += `</div></div>`;
 
   $("#app").innerHTML = html;
 }
@@ -1301,16 +1385,42 @@ async function runLocks() {
 }
 $("#locksRun")?.addEventListener("click", runLocks);
 
+// View routing — sidebar nav switches the active view.
+function showView(name) {
+  for (const v of document.querySelectorAll(".view")) v.classList.toggle("active", v.id === "view-" + name);
+  for (const it of document.querySelectorAll(".nav .item")) it.classList.toggle("active", it.dataset.view === name);
+}
+$("#nav").addEventListener("click", (e) => {
+  const it = e.target.closest(".item");
+  if (!it || it.classList.contains("disabled")) return;
+  showView(it.dataset.view);
+});
+
+// Theme toggle — persisted, defaults to dark.
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("#themeBtn").textContent = t === "light" ? "◑" : "◐";
+  try { localStorage.setItem("ls-theme", t); } catch (_) {}
+}
+applyTheme((() => { try { return localStorage.getItem("ls-theme") || "dark"; } catch (_) { return "dark"; } })());
+$("#themeBtn").addEventListener("click", () => {
+  applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+});
+
 fetch("/api/capabilities").then(r => r.json()).then(c => {
   IMPORT_ENABLED = !!c.import;
   DATA_ENABLED = !!c.data;
   SCHEMA_ENABLED = !!c.schema;
   DIFF_ENABLED = !!c.diff;
   LOCKS_ENABLED = !!c.locks;
-  if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); renderHistory(); }
-  if (SCHEMA_ENABLED) { $("#erdPanel").style.display = ""; initErdInteractions(); syncErdPanel(); }
-  if (DIFF_ENABLED) { $("#diffPanel").style.display = ""; syncDiffPanel(); }
-  if (LOCKS_ENABLED) { $("#locksPanel").style.display = ""; syncLocksPanel(); }
+  // Enable a nav item only when its capability is present.
+  for (const it of document.querySelectorAll(".nav .item[data-cap]")) {
+    if (c[it.dataset.cap]) it.classList.remove("disabled");
+  }
+  if (DATA_ENABLED) { syncDataPanel(); renderHistory(); }
+  if (SCHEMA_ENABLED) { initErdInteractions(); syncErdPanel(); }
+  if (DIFF_ENABLED) { syncDiffPanel(); }
+  if (LOCKS_ENABLED) { syncLocksPanel(); }
 }).catch(() => {});
 
 load();
