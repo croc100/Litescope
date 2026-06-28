@@ -184,15 +184,21 @@ become the priority order for the depth work above.
 surface, so it has to read like a serious operations tool, not a hobby utility.
 Shipped: an app shell (sidebar nav + routed views), dual light/dark theming, and
 a dense at-a-glance fleet overview (KPI strip, topology heatmap, worst-first
-worklist). Remaining:
+worklist).
 
-1. **Panel restyle** — bring the lock doctor, diff, data browser, and ERD panels
-   onto the new design tokens (sharp, dense, status-only color) so the whole app
-   is visually coherent.
-2. **Time dimension (true monitoring)** — today the dashboard is point-in-time.
-   Persist a health history so the overview can show sparklines / trends, a
-   `SQLITE_BUSY` and WAL-size time-series, and heartbeat staleness — turning the
-   snapshot view into a real monitor. (Ties into Phase H heartbeat / alerting.)
+- ✅ **Panel restyle** — the lock doctor, diff, data browser, and ERD panels now
+  share the shell's sharp, dense design tokens (status-only color), so the whole
+  app is visually coherent in both themes.
+- ✅ **Time dimension (fleet health)** — the dashboard is no longer point-in-time:
+  a local SQLite history store (`~/.cache/litescope/history.db`) records a fleet
+  health/size snapshot on each overview request, surfaced as per-KPI sparklines
+  and a stacked ok/warning/critical "fleet health over time" timeline.
+
+Remaining time-dimension depth (ties into Phase H heartbeat / alerting):
+
+- **Per-database time-series** — `SQLITE_BUSY` and WAL-size history per DB (the
+  fleet-level health timeline shipped; per-DB lock/WAL trends are next).
+- **Heartbeat staleness** — flag databases that stopped reporting.
 
 ### Phase H — Fleet observability & alerting (hosted dashboard)
 
