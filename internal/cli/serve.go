@@ -16,6 +16,7 @@ import (
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/importer"
 	"github.com/croc100/litescope/internal/license"
+	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/spf13/cobra"
 	_ "modernc.org/sqlite"
@@ -172,6 +173,15 @@ Examples:
 				}
 				return diffDatabases(oldDSN, newDSN)
 			})
+			// Lock doctor: diagnose "database is locked" — static PRAGMA config
+			// plus a live probe of who holds the write lock right now.
+			srv.SetLockDoctor(func(name string) (*dashboard.LockReport, error) {
+				dsn, err := resolveDSN(name)
+				if err != nil {
+					return nil, err
+				}
+				return lockReport(dsn)
+			})
 
 			url := "http://" + addr
 
@@ -265,6 +275,49 @@ func openReadOnly(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// lockReport runs the lock doctor for one resolved fleet DSN and maps the result
+// into the dashboard's transport type. Local files get a live probe (who holds
+// the write lock right now) on top of the static PRAGMA diagnosis; remote
+// sources (d1://, turso://) get static guidance only.
+func lockReport(dsn string) (*dashboard.LockReport, error) {
+	src := dsn
+	local := false
+	if path, err := localDSNPath(dsn); err == nil {
+		src = path
+		local = true
+	}
+	rep, err := locks.Diagnose(src)
+	if err != nil {
+		return nil, err
+	}
+	out := &dashboard.LockReport{
+		Source:   rep.Source,
+		Provider: rep.Provider,
+		Verdict:  rep.Verdict,
+		Pragmas:  rep.Pragmas,
+		WALBytes: rep.WALBytes,
+	}
+	for _, f := range rep.Findings {
+		out.Findings = append(out.Findings, dashboard.LockFinding{
+			Severity: f.Severity, Rule: f.Rule, Summary: f.Summary, Detail: f.Detail, Fix: f.Fix,
+		})
+	}
+	if local {
+		if probe, perr := locks.Probe(src, 250*time.Millisecond); perr == nil {
+			out.LiveState = string(probe.State)
+			out.LiveDetail = probe.Detail
+			out.WaitMS = probe.WaitMS
+			out.Hint = probe.Hint
+			for _, h := range probe.Holders {
+				out.Holders = append(out.Holders, dashboard.LockHolder{
+					PID: h.PID, Command: h.Command, Access: h.Access,
+				})
+			}
+		}
+	}
+	return out, nil
 }
 
 // schemaGraph loads the ERD graph (tables, columns, foreign keys) of a local

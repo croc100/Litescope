@@ -169,6 +169,42 @@ type DiffResult struct {
 // resolution and the diff engine; when nil, the diff panel is disabled.
 type DiffFn func(oldDB, newDB string) (*DiffResult, error)
 
+// LockFinding is one static lock-configuration issue (mirrors locks.Finding).
+type LockFinding struct {
+	Severity string `json:"severity"` // "ok" | "warning" | "critical"
+	Rule     string `json:"rule"`
+	Summary  string `json:"summary"`
+	Detail   string `json:"detail"`
+	Fix      string `json:"fix"`
+}
+
+// LockHolder is a process holding the database file open (mirrors locks.Holder).
+type LockHolder struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	Access  string `json:"access"`
+}
+
+// LockReport is the lock doctor's verdict for one database — static PRAGMA
+// diagnosis plus, for local files, a live probe of who holds the lock right now.
+type LockReport struct {
+	Source    string            `json:"source"`
+	Provider  string            `json:"provider"` // "local" | "d1" | "turso"
+	Verdict   string            `json:"verdict"`  // "ok" | "attention" | "critical"
+	Pragmas   map[string]string `json:"pragmas,omitempty"`
+	WALBytes  int64             `json:"wal_bytes"`
+	Findings  []LockFinding     `json:"findings"`
+	LiveState string            `json:"live_state,omitempty"` // "free" | "locked" | "readable" | "error"
+	LiveDetail string           `json:"live_detail,omitempty"`
+	WaitMS    int64             `json:"wait_ms,omitempty"`
+	Holders   []LockHolder      `json:"holders,omitempty"`
+	Hint      string            `json:"hint,omitempty"`
+}
+
+// LocksFn diagnoses lock health for the named database. The CLI supplies it so
+// this package stays decoupled from DSN resolution; when nil, the panel hides.
+type LocksFn func(dbName string) (*LockReport, error)
+
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
 // browser is disabled.
@@ -191,6 +227,7 @@ type Server struct {
 	browseFn BrowseFn
 	schemaFn SchemaFn
 	diffFn   DiffFn
+	locksFn  LocksFn
 }
 
 // New builds a dashboard server backed by the given provider.
@@ -215,6 +252,9 @@ func (s *Server) SetSchemaProvider(fn SchemaFn) { s.schemaFn = fn }
 
 // SetDiffProvider enables the visual schema/data diff panel.
 func (s *Server) SetDiffProvider(fn DiffFn) { s.diffFn = fn }
+
+// SetLockDoctor enables the lock doctor panel.
+func (s *Server) SetLockDoctor(fn LocksFn) { s.locksFn = fn }
 
 // Handler returns the HTTP handler (useful for tests and custom hosting).
 func (s *Server) Handler() http.Handler {
@@ -244,7 +284,22 @@ func (s *Server) Handler() http.Handler {
 			"browse": s.browseFn != nil,
 			"schema": s.schemaFn != nil,
 			"diff":   s.diffFn != nil,
+			"locks":  s.locksFn != nil,
 		})
+	})
+
+	// Diagnoses lock health (static PRAGMA + live probe) for one database.
+	mux.HandleFunc("/api/locks", func(w http.ResponseWriter, r *http.Request) {
+		if s.locksFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "lock doctor is disabled"})
+			return
+		}
+		res, err := s.locksFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	// Compares two databases (old → new) and returns the curated schema/data diff.

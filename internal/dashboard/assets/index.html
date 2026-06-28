@@ -329,6 +329,19 @@
   </section>
 </div>
 
+<div class="wrap" id="locksPanel" style="display:none">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Lock doctor — "database is locked"</div><h2>Diagnose lock contention</h2>
+    <p class="sub">SQLite has a single writer, so <code>SQLITE_BUSY</code> is the most common production failure. Pick a database to see its WAL / busy_timeout / locking-mode config, whether a writer holds the lock <em>right now</em>, and the exact fix.</p>
+    <div class="data-bar">
+      <select id="locksDb" class="select"></select>
+      <button class="run" id="locksRun">Diagnose ▸</button>
+      <span class="runinfo" id="locksHint"></span>
+    </div>
+    <div id="locksResult"></div>
+  </section>
+</div>
+
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer"><button class="close" id="drawerClose">×</button><div id="drawerBody"></div></aside>
 
@@ -515,6 +528,7 @@ async function load() {
     syncDataPanel();
     syncErdPanel();
     syncDiffPanel();
+    syncLocksPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -1236,14 +1250,67 @@ function renderDiff(d) {
 
 $("#diffRun")?.addEventListener("click", runDiff);
 
+let LOCKS_ENABLED = false;
+
+function syncLocksPanel() {
+  if (!LOCKS_ENABLED || !STATE) return;
+  const names = (STATE.health?.results || []).map(r => r.database);
+  const sig = names.join("");
+  const sel = $("#locksDb");
+  if (sel.dataset.sig === sig) return;
+  const prev = sel.value;
+  sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.dataset.sig = sig;
+  if (prev && names.includes(prev)) sel.value = prev;
+}
+
+const liveLabel = (s) => ({
+  free: ["✓ Free", "ok"], locked: ["● Locked", "crit"],
+  readable: ["◐ Contended", "warn"], error: ["✕ Error", "warn"],
+}[s] || ["—", "ok"]);
+
+async function runLocks() {
+  const db = $("#locksDb").value, hint = $("#locksHint"), out = $("#locksResult");
+  if (!db) return;
+  hint.textContent = "diagnosing…"; out.innerHTML = "";
+  try {
+    const res = await fetch(`/api/locks?db=${encodeURIComponent(db)}`);
+    const d = await res.json();
+    if (!res.ok) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:#f48771">${esc(d.error || "failed")}</div>`; return; }
+    hint.textContent = "";
+    let html = "";
+    const vtag = sevClass(d.verdict === "critical" ? "critical" : d.verdict === "attention" ? "warning" : "ok");
+    html += `<div class="data-bar" style="margin-top:10px"><span class="dtag ${vtag}">verdict: ${esc(d.verdict)}</span> <span class="runinfo">${esc(d.provider)}${d.wal_bytes ? " · WAL " + bytes(d.wal_bytes) : ""}</span></div>`;
+    if (d.live_state) {
+      const [lbl, cls] = liveLabel(d.live_state);
+      html += `<div class="diff-tbl"><div class="diff-tbl-head"><span class="dtag ${cls}">${lbl}</span> live lock state${d.wait_ms ? ` · waited ${d.wait_ms}ms` : ""}</div><div class="diff-tbl-body">`;
+      if (d.live_detail) html += `<div class="diff-line">${esc(d.live_detail)}</div>`;
+      for (const h of (d.holders || [])) html += `<div class="diff-line">pid ${h.pid} · ${esc(h.command)} · ${esc(h.access)}</div>`;
+      if (d.hint) html += `<div class="diff-line diff-chg">${esc(d.hint)}</div>`;
+      html += `</div></div>`;
+    }
+    for (const f of (d.findings || [])) {
+      html += `<div class="diff-tbl"><div class="diff-tbl-head"><span class="dtag ${sevClass(f.severity)}">${esc(f.severity)}</span> ${esc(f.summary)}</div><div class="diff-tbl-body">`;
+      if (f.detail) html += `<div class="diff-line">${esc(f.detail)}</div>`;
+      if (f.fix) html += `<div class="diff-line diff-add">fix: ${esc(f.fix)}</div>`;
+      html += `</div></div>`;
+    }
+    if (!(d.findings || []).length && !d.live_state) html += `<div class="diff-ident">✓ No lock issues found.</div>`;
+    out.innerHTML = html;
+  } catch (e) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:#f48771">${esc(String(e))}</div>`; }
+}
+$("#locksRun")?.addEventListener("click", runLocks);
+
 fetch("/api/capabilities").then(r => r.json()).then(c => {
   IMPORT_ENABLED = !!c.import;
   DATA_ENABLED = !!c.data;
   SCHEMA_ENABLED = !!c.schema;
   DIFF_ENABLED = !!c.diff;
+  LOCKS_ENABLED = !!c.locks;
   if (DATA_ENABLED) { $("#dataPanel").style.display = ""; syncDataPanel(); renderHistory(); }
   if (SCHEMA_ENABLED) { $("#erdPanel").style.display = ""; initErdInteractions(); syncErdPanel(); }
   if (DIFF_ENABLED) { $("#diffPanel").style.display = ""; syncDiffPanel(); }
+  if (LOCKS_ENABLED) { $("#locksPanel").style.display = ""; syncLocksPanel(); }
 }).catch(() => {});
 
 load();
