@@ -9,6 +9,7 @@
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare%20D1-native-f48120?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/d1/)
 [![Turso](https://img.shields.io/badge/Turso-supported-4ec9b0)](https://turso.tech)
 [![Contributors](https://gcv-five.vercel.app/api/badge/croc100/litescope)](https://gcv-five.vercel.app/croc100/litescope)
+[![Litescope MCP server](https://glama.ai/mcp/servers/croc100/Litescope/badges/score.svg)](https://glama.ai/mcp/servers/croc100/Litescope)
 
 Ask Claude about your D1 database. Rewind it. Migrate it. Diff it against local. All from chat.
 
