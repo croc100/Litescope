@@ -180,6 +180,20 @@ existing moats on the paying screen is near-zero new code for a large product
 value jump, and the gaps it reveals (e.g. lock doctor needs a time-series view)
 become the priority order for the depth work above.
 
+**Dashboard redesign — a real monitoring console.** The dashboard is the paying
+surface, so it has to read like a serious operations tool, not a hobby utility.
+Shipped: an app shell (sidebar nav + routed views), dual light/dark theming, and
+a dense at-a-glance fleet overview (KPI strip, topology heatmap, worst-first
+worklist). Remaining:
+
+1. **Panel restyle** — bring the lock doctor, diff, data browser, and ERD panels
+   onto the new design tokens (sharp, dense, status-only color) so the whole app
+   is visually coherent.
+2. **Time dimension (true monitoring)** — today the dashboard is point-in-time.
+   Persist a health history so the overview can show sparklines / trends, a
+   `SQLITE_BUSY` and WAL-size time-series, and heartbeat staleness — turning the
+   snapshot view into a real monitor. (Ties into Phase H heartbeat / alerting.)
+
 ### Phase H — Fleet observability & alerting (hosted dashboard)
 
 The differentiation thesis: generic Linux monitoring (Datadog, Grafana,
