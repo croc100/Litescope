@@ -4,28 +4,34 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Litescope — Fleet</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230C0D10'/%3E%3Cpath d='M12.4 15.6 19.6 15.6 16.8 25.2a.9.9 0 0 1-1.7 0z' fill='%23E6E8EB'/%3E%3Cpath d='M16 14.2c-.2-2-1.4-3.2-3.4-3.6.3 2 1.5 3.2 3.4 3.6z' fill='%239CA1AB'/%3E%3Cpath d='M16 14.2c.2-2 1.4-3.2 3.4-3.6-.3 2-1.5 3.2-3.4 3.6z' fill='%239CA1AB'/%3E%3Cpath d='M16 13.8c0-2 .7-3.4 2-4.3-.2 2.1-.9 3.6-2 4.3z' fill='%239CA1AB'/%3E%3C/svg%3E" />
 <style>
+  /* Brand tokens mirror litescope.crode.net (the landing): monochrome accent
+     (near-white on dark, near-black on light) with saturation reserved for
+     status only — gold/green/red shared across themes. */
   :root {
-    --bg:#0c0e13; --surface:#13161d; --surface-2:#191d26; --surface-3:#1f2430;
-    --border:#252b36; --border-strong:#333a47;
-    --text:#98a2b3; --head:#e8edf4; --dim:#5e6878;
-    --accent:#2dd4bf; --accent-bg:rgba(45,212,191,0.1); --accent-bd:rgba(45,212,191,0.35);
-    --gold:#e3b341; --gold-bg:rgba(227,179,65,0.12);
-    --danger:#f0616d; --danger-bg:rgba(240,97,109,0.12);
-    --ok:#3fb950; --ok-bg:rgba(63,185,80,0.12);
+    --bg:#0B0C0E; --surface:#141619; --surface-2:#1B1E22; --surface-3:#22262C;
+    --border:#26292E; --border-strong:#3A3E45;
+    --text:#B4B9C2; --head:#F4F5F7; --dim:#767B85;
+    --accent-rgb:244,245,247;
+    --accent:#F4F5F7; --accent-bg:rgba(244,245,247,0.08); --accent-bd:rgba(244,245,247,0.22);
+    --gold:#C99A4B; --gold-bg:rgba(201,154,75,0.14);
+    --danger:#D9605C; --danger-bg:rgba(217,96,92,0.14);
+    --ok:#4FA46A; --ok-bg:rgba(79,164,106,0.14);
     --teal:var(--accent);
-    --r:3px; --r-sm:2px;
+    --r:8px; --r-sm:6px;
     --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
     --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   }
   [data-theme="light"] {
-    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#f0f2f5; --surface-3:#e8ebef;
-    --border:#e1e4e9; --border-strong:#cbd0d8;
-    --text:#5a6473; --head:#11151c; --dim:#9099a6;
-    --accent:#0f9b87; --accent-bg:rgba(15,155,135,0.1); --accent-bd:rgba(15,155,135,0.35);
-    --gold:#9a6a00; --gold-bg:rgba(154,106,0,0.1);
-    --danger:#c8313f; --danger-bg:rgba(200,49,63,0.1);
-    --ok:#1a7f37; --ok-bg:rgba(26,127,55,0.1);
+    --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F1F2F4; --surface-3:#E8EBEF;
+    --border:#D7DAE0; --border-strong:#B9BEC7;
+    --text:#4A4F57; --head:#0C0D10; --dim:#9CA1AB;
+    --accent-rgb:17,19,23;
+    --accent:#111317; --accent-bg:rgba(17,19,23,0.06); --accent-bd:rgba(17,19,23,0.22);
+    --gold:#B7791F; --gold-bg:rgba(183,121,31,0.10);
+    --danger:#D33A3A; --danger-bg:rgba(211,58,58,0.10);
+    --ok:#15924C; --ok-bg:rgba(21,146,76,0.10);
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5; -webkit-font-smoothing:antialiased; font-size:13px; }
@@ -315,7 +321,7 @@
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand"><span class="mark">◎</span><span>litescope</span></div>
+    <div class="brand"><svg class="mark" width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0C0D10"/><path d="M12.4 15.6 19.6 15.6 16.8 25.2a.9.9 0 0 1-1.7 0z" fill="#E6E8EB"/><path d="M16 14.2c-.2-2-1.4-3.2-3.4-3.6.3 2 1.5 3.2 3.4 3.6z" fill="#9CA1AB"/><path d="M16 14.2c.2-2 1.4-3.2 3.4-3.6-.3 2-1.5 3.2-3.4 3.6z" fill="#9CA1AB"/><path d="M16 13.8c0-2 .7-3.4 2-4.3-.2 2.1-.9 3.6-2 4.3z" fill="#9CA1AB"/></svg><span>litescope</span></div>
     <nav class="nav" id="nav">
       <div class="item active" data-view="overview"><span class="ic">▦</span><span>Fleet</span></div>
       <div class="item disabled" data-view="locks" data-cap="locks"><span class="ic">◍</span><span>Lock doctor</span></div>

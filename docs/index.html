@@ -197,13 +197,16 @@ h1 {
   white-space: pre; overflow-x: auto;
   color: #6b8096;
 }
-.t-prompt { color: var(--teal); }
-.t-cmd { color: var(--head); }
+/* The terminal has a fixed dark background in both themes, so its text uses
+   fixed light colors — theme tokens (--head/--teal) would invert to near-black
+   in light mode and vanish against the dark terminal. */
+.t-prompt { color: #C9D3E0; }
+.t-cmd { color: #F4F5F7; }
 .t-ok { color: #4ade80; }
 .t-warn { color: var(--gold); }
 .t-err { color: var(--danger); }
-.t-dim { color: var(--dim); }
-.t-head { color: var(--head); font-weight: 600; }
+.t-dim { color: #6b8096; }
+.t-head { color: #F4F5F7; font-weight: 600; }
 
 /* ── Sections ── */
 section { padding: 88px 0; }
@@ -275,7 +278,7 @@ h2 {
   display: inline-block; font-size: 10px; font-family: var(--mono);
   padding: 2px 7px; border-radius: 5px; margin-left: 7px; vertical-align: middle;
 }
-.tier-free { background: rgba(100,116,139,0.15); color: var(--dim); }
+.tier-free { background: rgba(var(--accent-rgb),0.10); color: var(--text); }
 .tier-pro { background: rgba(var(--accent-rgb),0.12); color: var(--teal); }
 .card h3 { color: var(--head); font-size: 15px; margin-bottom: 8px; font-weight: 600; }
 .card p { color: var(--text); font-size: 14px; line-height: 1.7; }
@@ -376,12 +379,12 @@ h2 {
   background: var(--surface-2);
 }
 .compare th.col-pro { color: var(--teal); }
-.compare td { padding: 12px 20px; border-bottom: 1px solid rgba(30,42,56,0.7); color: var(--text); vertical-align: middle; }
+.compare td { padding: 12px 20px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
 .compare tr:last-child td { border-bottom: none; }
 .compare tbody tr:hover td { background: rgba(var(--accent-rgb),0.03); }
 .compare td:first-child { color: #7a8fa8; }
 .compare .yes { color: var(--teal); font-size: 15px; }
-.compare .no { color: #2a3848; font-size: 15px; }
+.compare .no { color: var(--dim); font-size: 15px; }
 .compare .val { color: var(--head); font-weight: 500; }
 .compare .section-row td {
   background: var(--bg-2); color: var(--dim);
@@ -404,14 +407,14 @@ h2 {
   padding: 12px 20px; border-bottom: 2px solid transparent;
   transition: color .15s, border-color .15s;
 }
-.install-tabs button.active { color: var(--head); border-bottom-color: var(--teal); }
+.install-tabs button.active { color: #F4F5F7; border-bottom-color: #F4F5F7; }
 .install-code {
   padding: 20px 24px;
   font-family: var(--mono); font-size: 14px;
-  color: var(--head); display: flex; align-items: center;
+  color: #F4F5F7; display: flex; align-items: center;
   justify-content: space-between; gap: 16px;
 }
-.install-code .prompt { color: var(--teal); margin-right: 8px; user-select: none; }
+.install-code .prompt { color: #C9D3E0; margin-right: 8px; user-select: none; }
 .copy-btn {
   font-family: var(--sans); font-size: 12px; font-weight: 500;
   color: var(--dim); background: var(--surface);
