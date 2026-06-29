@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080b10'/%3E%3Cpath d='M12.4 15.6 19.6 15.6 16.8 25.2a.9.9 0 0 1-1.7 0z' fill='%23E6E8EB'/%3E%3Cpath d='M16 14.2c-.2-2-1.4-3.2-3.4-3.6.3 2 1.5 3.2 3.4 3.6z' fill='%239CA1AB'/%3E%3Cpath d='M16 14.2c.2-2 1.4-3.2 3.4-3.6-.3 2-1.5 3.2-3.4 3.6z' fill='%239CA1AB'/%3E%3Cpath d='M16 13.8c0-2 .7-3.4 2-4.3-.2 2.1-.9 3.6-2 4.3z' fill='%239CA1AB'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230C0D10'/%3E%3Cpath d='M11 12 L21 12 C18.5 19 16.8 23 16 27.6 C15.2 23 13.5 19 11 12 Z' fill='%23F4F5F7'/%3E%3Cpath d='M16 12.4 C14.6 9.4 13.2 6.6 12.2 4.4 C12.2 7 13.4 10 16 12.4 Z' fill='%23AEB4BF'/%3E%3Cpath d='M16 12.4 C17.4 9.4 18.8 6.6 19.8 4.4 C19.8 7 18.6 10 16 12.4 Z' fill='%23AEB4BF'/%3E%3Cpath d='M16 12.6 C15.4 9 15.4 5.4 15.9 2.9 C17 5.3 16.7 9 16 12.6 Z' fill='%23AEB4BF'/%3E%3C/svg%3E" />
 <script>(function(){try{var t=localStorage.getItem('ls-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <style>
 :root {
@@ -424,16 +424,25 @@ h2 {
 }
 .copy-btn:hover { color: var(--head); border-color: var(--teal); background: rgba(var(--accent-rgb),0.05); }
 
-/* ── Footer ── */
-footer { border-top: 1px solid var(--border); padding: 48px 0; }
-.foot-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
-.foot-links { display: flex; gap: 4px; flex-wrap: wrap; }
-.foot-links a {
-  color: var(--text); font-size: 13.5px; font-weight: 500;
-  padding: 5px 10px; border-radius: 7px; transition: color .15s, background .15s;
+/* ── Footer ── (shared CRODE-family identity: brand + columns + bottom bar) */
+footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 64px 0 36px; }
+.footer-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 40px; padding-bottom: 44px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+.footer-brand { max-width: 280px; }
+.footer-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--head); letter-spacing: -0.02em; margin-bottom: 14px; }
+.footer-logo svg { border-radius: 5px; }
+.footer-tagline { font-size: 13px; color: var(--dim); line-height: 1.65; }
+.footer-col { display: flex; flex-direction: column; gap: 11px; }
+.footer-h { font-size: 11.5px; font-weight: 600; color: var(--text); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px; }
+.footer-col a { font-size: 13.5px; color: var(--dim); transition: color 0.15s; width: fit-content; }
+.footer-col a:hover { color: var(--head); }
+.footer-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.footer-bottom span { font-size: 12.5px; color: var(--dim); }
+@media (max-width: 760px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px 24px; }
+  .footer-brand { grid-column: 1 / -1; max-width: none; }
+  .footer-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
-.foot-links a:hover { color: var(--head); background: rgba(var(--accent-rgb),0.05); }
-.foot-note { color: var(--dim); font-size: 12.5px; line-height: 1.65; }
+@media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -443,7 +452,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 <nav>
   <div class="wrap nav-inner">
     <a class="logo" href="#top">
-      <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#111820"/><path d="M12.4 15.6 19.6 15.6 16.8 25.2a.9.9 0 0 1-1.7 0z" fill="#E6E8EB"/><path d="M16 14.2c-.2-2-1.4-3.2-3.4-3.6.3 2 1.5 3.2 3.4 3.6z" fill="#9CA1AB"/><path d="M16 14.2c.2-2 1.4-3.2 3.4-3.6-.3 2-1.5 3.2-3.4 3.6z" fill="#9CA1AB"/><path d="M16 13.8c0-2 .7-3.4 2-4.3-.2 2.1-.9 3.6-2 4.3z" fill="#9CA1AB"/></svg>
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0C0D10"/><path d="M11 12 L21 12 C18.5 19 16.8 23 16 27.6 C15.2 23 13.5 19 11 12 Z" fill="#F4F5F7"/><path d="M16 12.4 C14.6 9.4 13.2 6.6 12.2 4.4 C12.2 7 13.4 10 16 12.4 Z" fill="#AEB4BF"/><path d="M16 12.4 C17.4 9.4 18.8 6.6 19.8 4.4 C19.8 7 18.6 10 16 12.4 Z" fill="#AEB4BF"/><path d="M16 12.6 C15.4 9 15.4 5.4 15.9 2.9 C17 5.3 16.7 9 16 12.6 Z" fill="#AEB4BF"/></svg>
       Litescope
     </a>
     <div class="nav-links">
@@ -998,22 +1007,37 @@ footer { border-top: 1px solid var(--border); padding: 48px 0; }
 
 <footer>
   <div class="wrap">
-    <div class="foot-inner">
-      <a class="logo" href="#top" style="display:flex;align-items:center;gap:9px;font-weight:700;color:var(--head);font-size:15px;letter-spacing:-0.02em;">
-        <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#111820"/><path d="M12.4 15.6 19.6 15.6 16.8 25.2a.9.9 0 0 1-1.7 0z" fill="#E6E8EB"/><path d="M16 14.2c-.2-2-1.4-3.2-3.4-3.6.3 2 1.5 3.2 3.4 3.6z" fill="#9CA1AB"/><path d="M16 14.2c.2-2 1.4-3.2 3.4-3.6-.3 2-1.5 3.2-3.4 3.6z" fill="#9CA1AB"/><path d="M16 13.8c0-2 .7-3.4 2-4.3-.2 2.1-.9 3.6-2 4.3z" fill="#9CA1AB"/></svg>
-        Litescope
-      </a>
-      <div class="foot-links">
-        <a href="https://crode.net" target="_blank" rel="noopener">CRODE ↗</a>
-        <a href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">GitHub</a>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0C0D10"/><path d="M11 12 L21 12 C18.5 19 16.8 23 16 27.6 C15.2 23 13.5 19 11 12 Z" fill="#F4F5F7"/><path d="M16 12.4 C14.6 9.4 13.2 6.6 12.2 4.4 C12.2 7 13.4 10 16 12.4 Z" fill="#AEB4BF"/><path d="M16 12.4 C17.4 9.4 18.8 6.6 19.8 4.4 C19.8 7 18.6 10 16 12.4 Z" fill="#AEB4BF"/><path d="M16 12.6 C15.4 9 15.4 5.4 15.9 2.9 C17 5.3 16.7 9 16 12.6 Z" fill="#AEB4BF"/></svg>
+          Litescope
+        </div>
+        <p class="footer-tagline">The operations layer for the databases AI apps run on. Free and open source under AGPL-3.0 — part of CRODE.</p>
+      </div>
+      <div class="footer-col">
+        <p class="footer-h">Product</p>
+        <a href="#features">Features</a>
         <a href="/docs">Docs</a>
         <a href="https://github.com/croc100/Litescope/blob/main/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a>
+      </div>
+      <div class="footer-col">
+        <p class="footer-h">Open source</p>
+        <a href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/sponsors/croc100" target="_blank" rel="noopener">Sponsor</a>
+        <a href="https://crode.net" target="_blank" rel="noopener">CRODE &#8599;</a>
+      </div>
+      <div class="footer-col">
+        <p class="footer-h">Reach us</p>
+        <a href="mailto:dl_litescope@crode.net">dl_litescope@crode.net</a>
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
       </div>
     </div>
-    <p class="foot-note">Litescope is free and open source under the GNU AGPL-3.0 — the entire CLI and GUI, no license key. A hosted dashboard and enterprise self-host with support are planned, separate, optional offerings that never gate the open-source tool. Part of <a href="https://crode.net" target="_blank" rel="noopener"><b>CRODE</b></a> — secure, privacy-respecting tools that give you operational power without surveillance. Questions: dl_litescope@crode.net. © 2026 Crode.</p>
+    <div class="footer-bottom">
+      <span>&copy; 2026 Litescope. All rights reserved.</span>
+      <span class="footer-tag-min">Operational power, without surveillance.</span>
+    </div>
   </div>
 </footer>
 
