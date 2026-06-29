@@ -226,6 +226,62 @@ SQLite's unique physics (WAL, pages, locks, single-file integrity).
   rewind / bisect / lock resolution from the dashboard. Monitoring tools alert;
   LiteScope fixes.
 
+### Phase J — Agent-native operations ← strategic frontier
+
+The agent era spawns *millions* of small SQLite databases — per-agent,
+per-session, and per-edge-device memory — and agent writes are the scariest thing
+to put in production. Litescope's existing moats (snapshot, rewind, diff, fleet
+fingerprint, lock doctor — all metadata-only and verifiable) are exactly the
+primitives this needs. It's open ground no DB tool owns yet, and most of it is
+repackaging parts we already ship.
+
+**Headline primitives (build on parts already shipped):**
+
+- **Reversible writes — the category-defining MCP contract.** The parts already
+  exist (`litescope_query_write` + auto-snapshot + `litescope_rewind` + diff).
+  Package them as one guarantee: every agent write returns
+  `{ rows_affected, blast-radius diff preview, rewind_token }`, and any write is
+  undone in a single call. No other DB MCP makes agent writes atomically
+  reversible *and* auditable — "give the agent write access without fear."
+  *Operational power without surveillance*, extended to autonomy. This is the
+  headline.
+- **Fleet ops for agent memory.** Reframe the fleet engine (health, fingerprint,
+  drift, lock contention across thousands of DBs) as the observability + recovery
+  layer for swarms of agent SQLite memories: detect corruption / bloat / drift /
+  contention across 10k agent DBs, rewind a single agent's memory, fingerprint
+  which agents diverged. A new market built on tech we already have.
+- **Provenance-stamped, time-travel memory.** Stamp every write with the agent /
+  turn / tool that produced it, so you can audit "why is this row here?" and rewind
+  an agent's memory to before a bad turn — *git blame + git revert for agent
+  memory*.
+- **Lock doctor as a live MCP resource.** Multiple agents hammering one SQLite file
+  (`SQLITE_BUSY`) is the #1 multi-agent failure; let an agent subscribe to a
+  real-time contention signal ("you're contended — back off / use WAL"). The lock
+  doctor moat, aimed at multi-agent concurrency.
+
+**Gap-closers (parity the ecosystem already expects):**
+
+- **Vector-aware ops (`sqlite-vec`)** — highest-priority gap. Teach `schema` /
+  `advise` / `autopilot` about `vec0` virtual tables: flag missing or oversized
+  vector indexes, recommend ANN parameters, and catch embedding-dimension drift
+  across a fleet. Become the ops layer for SQLite RAG — the core of "the database
+  AI apps run on."
+- **Daily-driver query ergonomics** — make the `litescope_query` loop the smoothest
+  way to ask a SQLite database a question (pagination, sampling, inline
+  `EXPLAIN QUERY PLAN`, result formatting), so Litescope is the everyday driver,
+  not just the break-glass incident tool.
+- **Branch / merge framing for snapshots** — surface the existing snapshot/restore
+  primitive as agent-facing branching (*branch → experiment → diff → merge or
+  discard*), matching how Neon / Xata frame safe experimentation.
+- **Shareable query results** — a one-call "share this result" link for ad-hoc
+  queries (Datasette-style), complementing the fleet-ops dashboard.
+- **Session insight memo** — let an agent accumulate curated findings across a
+  session as a running, queryable memo, so repeated investigations compound.
+
+*Deliberately **not** on the roadmap yet: multi-engine support (Postgres / MySQL /
+DuckDB in one MCP). Depth on SQLite's unique physics is the bet; breadth is still
+under consideration, not committed.*
+
 ---
 
 *Priority shifts based on ecosystem feedback. File issues or start a discussion
