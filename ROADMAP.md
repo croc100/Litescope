@@ -151,12 +151,12 @@ Phase E (MCP protocol depth) and Phase F (exploration UI) have shipped.
   **Published to npm** as [`litescope`](https://www.npmjs.com/package/litescope).
 - **Cloudflare Workers Launchpad** — apply for CF's startup support program.
 
-### Phase I — SQLite supremacy ← next
+### Phase H — SQLite depth ← next
 
 Being *the* SQLite tool means going deeper than any generic DB client can. The
 MCP transport foundation now ships (see Shipped); what remains is depth. Three
 fronts, in priority order — each lands in the CLI first, then surfaces in the
-hosted dashboard (Phase H) so the paying screen reflects every moat.
+hosted dashboard (Phase I) so the paying screen reflects every moat.
 
 1. **Deeper moats** — push the three superpowers past parity:
    - *Lock doctor*: live WAL-checkpoint monitoring, a `SQLITE_BUSY` event
@@ -194,20 +194,26 @@ worklist).
   health/size snapshot on each overview request, surfaced as per-KPI sparklines
   and a stacked ok/warning/critical "fleet health over time" timeline.
 
-Remaining time-dimension depth (ties into Phase H heartbeat / alerting):
+Remaining time-dimension depth (ties into Phase I heartbeat / alerting):
 
 - **Per-database time-series** — `SQLITE_BUSY` and WAL-size history per DB (the
   fleet-level health timeline shipped; per-DB lock/WAL trends are next).
 - **Heartbeat staleness** — flag databases that stopped reporting.
 
-### Phase H — Fleet observability & alerting (hosted dashboard)
+### Phase I — Fleet observability & alerting (hosted dashboard)
 
 The differentiation thesis: generic Linux monitoring (Datadog, Grafana,
 Prometheus, Netdata) watches *servers*. SQLite is a *file*, scattered across
-apps, edge, devices, and per-tenant stores — invisible to those tools. No one
-treats a fleet of thousands of SQLite files as first-class operational objects
-**and acts on them**. That's the open ground, and it's only possible because of
-SQLite's unique physics (WAL, pages, locks, single-file integrity).
+apps, edge, devices, and per-tenant stores — invisible to those tools. Few tools
+treat a fleet of thousands of SQLite files as first-class operational objects
+**and act on them**. That's the open ground, and it leans on SQLite's unique
+physics (WAL, pages, locks, single-file integrity).
+
+**Live today (Enterprise hosted backend).** The hosted dashboard ships on
+Cloudflare Workers + D1: org auth (OTP / magic-link), billing + plan caps, and
+metadata-only push ingestion (`litescope push` posts health reports, schema
+fingerprints, and drift — never customer data) rendered as a fleet overview.
+What remains below turns that ingestion into active monitoring:
 
 - **Heartbeat / staleness detection** — a Cloudflare Cron Trigger scans for
   databases that stopped pushing (dead-man's-switch, like a ping-fail monitor).
@@ -222,7 +228,7 @@ SQLite's unique physics (WAL, pages, locks, single-file integrity).
   enterprise host self-reports every N minutes with one install step.
 - **Lock doctor for the fleet** — surface "database is locked" contention
   across the fleet (build-order priority #1 of the SQLite moats).
-- **Remote actions (the real moat)** — move from *observe* to *act*: trigger
+- **Remote actions** — move from *observe* to *act*: trigger
   rewind / bisect / lock resolution from the dashboard. Monitoring tools alert;
   LiteScope fixes.
 
@@ -235,52 +241,76 @@ fingerprint, lock doctor — all metadata-only and verifiable) are exactly the
 primitives this needs. It's open ground no DB tool owns yet, and most of it is
 repackaging parts we already ship.
 
-**Headline primitives (build on parts already shipped):**
+**Headline — reversible writes.** The parts already exist
+(`litescope_query_write` + auto-snapshot + `litescope_rewind` + diff). Package
+them as one MCP contract: every agent write returns
+`{ rows_affected, blast-radius diff preview, rewind_token }`, and any write is
+undone in a single call — "give the agent write access without fear." This is the
+near-term bet; the rest of this phase only makes sense once it lands.
 
-- **Reversible writes — the category-defining MCP contract.** The parts already
-  exist (`litescope_query_write` + auto-snapshot + `litescope_rewind` + diff).
-  Package them as one guarantee: every agent write returns
-  `{ rows_affected, blast-radius diff preview, rewind_token }`, and any write is
-  undone in a single call. No other DB MCP makes agent writes atomically
-  reversible *and* auditable — "give the agent write access without fear."
-  *Operational power without surveillance*, extended to autonomy. This is the
-  headline.
+**Then, building on the same primitives:**
+
+- **Lock doctor for multi-agent concurrency.** Multiple agents hammering one
+  SQLite file (`SQLITE_BUSY`) is the #1 multi-agent failure; let an agent
+  subscribe to a live contention signal ("you're contended — back off / use
+  WAL"). The existing lock-doctor moat, aimed at concurrency.
 - **Fleet ops for agent memory.** Reframe the fleet engine (health, fingerprint,
-  drift, lock contention across thousands of DBs) as the observability + recovery
-  layer for swarms of agent SQLite memories: detect corruption / bloat / drift /
-  contention across 10k agent DBs, rewind a single agent's memory, fingerprint
-  which agents diverged. A new market built on tech we already have.
-- **Provenance-stamped, time-travel memory.** Stamp every write with the agent /
-  turn / tool that produced it, so you can audit "why is this row here?" and rewind
-  an agent's memory to before a bad turn — *git blame + git revert for agent
-  memory*.
-- **Lock doctor as a live MCP resource.** Multiple agents hammering one SQLite file
-  (`SQLITE_BUSY`) is the #1 multi-agent failure; let an agent subscribe to a
-  real-time contention signal ("you're contended — back off / use WAL"). The lock
-  doctor moat, aimed at multi-agent concurrency.
+  drift, lock contention) as the observability + recovery layer for swarms of
+  agent SQLite memories: detect corruption / drift across many agent DBs, rewind
+  a single agent's memory, fingerprint which agents diverged. Reuses shipped tech;
+  the demand is still a hypothesis, so it stays a bet, not a commitment.
 
-**Gap-closers (parity the ecosystem already expects):**
+**Exploring (operational depth the target buyers may expect — not committed):**
+vector-aware ops for `sqlite-vec`/`vec0` tables (SQLite-RAG ops, for AI platforms);
+and provenance-stamped writes (agent/turn/tool, *git blame for agent memory* — an
+audit primitive for enterprise). Both deepen the operations story; each waits on
+real demand.
 
-- **Vector-aware ops (`sqlite-vec`)** — highest-priority gap. Teach `schema` /
-  `advise` / `autopilot` about `vec0` virtual tables: flag missing or oversized
-  vector indexes, recommend ANN parameters, and catch embedding-dimension drift
-  across a fleet. Become the ops layer for SQLite RAG — the core of "the database
-  AI apps run on."
-- **Daily-driver query ergonomics** — make the `litescope_query` loop the smoothest
-  way to ask a SQLite database a question (pagination, sampling, inline
-  `EXPLAIN QUERY PLAN`, result formatting), so Litescope is the everyday driver,
-  not just the break-glass incident tool.
-- **Branch / merge framing for snapshots** — surface the existing snapshot/restore
-  primitive as agent-facing branching (*branch → experiment → diff → merge or
-  discard*), matching how Neon / Xata frame safe experimentation.
-- **Shareable query results** — a one-call "share this result" link for ad-hoc
-  queries (Datasette-style), complementing the fleet-ops dashboard.
-- **Session insight memo** — let an agent accumulate curated findings across a
-  session as a running, queryable memo, so repeated investigations compound.
+*Deliberately **not** on the roadmap: multi-engine support (Postgres / MySQL /
+DuckDB in one MCP). Depth on SQLite's unique physics is the bet; breadth is not.*
 
-*Deliberately **not** on the roadmap yet: multi-engine support (Postgres / MySQL /
-DuckDB in one MCP). Depth on SQLite's unique physics is the bet; breadth is still
-under consideration, not committed.*
+### Phase K — Fleet operations at scale ← the revenue frontier
+
+The depth phases above serve *one developer operating one database*. The money is
+in *one company operating tens of thousands of SQLite files as a fleet* — the
+per-tenant / per-edge / per-agent shape that Turso, Cloudflare D1, LiteFS, and
+PocketBase deployments already live in. These are the unsolved operational jobs
+those teams pay for, and each builds on the fleet engine and file-superpower moats
+we already ship.
+
+- **Tenant-fleet migration orchestration** — roll a schema change across N tenant
+  databases as a supervised rollout, not a for-loop: automatic canary cohort,
+  halt-on-error, progress + per-tenant status, and per-tenant rollback (restore
+  from the auto-snapshot taken before each apply). The #1 nightmare of running a
+  SaaS on per-tenant SQLite, and the highest-conviction commercial feature here.
+- **Online schema-change engine** — safe, low-lock execution of the changes
+  SQLite's thin `ALTER TABLE` can't do directly: generate and run the
+  create-new / backfill / swap / rename rebuild (the SQLite analog of `gh-ost` /
+  `pt-online-schema-change`), with blast-radius preview and the lock doctor
+  guarding contention. Hard to build = a real moat; ties directly into `migrate`.
+- **Replication & DR health** — make Litescope aware of the replication layer real
+  SQLite shops run: is litestream caught up, is the LiteFS primary healthy, did a
+  failover lose writes? An operations tool that ignores replication has a hole;
+  this closes it (metadata-only, like the rest of the fleet story).
+
+### Phase L — Cost & compliance (enterprise gates)
+
+What unblocks big-tech procurement and recurring enterprise revenue — distinct
+from developer-facing depth.
+
+- **D1 / Turso cost & capacity intelligence** — usage is billed by rows-read and
+  storage, and no tool shows where the money leaks. Attribute cost to the queries
+  and tables driving it, surface the full-scan reading 10M rows, and forecast when
+  a database hits plan limits. Autopilot watches *performance*; this watches the
+  *bill*.
+- **Compliance & governance posture** — the angle that fits the "DB verification
+  tool" identity and clears the buyer's security review: detect plaintext PII in
+  columns across the fleet, verify encryption-at-rest (SQLCipher / SEE), and keep
+  an access audit trail. "Which of my 10k tenant DBs hold unencrypted PII?"
+- **Signed integrity attestation** — a cryptographically signed certificate that a
+  database passed integrity + backup + canonical-schema checks at time T, for
+  contractual SLAs, supply-chain, and audit. No one issues verifiable proofs for
+  SQLite state; this makes Litescope the system of record for "it was healthy."
 
 ---
 
