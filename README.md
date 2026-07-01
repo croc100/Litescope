@@ -1,6 +1,6 @@
 # Litescope
 
-**The MCP-first operations tool for Cloudflare D1 and SQLite.**
+**The operations tool for production SQLite — D1, Turso, and local files.**
 
 [Website](https://litescope-site.pages.dev) · [Roadmap](ROADMAP.md) · [Sponsor](https://github.com/sponsors/croc100)
 
@@ -13,7 +13,30 @@
 
 Ask Claude about your D1 database. Rewind it. Migrate it. Diff it against local. All from chat.
 
-**Free and open source (AGPL-3.0)** — every command, every fleet operation, no license key.
+**Free and open source (AGPL-3.0)** — every command, every fleet operation, self-hostable, no license key. The only paid thing is the [hosted dashboard we run for you](#pricing--whats-free).
+
+---
+
+## Why a tool for SQLite?
+
+"It's just a file — what's there to operate?"
+
+That was true when SQLite was a local dev toy. It isn't anymore. D1, Turso,
+LiteFS, and Litestream put SQLite in **production at fleet scale** — thousands of
+databases, one per tenant. But the tooling never caught up:
+
+- **`sqlite3` assumes one database.** Production assumes thousands. There's no
+  `pg_stat`, no APM, no standard way to see *from the outside* why a database is
+  locked, why WAL is bloating, or which tenant went silent.
+- **Embedded means unobservable.** The very thing that makes SQLite great — no
+  server — is what leaves you blind in production.
+- **Agents now write to your data.** No SQLite tool was built assuming an AI
+  would run the migration. Litescope was.
+
+Postgres has a mature tool for every problem. SQLite has none — so Litescope is
+**one binary for the whole job**: fleet observability, file-level superpowers
+(bisect / rewind / salvage), lock & WAL diagnostics, and a safe interface for
+agents. Things a generic DB client structurally can't do.
 
 ---
 
@@ -385,6 +408,29 @@ macOS, Linux, Windows — [Releases](https://github.com/croc100/Litescope/releas
 | `d1://DB_UUID` | Cloudflare D1 (env: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`) |
 | `d1://TOKEN@ACCOUNT_ID/DB_UUID` | Cloudflare D1 (explicit credentials) |
 | `turso://TOKEN@ORG/DBNAME` | [Turso](https://turso.tech) |
+
+---
+
+## Pricing — what's free
+
+The tool is free. We only charge to run the dashboard for you.
+
+| | **Free** (OSS, AGPL-3.0) | **Cloud** (paid) |
+|---|---|---|
+| Every CLI command, MCP server, fleet ops | ✅ | ✅ |
+| `litescope serve` — local web dashboard | ✅ | ✅ |
+| Self-hosted dashboard on your own infra | ✅ | ✅ |
+| **Hosted dashboard we run & maintain** | — | ✅ |
+| Managed metadata ingestion, retention, alerting | — | ✅ |
+| Org auth, teams, SSO | — | ✅ |
+| Support SLA | — | ✅ |
+
+**The line is simple: the software and every feature is free and self-hostable
+forever. You pay only if you want us to host and operate the dashboard so you
+don't have to.** No feature is locked behind a license key.
+
+See [litescope-site.pages.dev/pricing](https://litescope-site.pages.dev) for the
+hosted plans.
 
 ---
 

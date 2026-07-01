@@ -476,9 +476,9 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
 
 <header id="top">
   <div class="wrap">
-    <div class="badge"><span class="pulse"></span>MCP-first ops tool for Cloudflare D1 and SQLite</div>
-    <h1>Ask Claude about<br/><span class="accent">your D1 database.</span></h1>
-    <p class="hero-sub">Litescope is the MCP server for Cloudflare D1 — let Claude inspect schemas, run queries, apply migrations, and rewind with Time Travel. Works on local SQLite too. One binary, zero cloud account required — every write is dry-run by default and verifiable.</p>
+    <div class="badge"><span class="pulse"></span>D1 · Turso · LiteFS · local SQLite</div>
+    <h1>The ops layer for<br/><span class="accent">production SQLite.</span></h1>
+    <p class="hero-sub">SQLite went to production on D1, Turso, and LiteFS — thousands of databases, one per tenant — but its tooling didn't. No <code>pg_stat</code>, no APM, no way to see why a database is locked. Litescope is the ops layer it never had: fleet observability, file-level rewind &amp; salvage, lock &amp; WAL diagnostics, and a safe MCP interface so Claude can operate it. One binary. Every write dry-run by default.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">Free &amp; open source</a>
@@ -514,9 +514,9 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
   <div class="wrap problem-grid">
     <div>
       <div class="eyebrow">The problem</div>
-      <h2>D1 has no ops tooling.<br/>Until now.</h2>
-      <p>Cloudflare D1 made SQLite a real production database — per-tenant, globally distributed, backed by 30 days of Time Travel. But <code>wrangler d1</code> stops at "execute a file." No schema diff, no pull-to-local, no bisect, no MCP.</p>
-      <p>Litescope is the ops layer D1 was missing: ask Claude to inspect your production database, diff schemas, apply migrations, and rewind to any point — from your editor or terminal.</p>
+      <h2>"It's just a file."<br/>Not anymore.</h2>
+      <p>That was true when SQLite was a dev toy. Now D1, Turso, and LiteFS run it in production — per-tenant, globally distributed, thousands of instances. But the tooling stayed in the toy era: no way to observe a fleet, no bisect, no salvage, no <code>pg_stat</code> equivalent. <code>sqlite3</code> assumes one database; production assumes thousands.</p>
+      <p>Litescope is the ops layer SQLite never had — fleet health, file-level superpowers, lock &amp; WAL diagnostics, and an MCP interface so Claude can safely operate it. Things a generic DB client structurally can't do.</p>
     </div>
     <div class="stack">
       <div class="stack-item">
@@ -890,7 +890,7 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
   <div class="wrap center">
     <div class="eyebrow">Free &amp; open source</div>
     <h2>The whole toolchain is free.<br/>Forever.</h2>
-    <p class="section-sub">Litescope is open source under the GNU AGPL-3.0. Every command — diff, migrate, monitor, the entire fleet lifecycle, and the local web dashboard — is unlocked for everyone, on a fleet of any size. No license key, no tiers, nothing to unlock.</p>
+    <p class="section-sub">Litescope is open source under the GNU AGPL-3.0. Every command — diff, migrate, monitor, the entire fleet lifecycle, and the local web dashboard — is unlocked for everyone, on a fleet of any size. No license key, no tiers, nothing to unlock. <b>The line is simple: the software and every feature is free and self-hostable forever — you pay only if you want us to host and operate the dashboard for you.</b></p>
     <div class="cta-row" style="margin-top:24px">
       <a class="btn btn-primary" href="#install">Install free</a>
       <a class="btn btn-ghost" href="https://github.com/croc100/Litescope" target="_blank" rel="noopener">Star on GitHub ↗</a>
