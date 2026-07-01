@@ -70,8 +70,10 @@ databases without hand-written glue and without footguns.
 - `fleet` — parallel ops across hundreds of databases (health, fingerprint, migrate canary)
 - **`serve` — local web dashboard: fleet topology + health, interactive ERD,
   read-only data browser (paginated/sortable + visual query builder), drag-drop
-  import, and a visual schema/data diff panel — compare any two databases to
-  review table/column/index changes and row-count deltas before applying** ✨ updated
+  import, a visual schema/data diff panel, lock doctor, DBA autopilot plan
+  preview, snapshot/restore backups, and a D1 Time Travel panel to rewind any
+  D1 database to a point in the last 30 days — every moat surfaced on the
+  paying screen** ✨ updated
 - `metrics` — Prometheus/OpenMetrics exporter
 - `import` / `export` / `dump` — CSV/TSV/JSON/XLSX ↔ SQLite, portable SQL
 
@@ -173,12 +175,14 @@ hosted dashboard (Phase I) so the paying screen reflects every moat.
    toward Bytebase-class coverage: naming conventions, index width, NULL
    handling, type-affinity, reserved words, and migration-safety checks.
 
-**Dashboard surfacing (next concrete step).** The moats already shipped in the
-CLI (lock doctor, autopilot, snapshot/restore, bisect/rewind) are not all
-exposed in the hosted dashboard yet — only the diff panel is. Surfacing the
-existing moats on the paying screen is near-zero new code for a large product
-value jump, and the gaps it reveals (e.g. lock doctor needs a time-series view)
-become the priority order for the depth work above.
+**Dashboard surfacing — done.** Every moat shipped in the CLI is now surfaced
+in the dashboard: diff, lock doctor, autopilot (plus query-driven index advice
+fed by the SQL console), backups (snapshot/restore), and D1 Time Travel
+(rewind panel, gated to D1 sources). Near-zero new code per panel (the same
+`SetXxx` + `/api/xxx` + capability-gated view pattern throughout) for a large
+product-value jump — the paying screen now reflects every weapon the CLI has.
+The gaps this revealed become the priority order for the depth work above
+(e.g. lock doctor needs a time-series view, autopilot needs a real query log).
 
 **Dashboard redesign — a real monitoring console.** The dashboard is the paying
 surface, so it has to read like a serious operations tool, not a hobby utility.

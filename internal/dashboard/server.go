@@ -259,6 +259,33 @@ type CreateSnapshotFn func(dbName, label string) (*SnapshotInfo, error)
 // (identified by path). A safety snapshot of the current state is taken first.
 type RestoreSnapshotFn func(dbName, snapshotPath string) error
 
+// TimeTravelInfo describes the Cloudflare D1 Time Travel window for one
+// database — the file-superpower moat's D1-native counterpart to local
+// snapshots (D1 keeps 30 days of continuous history, no local backup needed).
+type TimeTravelInfo struct {
+	Source string    `json:"source"`
+	Oldest time.Time `json:"oldest"`
+	Now    time.Time `json:"now"`
+}
+
+// TimeTravelFn reports the Time Travel window for the named database. The CLI
+// supplies it and rejects non-D1 sources; when nil, the panel hides.
+type TimeTravelFn func(dbName string) (*TimeTravelInfo, error)
+
+// RewindResult is the outcome of a Time Travel restore (mirrors
+// connector.D1TimeTravelResult, kept local so this package stays decoupled
+// from the D1 connector).
+type RewindResult struct {
+	Bookmark  string `json:"bookmark"`
+	Timestamp string `json:"timestamp"`
+}
+
+// RewindFn restores the named database to the given point in time (RFC 3339 or
+// a human form like "2h ago"). Destructive — the CLI supplies it only for D1
+// sources, which is why it lives alongside TimeTravelFn rather than the local
+// backup panel's RestoreSnapshotFn.
+type RewindFn func(dbName, to string) (*RewindResult, error)
+
 // TablesFn lists the browsable tables of the named database. The CLI supplies it
 // so this package stays decoupled from DSN resolution; when nil, the data
 // browser is disabled.
@@ -286,6 +313,8 @@ type Server struct {
 	snapshotsFn      SnapshotsFn
 	createSnapshotFn CreateSnapshotFn
 	restoreFn        RestoreSnapshotFn
+	timeTravelFn     TimeTravelFn
+	rewindFn         RewindFn
 	history          *History
 }
 
@@ -324,6 +353,13 @@ func (s *Server) SetBackup(list SnapshotsFn, create CreateSnapshotFn, restore Re
 	s.snapshotsFn = list
 	s.createSnapshotFn = create
 	s.restoreFn = restore
+}
+
+// SetTimeTravel enables the D1 Time Travel panel (window info + restore).
+// info is required; rewind enables the restore action when non-nil.
+func (s *Server) SetTimeTravel(info TimeTravelFn, rewind RewindFn) {
+	s.timeTravelFn = info
+	s.rewindFn = rewind
 }
 
 // SetHistory enables the fleet-health timeline, persisting a snapshot on each
@@ -378,16 +414,18 @@ func (s *Server) Handler() http.Handler {
 	// Advertises which optional features are available to the frontend.
 	mux.HandleFunc("/api/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{
-			"import":         s.importFn != nil,
-			"data":           s.tablesFn != nil && s.queryFn != nil,
-			"browse":         s.browseFn != nil,
-			"schema":         s.schemaFn != nil,
-			"diff":           s.diffFn != nil,
-			"locks":          s.locksFn != nil,
-			"autopilot":      s.autopilotFn != nil,
-			"backup":         s.snapshotsFn != nil,
-			"backup_create":  s.createSnapshotFn != nil,
-			"backup_restore": s.restoreFn != nil,
+			"import":             s.importFn != nil,
+			"data":               s.tablesFn != nil && s.queryFn != nil,
+			"browse":             s.browseFn != nil,
+			"schema":             s.schemaFn != nil,
+			"diff":               s.diffFn != nil,
+			"locks":              s.locksFn != nil,
+			"autopilot":          s.autopilotFn != nil,
+			"backup":             s.snapshotsFn != nil,
+			"backup_create":      s.createSnapshotFn != nil,
+			"backup_restore":     s.restoreFn != nil,
+			"timetravel":         s.timeTravelFn != nil,
+			"timetravel_restore": s.rewindFn != nil,
 		})
 	})
 
@@ -469,6 +507,46 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	// Reports the D1 Time Travel window for one database.
+	mux.HandleFunc("/api/timetravel", func(w http.ResponseWriter, r *http.Request) {
+		if s.timeTravelFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "time travel is disabled"})
+			return
+		}
+		res, err := s.timeTravelFn(r.URL.Query().Get("db"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	})
+
+	// Restores one D1 database to a point in time via Cloudflare Time Travel.
+	mux.HandleFunc("/api/rewind", func(w http.ResponseWriter, r *http.Request) {
+		if s.rewindFn == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "rewind is disabled"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST to rewind"})
+			return
+		}
+		var req struct {
+			DB string `json:"db"`
+			To string `json:"to"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		res, err := s.rewindFn(req.DB, req.To)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	// Diagnoses lock health (static PRAGMA + live probe) for one database.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/croc100/litescope/internal/autopilot"
+	"github.com/croc100/litescope/internal/connector"
 	"github.com/croc100/litescope/internal/dashboard"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
@@ -250,6 +251,25 @@ Examples:
 					return snapshotRestore(dsn, snapPath)
 				},
 			)
+			// D1 Time Travel: the file-superpower moat's D1-native counterpart to
+			// local snapshots. Read-only info and restore share the same D1-only
+			// guard; local/Turso sources never expose this panel.
+			srv.SetTimeTravel(
+				func(name string) (*dashboard.TimeTravelInfo, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return timeTravelInfo(dsn)
+				},
+				func(name, to string) (*dashboard.RewindResult, error) {
+					dsn, err := resolveDSN(name)
+					if err != nil {
+						return nil, err
+					}
+					return rewindApply(dsn, to)
+				},
+			)
 
 			// Fleet-health timeline: persist a snapshot on each overview request
 			// so the dashboard can show trends across the session and beyond. The
@@ -411,6 +431,48 @@ func lockReport(dsn string) (*dashboard.LockReport, error) {
 		}
 	}
 	return out, nil
+}
+
+// d1DSN validates that dsn is a Cloudflare D1 source and returns it unchanged.
+// Time Travel is D1-only — local and Turso sources have no continuous history
+// to rewind, unlike the local snapshot/restore backup panel.
+func d1DSN(dsn string) (string, error) {
+	if !strings.HasPrefix(dsn, "d1://") {
+		return "", fmt.Errorf("time travel supports Cloudflare D1 only (this database is local or Turso)")
+	}
+	return dsn, nil
+}
+
+// timeTravelInfo reports the Time Travel window (30 days of continuous
+// history) for one resolved D1 fleet DSN.
+func timeTravelInfo(dsn string) (*dashboard.TimeTravelInfo, error) {
+	src, err := d1DSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	return &dashboard.TimeTravelInfo{Source: src, Oldest: now.Add(-30 * 24 * time.Hour), Now: now}, nil
+}
+
+// rewindApply restores one resolved D1 fleet DSN to the given point in time
+// ("2h ago", "yesterday", RFC 3339, ...) via Cloudflare D1 Time Travel.
+func rewindApply(dsn, to string) (*dashboard.RewindResult, error) {
+	if _, err := d1DSN(dsn); err != nil {
+		return nil, err
+	}
+	ts, err := parseRewindTime(to)
+	if err != nil {
+		return nil, fmt.Errorf("to %q: %w", to, err)
+	}
+	_, accountID, databaseID, err := connector.ParseD1DSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	res, err := connector.D1TimeTravel(accountID, databaseID, ts)
+	if err != nil {
+		return nil, err
+	}
+	return &dashboard.RewindResult{Bookmark: res.Bookmark, Timestamp: res.Timestamp}, nil
 }
 
 // autopilotPlan builds the DBA autopilot plan for one resolved fleet DSN and

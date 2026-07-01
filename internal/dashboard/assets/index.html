@@ -327,6 +327,7 @@
       <div class="item disabled" data-view="locks" data-cap="locks"><span class="ic">◍</span><span>Lock doctor</span></div>
       <div class="item disabled" data-view="autopilot" data-cap="autopilot"><span class="ic">◎</span><span>Autopilot</span></div>
       <div class="item disabled" data-view="backup" data-cap="backup"><span class="ic">⦿</span><span>Backups</span></div>
+      <div class="item disabled" data-view="timetravel" data-cap="timetravel"><span class="ic">↺</span><span>Time Travel</span></div>
       <div class="item disabled" data-view="erd" data-cap="schema"><span class="ic">◈</span><span>Schema</span></div>
       <div class="item disabled" data-view="diff" data-cap="diff"><span class="ic">⇄</span><span>Diff</span></div>
       <div class="item disabled" data-view="data" data-cap="data"><span class="ic">▤</span><span>Data</span></div>
@@ -461,6 +462,20 @@
       <span class="runinfo" id="backupHint"></span>
     </div>
     <div id="backupResult"></div>
+  </section>
+</div>
+
+<div class="view" id="view-timetravel">
+  <section style="border-top:1px solid var(--border)">
+    <div class="eyebrow">Time Travel — Cloudflare D1</div><h2>Rewind to any point in the last 30 days</h2>
+    <p class="sub">D1 keeps 30 days of continuous history — no local snapshot needed. Restore is destructive: the live database is overwritten with the historical state at the chosen time.</p>
+    <div class="data-bar">
+      <select id="ttDb" class="select"></select>
+      <input id="ttTo" class="select" style="width:220px" placeholder='e.g. "2h ago", "yesterday", RFC 3339'>
+      <button class="run" id="ttRewind">Rewind ▸</button>
+      <span class="runinfo" id="ttHint"></span>
+    </div>
+    <div id="ttResult"></div>
   </section>
 </div>
 
@@ -726,6 +741,7 @@ async function load() {
     syncLocksPanel();
     syncAutopilotPanel();
     syncBackupPanel();
+    syncTimeTravelPanel();
   } catch (e) {
     // When the page is opened as a static file (no server, no base URL), fetch
     // can't resolve "/api/...". Show a hint instead of a raw parse error.
@@ -1617,6 +1633,55 @@ $("#backupResult")?.addEventListener("click", (e) => {
   if (b) restoreSnapshot(b.dataset.restore);
 });
 
+let TT_ENABLED = false, TT_RESTORE = false;
+
+function syncTimeTravelPanel() {
+  if (!TT_ENABLED || !STATE) return;
+  // D1 Time Travel is Cloudflare-only — filter the fleet to d1:// sources.
+  const names = (STATE.health?.results || []).filter(r => (r.dsn || "").startsWith("d1://")).map(r => r.database);
+  const sig = names.join("");
+  const sel = $("#ttDb");
+  if (sel.dataset.sig === sig) return;
+  const prev = sel.value;
+  sel.innerHTML = names.length
+    ? names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+    : `<option value="">no D1 databases in this fleet</option>`;
+  sel.dataset.sig = sig;
+  if (prev && names.includes(prev)) sel.value = prev;
+  if (names.length) loadTimeTravel();
+}
+
+async function loadTimeTravel() {
+  const db = $("#ttDb").value, out = $("#ttResult");
+  if (!db) { out.innerHTML = ""; return; }
+  try {
+    const res = await fetch(`/api/timetravel?db=${encodeURIComponent(db)}`);
+    const d = await res.json();
+    if (!res.ok) { out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(d.error || "failed")}</div>`; return; }
+    out.innerHTML = `<div class="block" style="margin-top:12px"><div class="bhead">restore window</div><div class="bbody">`
+      + `<div class="diff-line">${fmtTime(d.oldest)} &rarr; ${fmtTime(d.now)} (30 days of continuous history)</div>`
+      + `</div></div>`;
+  } catch (e) { out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(String(e))}</div>`; }
+}
+
+async function rewindDatabase() {
+  const db = $("#ttDb").value, to = $("#ttTo").value.trim(), hint = $("#ttHint");
+  if (!db || !to) return;
+  if (!confirm(`Rewind ${db} to "${to}"?\n\nThis overwrites the live D1 database with its historical state — it cannot be undone by Litescope (use Time Travel again to go elsewhere in the window).`)) return;
+  hint.textContent = "rewinding…";
+  try {
+    const res = await fetch("/api/rewind", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ db, to }) });
+    const d = await res.json();
+    hint.textContent = "";
+    if (!res.ok) { toast(d.error || "rewind failed", "err"); return; }
+    toast(`rewound to bookmark ${d.bookmark}`, "ok");
+    load();
+  } catch (e) { hint.textContent = ""; toast(String(e), "err"); }
+}
+
+$("#ttRewind")?.addEventListener("click", rewindDatabase);
+$("#ttDb")?.addEventListener("change", loadTimeTravel);
+
 // View routing — sidebar nav switches the active view.
 function showView(name) {
   for (const v of document.querySelectorAll(".view")) v.classList.toggle("active", v.id === "view-" + name);
@@ -1649,6 +1714,8 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   BACKUP_ENABLED = !!c.backup;
   BACKUP_CREATE = !!c.backup_create;
   BACKUP_RESTORE = !!c.backup_restore;
+  TT_ENABLED = !!c.timetravel;
+  TT_RESTORE = !!c.timetravel_restore;
   // Enable a nav item only when its capability is present.
   for (const it of document.querySelectorAll(".nav .item[data-cap]")) {
     if (c[it.dataset.cap]) it.classList.remove("disabled");
@@ -1659,6 +1726,7 @@ fetch("/api/capabilities").then(r => r.json()).then(c => {
   if (LOCKS_ENABLED) { syncLocksPanel(); }
   if (AUTOPILOT_ENABLED) { syncAutopilotPanel(); }
   if (BACKUP_ENABLED) { syncBackupPanel(); }
+  if (TT_ENABLED) { syncTimeTravelPanel(); }
 }).catch(() => {});
 
 load();
