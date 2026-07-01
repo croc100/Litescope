@@ -7,6 +7,7 @@ package advisor
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -15,7 +16,8 @@ import (
 
 // Finding is one performance issue with a concrete suggestion.
 type Finding struct {
-	Rule       string `json:"rule"`     // fk-no-index | redundant-index | full-scan
+	Rule string `json:"rule"` // fk-no-index | redundant-index | full-scan | expr-index |
+	// partial-index | pragma-tuning
 	Severity   string `json:"severity"` // warning | info
 	Table      string `json:"table,omitempty"`
 	Detail     string `json:"detail"`
@@ -54,7 +56,11 @@ func Analyze(path string, queries []string) (*Report, error) {
 
 	for _, q := range queries {
 		r.Findings = append(r.Findings, scanFindings(db, q)...)
+		r.Findings = append(r.Findings, exprFindings(db, q)...)
+		r.Findings = append(r.Findings, partialFindings(db, q)...)
 	}
+
+	r.Findings = append(r.Findings, pragmaFindings(db, path)...)
 
 	return r, nil
 }
@@ -196,8 +202,14 @@ func scanFindings(db *sql.DB, query string) []Finding {
 			Detail:   fmt.Sprintf("query does a full table scan of %q: %s", table, oneLine(query)),
 		}
 		if cols := inferIndexColumns(db, table, query); len(cols) > 0 {
+			covering := append([]string{}, cols...)
+			extra := selectColumns(db, table, query, cols)
+			covering = append(covering, extra...)
 			f.Suggestion = fmt.Sprintf("CREATE INDEX idx_%s_%s ON %q(%s);",
-				table, strings.Join(cols, "_"), table, strings.Join(cols, ", "))
+				table, strings.Join(covering, "_"), table, strings.Join(covering, ", "))
+			if len(extra) > 0 {
+				f.Detail += fmt.Sprintf(" — widening the index with %s makes it covering (no row lookup needed)", strings.Join(extra, ", "))
+			}
 		} else {
 			f.Suggestion = "add an index covering the WHERE/JOIN columns used in this query"
 		}
@@ -320,6 +332,226 @@ func indexedLeftmost(db *sql.DB, table string) map[string]bool {
 		}
 	}
 	return out
+}
+
+// selectColumns extracts plain identifier columns from the query's SELECT
+// list (skipping "*", expressions, and aliases) that belong to table and
+// aren't already in lead, so they can be appended to a query-derived index to
+// make it covering. Deliberately conservative: a select list with more than 6
+// items or anything that isn't a simple (optionally qualified) identifier
+// yields no suggestion, since guessing wrong there is worse than staying
+// silent.
+func selectColumns(db *sql.DB, table, query string, lead []string) []string {
+	cols := tableColumnSet(db, table)
+	if len(cols) == 0 {
+		return nil
+	}
+	q := " " + strings.Join(strings.Fields(query), " ") + " "
+	lower := strings.ToLower(q)
+	si := strings.Index(lower, "select ")
+	fi := strings.Index(lower, " from ")
+	if si < 0 || fi < 0 || fi <= si {
+		return nil
+	}
+	list := q[si+len("select ") : fi]
+	if strings.Contains(list, "(") || strings.TrimSpace(list) == "*" {
+		return nil // aggregates/expressions/star — too risky to guess
+	}
+	parts := strings.Split(list, ",")
+	if len(parts) > 6 {
+		return nil
+	}
+	leadSet := map[string]bool{}
+	for _, c := range lead {
+		leadSet[strings.ToLower(c)] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, p := range parts {
+		name := strings.TrimSpace(p)
+		if i := strings.LastIndex(name, "."); i >= 0 {
+			name = name[i+1:]
+		}
+		if !identOnly.MatchString(name) || !cols[name] {
+			return nil // anything unexpected in the list — bail out entirely
+		}
+		key := strings.ToLower(name)
+		if leadSet[key] || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+var identOnly = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// ── rule: expression index ──────────────────────────────────────────────────
+
+// exprPred matches a single-argument function call compared against a value,
+// e.g. lower(email) = ? or date(created_at) >= ?.
+var exprPred = regexp.MustCompile(`(?i)\b([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*(=|<|>|<=|>=|<>|!=|\bIN\b|\bLIKE\b)`)
+
+// exprFindings flags predicates that filter on a function of a column
+// (lower(email) = ..., date(created_at) = ...). SQLite can't use a plain
+// index for these — only an expression index on the same function call.
+func exprFindings(db *sql.DB, query string) []Finding {
+	tables, err := userTables(db)
+	if err != nil {
+		return nil
+	}
+	region := predicateRegion(query)
+	var out []Finding
+	seen := map[string]bool{}
+	for _, m := range exprPred.FindAllStringSubmatch(region, -1) {
+		fn, col := strings.ToLower(m[1]), m[2]
+		for _, table := range tables {
+			if !tableColumnSet(db, table)[col] {
+				continue
+			}
+			key := table + "." + fn + "(" + strings.ToLower(col) + ")"
+			if seen[key] || hasExprIndex(db, table, fn, col) {
+				continue
+			}
+			seen[key] = true
+			out = append(out, Finding{
+				Rule:     "expr-index",
+				Severity: "warning",
+				Table:    table,
+				Detail: fmt.Sprintf("query filters on %s(%s) — a plain index on %s can't be used for this predicate",
+					fn, col, col),
+				Suggestion: fmt.Sprintf("CREATE INDEX idx_%s_%s_%s ON %q(%s(%s));", table, fn, col, table, fn, col),
+			})
+			break
+		}
+	}
+	return out
+}
+
+// hasExprIndex reports whether table already has an index whose leading term
+// is exactly fn(col). PRAGMA index_info reports a NULL column name for
+// expression terms, so exact-expression matching isn't available via pragmas
+// alone; this checks sqlite_master's stored index SQL as a best effort.
+func hasExprIndex(db *sql.DB, table, fn, col string) bool {
+	rows, err := db.Query(`SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL`, table)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	needle := strings.ToLower(fn) + "(" + strings.ToLower(col) + ")"
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			continue
+		}
+		if strings.Contains(strings.ToLower(strings.ReplaceAll(s, " ", "")), strings.ReplaceAll(needle, " ", "")) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── rule: partial index ─────────────────────────────────────────────────────
+
+// eqLiteral matches "col = literal" where literal is a quoted string or a
+// number, so selectivity can be measured directly against the table.
+var eqLiteral = regexp.MustCompile(`(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*('(?:[^']|'')*'|-?\d+(?:\.\d+)?)`)
+
+// partialFindings flags equality filters on a literal value that only match a
+// small slice of the table (e.g. status = 'archived' on a mostly-active
+// table). A partial index restricted to that value is far smaller and
+// cheaper to maintain than a full index over the whole column.
+func partialFindings(db *sql.DB, query string) []Finding {
+	tables, err := userTables(db)
+	if err != nil {
+		return nil
+	}
+	region := predicateRegion(query)
+	var out []Finding
+	seen := map[string]bool{}
+	for _, m := range eqLiteral.FindAllStringSubmatch(region, -1) {
+		col, lit := m[1], m[2]
+		for _, table := range tables {
+			cols := tableColumnSet(db, table)
+			if !cols[col] {
+				continue
+			}
+			key := table + "." + col + "=" + lit
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			total := scalarCount(db, fmt.Sprintf("SELECT COUNT(*) FROM %q", table))
+			if total < 1000 {
+				continue // too small to matter
+			}
+			matched := scalarCount(db, fmt.Sprintf("SELECT COUNT(*) FROM %q WHERE %q = %s", table, col, lit))
+			if matched <= 0 {
+				continue
+			}
+			ratio := float64(matched) / float64(total)
+			if ratio > 0.2 {
+				continue // not selective enough to justify a partial index
+			}
+			out = append(out, Finding{
+				Rule:     "partial-index",
+				Severity: "info",
+				Table:    table,
+				Detail: fmt.Sprintf("%q = %s matches %.1f%% of rows in %q — a full index over the column indexes the other %.0f%% for nothing",
+					col, lit, ratio*100, table, (1-ratio)*100),
+				Suggestion: fmt.Sprintf("CREATE INDEX idx_%s_%s_partial ON %q(%s) WHERE %s = %s;", table, col, table, col, col, lit),
+			})
+			break
+		}
+	}
+	return out
+}
+
+func scalarCount(db *sql.DB, query string) int64 {
+	var n int64
+	if err := db.QueryRow(query).Scan(&n); err != nil {
+		return -1
+	}
+	return n
+}
+
+// ── rule: PRAGMA tuning ──────────────────────────────────────────────────────
+
+// pragmaFindings recommends cache_size/mmap_size tuning for databases large
+// enough that SQLite's tiny default cache (2MB) causes repeated disk reads
+// for pages that would otherwise stay hot in memory. These are guidance-only:
+// cache_size and mmap_size are per-connection PRAGMAs, not stored in the
+// database file, so there's no SQL for autopilot to apply — the caller's
+// connection setup needs them.
+func pragmaFindings(db *sql.DB, path string) []Finding {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	const largeDB = 256 * 1024 * 1024 // 256MB
+	if info.Size() < largeDB {
+		return nil
+	}
+
+	var cacheSize int64
+	_ = db.QueryRow("PRAGMA cache_size").Scan(&cacheSize)
+	// Positive cache_size is a page count at the default page_size (usually
+	// 4096B); negative is a KB budget. Either way, SQLite's built-in default
+	// (-2000, i.e. ~2MB) is far too small for a multi-hundred-MB database.
+	if cacheSize != -2000 && cacheSize != 2000 {
+		return nil // already tuned away from the default
+	}
+
+	sizeMB := info.Size() / (1024 * 1024)
+	return []Finding{{
+		Rule:     "pragma-tuning",
+		Severity: "info",
+		Detail: fmt.Sprintf("database is %dMB but the connection is running SQLite's default ~2MB page cache — "+
+			"most reads miss the cache and hit disk", sizeMB),
+		Suggestion: "PRAGMA cache_size = -64000; -- 64MB, set per connection at startup\n" +
+			"PRAGMA mmap_size = 268435456; -- let the OS page cache serve reads beyond that",
+	}}
 }
 
 // ── SQLite metadata helpers ─────────────────────────────────────────────────

@@ -523,15 +523,25 @@ func Registry(allowWrites bool) []Tool {
 			Description: "Self-driving DBA for a local SQLite database. Derives safe maintenance and " +
 				"optimization actions — ANALYZE, PRAGMA optimize, missing foreign-key indexes, and " +
 				"(when fragmented) VACUUM / redundant-index cleanup — each explained in plain " +
-				"language.\n\n" +
+				"language. When queries are supplied, also flags full table scans, predicates on " +
+				"an expression (lower(col), date(col) — needs an expression index), and equality " +
+				"filters that only match a small slice of the table (needs a partial index instead " +
+				"of indexing the whole column). For large databases it also flags an undersized " +
+				"page cache (PRAGMA cache_size/mmap_size — guidance only, not stored in the file).\n\n" +
 				"Dry-run by default (apply=false): returns the plan without changing anything. " +
 				"apply=true executes the safe actions and requires --allow-writes; a snapshot is " +
 				"taken first so the run is one litescope_restore away from undo. Risky actions " +
-				"(VACUUM, dropping indexes) only run with aggressive=true. Local files only.",
+				"(VACUUM, dropping indexes, query-derived indexes) only run with aggressive=true. " +
+				"Local files only.",
 			InputSchema: obj(props{
 				"source":     strProp("Local SQLite file path."),
 				"apply":      boolProp("Execute the safe actions. Default false (dry-run). Requires --allow-writes."),
-				"aggressive": boolProp("Also run risky actions (VACUUM, drop redundant indexes)."),
+				"aggressive": boolProp("Also run risky actions (VACUUM, drop redundant indexes, query-derived indexes)."),
+				"queries": {
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Real SELECT statements this session has observed running against the database. Fed to EXPLAIN QUERY PLAN to detect full scans, expression predicates, and low-selectivity equality filters.",
+				},
 			}, "source"),
 			OutputSchema: outObj(props{
 				"path":    {"type": "string", "description": "The optimized database."},
@@ -552,7 +562,15 @@ func Registry(allowWrites bool) []Tool {
 					return "", fmt.Errorf("apply=true requires the MCP server to be started with --allow-writes")
 				}
 				aggressive, _ := args["aggressive"].(bool)
-				plan, err := autopilot.BuildPlan(src, nil)
+				var queries []string
+				if raw, ok := args["queries"].([]interface{}); ok {
+					for _, q := range raw {
+						if s, ok := q.(string); ok && s != "" {
+							queries = append(queries, s)
+						}
+					}
+				}
+				plan, err := autopilot.BuildPlan(src, queries)
 				if err != nil {
 					return "", err
 				}

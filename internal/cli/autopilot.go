@@ -35,6 +35,15 @@ cleanup and VACUUM are "risky" and only run with --aggressive. Every real change
 is preceded by an automatic snapshot, so a run is one 'litescope restore' away
 from undo.
 
+With --queries, autopilot runs each query through EXPLAIN QUERY PLAN and also
+flags: full table scans (missing index), predicates on an expression like
+lower(col) or date(col) (needs an expression index — a plain index can't serve
+these), and equality filters that only match a small slice of the table (needs
+a partial index instead of indexing the whole column). Large databases also
+get a PRAGMA cache_size/mmap_size recommendation when running with SQLite's
+tiny default page cache — guidance only, since those PRAGMAs aren't stored in
+the file.
+
   litescope autopilot ./app.db                 # dry-run: show the plan
   litescope autopilot ./app.db --apply         # apply the safe actions
   litescope autopilot ./app.db --apply --aggressive

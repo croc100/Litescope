@@ -33,11 +33,11 @@ const (
 
 // Action is one optimization step.
 type Action struct {
-	Kind   string `json:"kind"`            // analyze | optimize | vacuum | create-index | drop-index
-	Risk   string `json:"risk"`            // safe | risky
+	Kind   string `json:"kind"` // analyze | optimize | vacuum | create-index | drop-index | pragma-tuning
+	Risk   string `json:"risk"` // safe | risky
 	Table  string `json:"table,omitempty"`
-	SQL    string `json:"sql"`             // the statement autopilot would run
-	Reason string `json:"reason"`          // plain-language explanation
+	SQL    string `json:"sql"`    // the statement autopilot would run
+	Reason string `json:"reason"` // plain-language explanation
 }
 
 // ActionResult records what happened to an action during a run.
@@ -118,6 +118,21 @@ func BuildPlan(path string, queries []string) (*Plan, error) {
 				act.Reason = f.Detail + " — " + f.Suggestion
 			}
 			p.Actions = append(p.Actions, act)
+		case "expr-index":
+			p.Actions = append(p.Actions, Action{
+				Kind: "create-index", Risk: RiskRisky, Table: f.Table, SQL: f.Suggestion,
+				Reason: f.Detail + " — an expression index matching the function call lets this seek instead of scanning",
+			})
+		case "partial-index":
+			p.Actions = append(p.Actions, Action{
+				Kind: "create-index", Risk: RiskRisky, Table: f.Table, SQL: f.Suggestion,
+				Reason: f.Detail + " — a partial index only covers the matching rows, smaller and cheaper to maintain than a full index",
+			})
+		case "pragma-tuning":
+			p.Actions = append(p.Actions, Action{
+				Kind: "pragma-tuning", Risk: RiskSafe,
+				Reason: f.Detail + " — " + f.Suggestion,
+			})
 		}
 	}
 
@@ -126,7 +141,7 @@ func BuildPlan(path string, queries []string) (*Plan, error) {
 
 // RunOptions controls how a plan is executed.
 type RunOptions struct {
-	Apply     bool // commit changes; false = dry-run (everything is "proposed")
+	Apply      bool // commit changes; false = dry-run (everything is "proposed")
 	Aggressive bool // also apply RiskRisky actions
 	NoSnapshot bool // skip the pre-run snapshot (not recommended)
 }
