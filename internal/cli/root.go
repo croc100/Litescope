@@ -36,6 +36,7 @@ func Root() *cobra.Command {
 	root.AddCommand(cmdRewind())
 	root.AddCommand(cmdSnapshot())
 	root.AddCommand(cmdRestore())
+	root.AddCommand(cmdSalvage())
 	root.AddCommand(cmdBisect())
 	root.AddCommand(cmdLocks())
 	root.AddCommand(cmdMCP())

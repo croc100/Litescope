@@ -39,11 +39,12 @@ end — CLI, MCP tools, and the hosted/local dashboard.
   `--queries` EXPLAIN-driven index proposals, `--fleet`), `migrate`, `validate`,
   `monitor`
 - **File superpowers** — `rewind` (D1 Time Travel), `bisect`, `snapshot` /
-  `restore` (local + Turso, `--label`/`--keep`/`schedule`)
+  `restore` (local + Turso, `--label`/`--keep`/`schedule`), `salvage`
+  (pure-Go `.recover`-style corruption recovery when no healthy backup exists)
 - **Fleet & data** — `fleet`, `serve` (local dashboard: topology, ERD, data
   browser, diff, lock doctor, autopilot preview, snapshot/restore, D1 Time
   Travel panel, fleet-health-over-time timeline), `metrics`, `import`/`export`/`dump`
-- **MCP protocol** — 22 tools spanning read/write/fleet/D1-lifecycle, 4 canned
+- **MCP protocol** — 24 tools spanning read/write/fleet/D1-lifecycle, 4 canned
   prompts (`diagnose_locked_database`, `review_migration`, `safe_optimize`,
   `health_checkup`), `schema`/`dictionary` resources, spec 2025-06-18
   (annotations, structured output, argument completion, resource subscriptions,
@@ -75,9 +76,10 @@ Being *the* SQLite tool means going deeper than any generic DB client can.
      This is also Phase J's headline bet — landing it here pulls it forward
      because it's the single highest-leverage MCP-server gap identified.
    - **Autopilot** — workload-driven index recommendations from a real query
-     log, partial/expression-index proposals, cache & page-size tuning.
-   - **File superpowers** — page-level diff visualization, automatic
-     corruption recovery (`.recover` pipeline), incremental backups.
+     log, partial/expression-index proposals, cache & page-size tuning. ✅ shipped
+   - **File superpowers** — automatic corruption recovery (pure-Go `.recover`
+     pipeline: schema replay + rowid-bisection row salvage) ✅ shipped;
+     page-level diff visualization and incremental backups still open.
 2. **MCP resource/prompt depth** — resources currently cover only
    schema/dictionary; add live-state resources (`litescope://health/{source}`,
    `litescope://locks/{source}`) so subscriptions cover more than schema

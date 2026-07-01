@@ -20,6 +20,7 @@ import (
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/migrate"
 	"github.com/croc100/litescope/internal/safewrite"
+	"github.com/croc100/litescope/internal/salvage"
 	"github.com/croc100/litescope/internal/schema"
 	"github.com/croc100/litescope/internal/snapshot"
 )
@@ -40,7 +41,7 @@ const sourcePropDesc = "Database source: a local file path (./app.db), a Cloudfl
 
 // Registry returns all MCP tools. When allowWrites is true, write-capable tools
 // are appended: litescope_query_write, litescope_migrate_apply, litescope_write_undo,
-// litescope_d1_create, litescope_d1_delete.
+// litescope_salvage, litescope_d1_create, litescope_d1_delete.
 func Registry(allowWrites bool) []Tool {
 	tools := []Tool{
 		{
@@ -884,6 +885,48 @@ func writeTools() []Tool {
 				})
 			},
 		},
+		{
+			Name: "litescope_salvage",
+			Description: "Recover readable rows from a corrupt local SQLite database into a brand-new " +
+				"file, for the case where litescope_restore has no healthy snapshot to fall back on. " +
+				"Does not modify the source file: replays the schema from sqlite_master into 'output', " +
+				"then copies every row it can still read out of each table, isolating and skipping only " +
+				"the exact rowids that live on corrupt pages instead of giving up on the whole table. " +
+				"This is a pure-Go approximation of the sqlite3 shell's '.recover' command (not available " +
+				"through this project's cgo-free driver) — it can't do a full page-level scan, so treat " +
+				"the result as best-effort, not a guarantee of completeness. 'output' must not already " +
+				"exist. Only available with --allow-writes (it writes a new file, though never the " +
+				"source); local files only.",
+			InputSchema: obj(props{
+				"source": strProp("Local path to the corrupt SQLite database (read-only; never modified)."),
+				"output": strProp("Path to write the recovered database to. Must not already exist."),
+			}, "source", "output"),
+			OutputSchema: outObj(props{
+				"source":         {"type": "string", "description": "The corrupt database that was read."},
+				"output":         {"type": "string", "description": "The recovered database that was written."},
+				"tables":         {"type": "array", "description": "Per-table rows_copied/rows_lost, and any schema-replay error."},
+				"schema_lost":    {"type": "array", "description": "Indexes/views/triggers that failed to replay."},
+				"output_healthy": {"type": "boolean", "description": "Whether the recovered file itself passes quick_check."},
+			}, "source", "output", "tables"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("litescope_salvage is for local SQLite files; %q is remote", src)
+				}
+				output, _ := args["output"].(string)
+				if output == "" {
+					return "", fmt.Errorf("output is required")
+				}
+				res, err := salvage.Recover(src, output)
+				if err != nil {
+					return "", err
+				}
+				return toJSON(res)
+			},
+		},
 	}
 }
 
@@ -1356,6 +1399,7 @@ var annotationsByName = map[string]toolAnnotations{
 	"litescope_autopilot": {Title: "Self-driving optimize (dry-run default)", ReadOnlyHint: false, DestructiveHint: false},
 	"litescope_d1_pull":   {Title: "Pull D1 to a local copy", ReadOnlyHint: false, DestructiveHint: false, OpenWorldHint: true},
 	"litescope_d1_create": {Title: "Create a D1 database", ReadOnlyHint: false, DestructiveHint: false, OpenWorldHint: true},
+	"litescope_salvage":   {Title: "Recover rows from a corrupt database", ReadOnlyHint: false, DestructiveHint: false},
 
 	// Destructive — replace or remove data.
 	"litescope_restore":       {Title: "Restore from a snapshot", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: false},
