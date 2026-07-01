@@ -1,27 +1,37 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/croc100/litescope/internal/connector"
+	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/schema"
 )
 
-// Litescope exposes two read-only resources per database, addressed by URI:
+// Litescope exposes four read-only resources per database, addressed by URI:
 //
 //	litescope://schema/<source>      — CREATE-style schema overview
 //	litescope://dictionary/<source>  — a human/agent-readable data dictionary
+//	litescope://health/<source>      — live operational health (corruption, WAL, bloat)
+//	litescope://locks/<source>       — live lock/contention diagnosis
 //
 // <source> is any DSN litescope understands (a local path, d1://…, turso://…).
 // Because the server is not bound to a single database, these are surfaced as
 // resource *templates*; a client substitutes the source. When the server is
-// started with a default source, the same two resources are also listed
+// started with a default source, the same resources are also listed
 // concretely so simple clients can read them without filling a template.
+//
+// Unlike schema/dictionary, health and locks are computed fresh on every read
+// rather than cached — an agent that subscribes gets pushed an update
+// whenever the underlying file changes (see watchResources), without polling.
 const (
 	schemaScheme = "litescope://schema/"
 	dictScheme   = "litescope://dictionary/"
+	healthScheme = "litescope://health/"
+	locksScheme  = "litescope://locks/"
 )
 
 // resourceTemplates returns the URI templates advertised by resources/templates/list.
@@ -38,6 +48,18 @@ func resourceTemplates() []map[string]interface{} {
 			"name":        "Data dictionary",
 			"description": "Human-readable data dictionary (every table and column described) for {source}.",
 			"mimeType":    "text/markdown",
+		},
+		{
+			"uriTemplate": "litescope://health/{source}",
+			"name":        "Database health",
+			"description": "Live operational health for {source}: corruption, WAL bloat, fragmentation, reachability. Subscribe to get pushed updates as the file changes.",
+			"mimeType":    "application/json",
+		},
+		{
+			"uriTemplate": "litescope://locks/{source}",
+			"name":        "Lock contention diagnosis",
+			"description": "Live lock/writer-starvation diagnosis for {source}. Subscribe to get pushed updates as the file changes.",
+			"mimeType":    "application/json",
 		},
 	}
 }
@@ -63,6 +85,18 @@ func concreteResources(defaultSource string) []map[string]interface{} {
 			"description": "Human-readable data dictionary for " + defaultSource + ".",
 			"mimeType":    "text/markdown",
 		},
+		{
+			"uri":         healthScheme + defaultSource,
+			"name":        "Database health (" + defaultSource + ")",
+			"description": "Live operational health for " + defaultSource + ".",
+			"mimeType":    "application/json",
+		},
+		{
+			"uri":         locksScheme + defaultSource,
+			"name":        "Lock contention diagnosis (" + defaultSource + ")",
+			"description": "Live lock/writer-starvation diagnosis for " + defaultSource + ".",
+			"mimeType":    "application/json",
+		},
 	}
 }
 
@@ -83,6 +117,30 @@ func readResource(uri string) (text, mime string, err error) {
 			return "", "", err
 		}
 		return renderDictionary(src, s), "text/markdown", nil
+	case strings.HasPrefix(uri, healthScheme):
+		src := strings.TrimPrefix(uri, healthScheme)
+		if src == "" {
+			return "", "", fmt.Errorf("resource URI is missing a source")
+		}
+		b, err := json.MarshalIndent(inspectHealth(src, false), "", "  ")
+		if err != nil {
+			return "", "", err
+		}
+		return string(b), "application/json", nil
+	case strings.HasPrefix(uri, locksScheme):
+		src := strings.TrimPrefix(uri, locksScheme)
+		if src == "" {
+			return "", "", fmt.Errorf("resource URI is missing a source")
+		}
+		r, err := locks.Diagnose(src)
+		if err != nil {
+			return "", "", err
+		}
+		b, err := json.MarshalIndent(r, "", "  ")
+		if err != nil {
+			return "", "", err
+		}
+		return string(b), "application/json", nil
 	default:
 		return "", "", fmt.Errorf("unknown resource URI: %s", uri)
 	}
@@ -98,6 +156,10 @@ func resourceFilePath(uri string) string {
 		src = strings.TrimPrefix(uri, schemaScheme)
 	case strings.HasPrefix(uri, dictScheme):
 		src = strings.TrimPrefix(uri, dictScheme)
+	case strings.HasPrefix(uri, healthScheme):
+		src = strings.TrimPrefix(uri, healthScheme)
+	case strings.HasPrefix(uri, locksScheme):
+		src = strings.TrimPrefix(uri, locksScheme)
 	default:
 		return ""
 	}

@@ -80,11 +80,10 @@ Being *the* SQLite tool means going deeper than any generic DB client can.
    - **File superpowers** — automatic corruption recovery (pure-Go `.recover`
      pipeline: schema replay + rowid-bisection row salvage) ✅ shipped;
      page-level diff visualization and incremental backups still open.
-2. **MCP resource/prompt depth** — resources currently cover only
-   schema/dictionary; add live-state resources (`litescope://health/{source}`,
-   `litescope://locks/{source}`) so subscriptions cover more than schema
-   changes. Prompts currently cover single-DB diagnosis only; add fleet-scale
-   workflow prompts (e.g. tenant health sweep).
+2. **MCP resource/prompt depth** — live-state resources (`litescope://health/{source}`,
+   `litescope://locks/{source}`) ✅ shipped, subscribable alongside
+   schema/dictionary. Prompts currently cover single-DB diagnosis only; add
+   fleet-scale workflow prompts (e.g. tenant health sweep) — still open.
 3. **Single-database depth** — inline cell editing in the browser, FTS5
    full-text search tooling, trigger/view/virtual-table inspection, `ATTACH`
    multi-database queries, `EXPLAIN QUERY PLAN` visualization.

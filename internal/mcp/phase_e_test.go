@@ -79,8 +79,8 @@ func TestServe_PromptsGet_MissingRequiredArg(t *testing.T) {
 func TestServe_ResourceTemplatesList(t *testing.T) {
 	r := run(t, `{"jsonrpc":"2.0","id":5,"method":"resources/templates/list"}`)
 	tmpls := r[5]["result"].(map[string]interface{})["resourceTemplates"].([]interface{})
-	if len(tmpls) != 2 {
-		t.Fatalf("expected 2 templates, got %d", len(tmpls))
+	if len(tmpls) != 4 {
+		t.Fatalf("expected 4 templates, got %d", len(tmpls))
 	}
 }
 
@@ -88,8 +88,8 @@ func TestServe_ResourcesList_BoundSource(t *testing.T) {
 	path := makeSchemaDB(t)
 	r := runSource(t, path, `{"jsonrpc":"2.0","id":6,"method":"resources/list"}`)
 	resources := r[6]["result"].(map[string]interface{})["resources"].([]interface{})
-	if len(resources) != 2 {
-		t.Fatalf("expected 2 concrete resources for a bound source, got %d", len(resources))
+	if len(resources) != 4 {
+		t.Fatalf("expected 4 concrete resources for a bound source, got %d", len(resources))
 	}
 }
 
@@ -120,6 +120,50 @@ func TestServe_ResourceRead_Dictionary(t *testing.T) {
 	text := res["contents"].([]interface{})[0].(map[string]interface{})["text"].(string)
 	if !strings.Contains(text, "Data dictionary") || !strings.Contains(text, "books") || !strings.Contains(text, "FK→authors") {
 		t.Errorf("dictionary missing expected content:\n%s", text)
+	}
+}
+
+func TestServe_ResourceRead_Health(t *testing.T) {
+	path := makeSchemaDB(t)
+	uri := "litescope://health/" + path
+	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":%q}}`, uri)
+	r := run(t, req)
+	res, ok := r[10]["result"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("resources/read failed: %v", r[10])
+	}
+	c := res["contents"].([]interface{})[0].(map[string]interface{})
+	if c["mimeType"] != "application/json" {
+		t.Errorf("expected application/json mimeType, got %v", c["mimeType"])
+	}
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(c["text"].(string)), &report); err != nil {
+		t.Fatalf("health resource is not valid JSON: %v", err)
+	}
+	if report["severity"] != "ok" {
+		t.Errorf("expected healthy severity, got %v", report)
+	}
+}
+
+func TestServe_ResourceRead_Locks(t *testing.T) {
+	path := makeSchemaDB(t)
+	uri := "litescope://locks/" + path
+	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":11,"method":"resources/read","params":{"uri":%q}}`, uri)
+	r := run(t, req)
+	res, ok := r[11]["result"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("resources/read failed: %v", r[11])
+	}
+	c := res["contents"].([]interface{})[0].(map[string]interface{})
+	if c["mimeType"] != "application/json" {
+		t.Errorf("expected application/json mimeType, got %v", c["mimeType"])
+	}
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(c["text"].(string)), &report); err != nil {
+		t.Fatalf("locks resource is not valid JSON: %v", err)
+	}
+	if report["Verdict"] == nil {
+		t.Errorf("expected a Verdict field, got %v", report)
 	}
 }
 

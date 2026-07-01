@@ -65,30 +65,7 @@ func Registry(allowWrites bool) []Tool {
 					return "", err
 				}
 				deep, _ := args["deep"].(bool)
-				if isRemote(src) {
-					// Remote sources: reachability check via connector
-					c, err := connector.Open(src)
-					if err != nil {
-						return toJSON(map[string]interface{}{
-							"source": src, "reachable": false,
-							"severity": "critical", "issues": []string{err.Error()},
-						})
-					}
-					defer c.Close()
-					_, schErr := c.Schema()
-					if schErr != nil {
-						return toJSON(map[string]interface{}{
-							"source": src, "reachable": false,
-							"severity": "critical", "issues": []string{schErr.Error()},
-						})
-					}
-					return toJSON(map[string]interface{}{
-						"source": src, "reachable": true,
-						"severity": "ok", "issues": []string{},
-						"note": "Full PRAGMA checks require a local file; remote health shows reachability only.",
-					})
-				}
-				return toJSON(health.Inspect(src, deep))
+				return toJSON(inspectHealth(src, deep))
 			},
 		},
 		{
@@ -946,6 +923,35 @@ func requireSource(args map[string]interface{}) (string, error) {
 
 func isRemote(src string) bool {
 	return strings.HasPrefix(src, "d1://") || strings.HasPrefix(src, "turso://")
+}
+
+// inspectHealth runs a health check on src, shared by the litescope_health
+// tool and the litescope://health/{source} resource. Remote sources only get
+// a reachability check; local files get the full corruption/WAL/fragmentation
+// inspection.
+func inspectHealth(src string, deep bool) interface{} {
+	if isRemote(src) {
+		c, err := connector.Open(src)
+		if err != nil {
+			return map[string]interface{}{
+				"source": src, "reachable": false,
+				"severity": "critical", "issues": []string{err.Error()},
+			}
+		}
+		defer c.Close()
+		if _, err := c.Schema(); err != nil {
+			return map[string]interface{}{
+				"source": src, "reachable": false,
+				"severity": "critical", "issues": []string{err.Error()},
+			}
+		}
+		return map[string]interface{}{
+			"source": src, "reachable": true,
+			"severity": "ok", "issues": []string{},
+			"note": "Full PRAGMA checks require a local file; remote health shows reachability only.",
+		}
+	}
+	return health.Inspect(src, deep)
 }
 
 // budgetRows enforces token-budgeting on a query result: it applies an optional

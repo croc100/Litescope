@@ -88,9 +88,12 @@ context window.
 Beyond tools, the MCP server exposes **prompts** — canned workflows like
 `diagnose_locked_database`, `review_migration`, `safe_optimize`, and
 `health_checkup` that chain the tools above into a safe plan — and
-**resources**: a database's schema and a data dictionary, readable by the agent
-without spending a tool call. Bind one with `litescope mcp ./app.db`, or address
-any source via `litescope://schema/{source}` and `litescope://dictionary/{source}`.
+**resources**: a database's schema, data dictionary, live health, and live lock
+diagnosis — readable by the agent without spending a tool call, and
+subscribable for push updates whenever the underlying file changes. Bind one
+with `litescope mcp ./app.db`, or address any source via
+`litescope://schema/{source}`, `litescope://dictionary/{source}`,
+`litescope://health/{source}`, and `litescope://locks/{source}`.
 
 The server implements **MCP 2025-06-18**: tool annotations (read-only /
 destructive hints), structured output (`structuredContent` + `outputSchema`),
