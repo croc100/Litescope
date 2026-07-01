@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/croc100/litescope/internal/health"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 func cmdHealth() *cobra.Command {
 	var format string
 	var deep bool
+	var staleAfter time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "health <database.db>",
@@ -26,6 +28,7 @@ func cmdHealth() *cobra.Command {
   litescope health app.db
   litescope health app.db --deep
   litescope health app.db --format json
+  litescope health app.db --stale-after 1h    # flag a heartbeat stall
 
 Exit code is 1 when the database is in a warning or critical state.
 
@@ -33,6 +36,7 @@ Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := health.Inspect(args[0], deep)
+			r.CheckStaleness(staleAfter)
 
 			if format == "json" {
 				enc := json.NewEncoder(os.Stdout)
@@ -52,6 +56,7 @@ Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
 	}
 	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
 	cmd.Flags().BoolVar(&deep, "deep", false, "use exhaustive integrity_check instead of quick_check")
+	cmd.Flags().DurationVar(&staleAfter, "stale-after", 0, "flag as stale if no writes within this duration (e.g. 1h); disabled by default")
 	return cmd
 }
 
@@ -90,6 +95,13 @@ func printHealth(r *health.Report) {
 			fragStr = styleWarn.Render(fragStr + "  (VACUUM candidate)")
 		}
 		row("fragmentation", fragStr)
+		if !r.ModTime.IsZero() {
+			lastWrite := agePhrase(r.ModTime)
+			if r.Stale {
+				lastWrite = styleWarn.Render(lastWrite + "  (stale)")
+			}
+			row("last write", lastWrite)
+		}
 
 		if r.HasBackup && r.LastBackupAt != nil {
 			row("backup", fmt.Sprintf("%s  (%s, %d kept)",

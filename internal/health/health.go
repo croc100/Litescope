@@ -68,6 +68,11 @@ type Report struct {
 	JournalMode   string   `json:"journal_mode,omitempty"`
 	Error         string   `json:"error,omitempty"`
 
+	// Heartbeat staleness — the database file hasn't been written to recently.
+	// Zero ModTime means it wasn't checked (remote source, or file missing).
+	ModTime time.Time `json:"mod_time,omitempty"`
+	Stale   bool      `json:"stale,omitempty"`
+
 	// Backup posture (local files only). HasBackup is false when no litescope
 	// snapshot exists for the database. These are informational and do not raise
 	// severity — a missing backup is a recommendation, not a fault.
@@ -101,10 +106,16 @@ func Inspect(path string, deep bool) *Report {
 	}
 	r.Reachable = true
 	r.SizeBytes = fi.Size()
+	r.ModTime = fi.ModTime()
 
 	// WAL file lives alongside the main DB; its size reveals checkpoint health.
+	// In WAL mode writes land there first, so it — not the main file — carries
+	// the freshest mtime; take the max of both for an accurate last-write time.
 	if wfi, err := os.Stat(path + "-wal"); err == nil {
 		r.WALBytes = wfi.Size()
+		if wfi.ModTime().After(r.ModTime) {
+			r.ModTime = wfi.ModTime()
+		}
 	}
 
 	db, err := sql.Open("sqlite", path+"?mode=ro")
@@ -158,6 +169,23 @@ func Inspect(path string, deep bool) *Report {
 
 	r.SeverityLabel = r.Severity.String()
 	return r
+}
+
+// CheckStaleness flags a database that stopped being written to — a
+// dead-man's-switch for an app that crashed, disconnected, or hung without
+// ever corrupting its file. No-op when maxIdle is zero/negative, the database
+// is unreachable, or its mtime wasn't captured (e.g. a remote source).
+func (r *Report) CheckStaleness(maxIdle time.Duration) {
+	if maxIdle <= 0 || !r.Reachable || r.ModTime.IsZero() {
+		return
+	}
+	idle := time.Since(r.ModTime)
+	if idle <= maxIdle {
+		return
+	}
+	r.Stale = true
+	r.raise(SevWarning, fmt.Sprintf("stale — no writes in %s (last write %s ago)", maxIdle, idle.Round(time.Second)))
+	r.SeverityLabel = r.Severity.String()
 }
 
 // raise bumps severity to at least sev and records an issue.

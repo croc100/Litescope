@@ -85,6 +85,26 @@ func Health(dbs []Database, deep bool, concurrency int) *HealthReport {
 	return &HealthReport{Results: results, CheckedAt: time.Now().UTC()}
 }
 
+// ApplyStaleness flags databases that haven't been written to within maxIdle
+// (a dead-man's-switch for an app that quietly stopped reporting) and
+// re-sorts the report worst-first to reflect any newly raised severities.
+// No-op when maxIdle is zero/negative.
+func (r *HealthReport) ApplyStaleness(maxIdle time.Duration) {
+	if maxIdle <= 0 {
+		return
+	}
+	for i := range r.Results {
+		r.Results[i].Report.CheckStaleness(maxIdle)
+	}
+	sort.Slice(r.Results, func(i, j int) bool {
+		si, sj := r.Results[i].Report.Severity, r.Results[j].Report.Severity
+		if si != sj {
+			return si > sj
+		}
+		return r.Results[i].Database < r.Results[j].Database
+	})
+}
+
 // SendHealthAlert POSTs a fault summary to a webhook (Slack-compatible when the
 // URL points at Slack, otherwise generic JSON). It is a no-op when the fleet is
 // healthy. Used by scheduled/continuous health watch.

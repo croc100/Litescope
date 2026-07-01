@@ -225,7 +225,7 @@ func recoverFailDetail(r fleet.RecoverResult) string {
 func cmdFleetHealth() *cobra.Command {
 	var configPath, tag, format, webhook string
 	var deep, watch, autoRecover bool
-	var interval time.Duration
+	var interval, staleAfter time.Duration
 	var concurrency int
 
 	cmd := &cobra.Command{
@@ -247,6 +247,7 @@ databases report reachability only.
   litescope fleet health --webhook $SLACK_URL         # one-shot alert for cron
   litescope fleet health --watch --interval 5m        # continuous monitoring
   litescope fleet health --watch --webhook $URL --recover  # detect → alert → auto-recover
+  litescope fleet health --stale-after 1h             # flag databases that stopped reporting
 
 Exit code is 1 when any database is in a warning or critical state — drop it
 into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
@@ -269,6 +270,7 @@ into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 			// One scan: inspect, render, alert, and optionally auto-recover.
 			runOnce := func() *fleet.HealthReport {
 				report := fleet.Health(dbs, deep, concurrency)
+				report.ApplyStaleness(staleAfter)
 				if format == "json" {
 					enc := json.NewEncoder(os.Stdout)
 					enc.SetIndent("", "  ")
@@ -344,6 +346,7 @@ into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 	cmd.Flags().StringVar(&webhook, "webhook", "", "POST a fault alert to this URL (Slack-compatible)")
 	cmd.Flags().BoolVar(&autoRecover, "recover", false, "auto-recover critically faulted databases from backup")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
+	cmd.Flags().DurationVar(&staleAfter, "stale-after", 0, "flag databases with no writes within this duration (e.g. 1h) — a dead-man's-switch; disabled by default")
 	return cmd
 }
 

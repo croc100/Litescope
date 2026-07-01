@@ -91,8 +91,9 @@ Being *the* SQLite tool means going deeper than any generic DB client can.
 4. **Lint rule expansion** — grow the schema linter toward Bytebase-class
    coverage: naming conventions, index width, NULL handling, type-affinity,
    reserved words, migration-safety checks.
-5. **Heartbeat staleness** — flag databases that stopped reporting (ties into
-   Phase I).
+5. **Heartbeat staleness** — flag databases that stopped reporting ✅ shipped
+   (`--stale-after` on `health`/`fleet health`; ties into Phase I's hosted
+   dead-man's-switch).
 6. **Cloudflare Workers Launchpad** — apply for CF's startup support program
    (external, non-code).
 

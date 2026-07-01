@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -111,6 +112,49 @@ func TestFragmentationPct(t *testing.T) {
 	empty := &Report{}
 	if got := empty.FragmentationPct(); got != 0 {
 		t.Errorf("FragmentationPct on empty = %.1f, want 0", got)
+	}
+}
+
+func TestCheckStaleness(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/heartbeat.db"
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+	db.Close()
+
+	r := Inspect(path, false)
+	if r.ModTime.IsZero() {
+		t.Fatalf("expected ModTime to be captured")
+	}
+
+	// Fresh write, generous threshold: not stale.
+	r.CheckStaleness(time.Hour)
+	if r.Stale || r.Severity != SevOK {
+		t.Errorf("fresh db: stale=%v severity=%v, want not stale/OK", r.Stale, r.Severity)
+	}
+
+	// Backdate the mtime to simulate a stalled heartbeat.
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	r = Inspect(path, false)
+	r.CheckStaleness(time.Hour)
+	if !r.Stale || r.Severity != SevWarning {
+		t.Errorf("stale db: stale=%v severity=%v, want stale/SevWarning", r.Stale, r.Severity)
+	}
+	if len(r.Issues) == 0 {
+		t.Error("expected a stale issue to be recorded")
+	}
+
+	// Disabled (zero threshold) is a no-op.
+	r2 := Inspect(path, false)
+	r2.CheckStaleness(0)
+	if r2.Stale || r2.Severity != SevOK {
+		t.Errorf("disabled staleness check should be a no-op, got stale=%v severity=%v", r2.Stale, r2.Severity)
 	}
 }
 
