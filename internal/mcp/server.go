@@ -307,11 +307,23 @@ func (s *server) handleSubscribe(req rpcRequest, subscribe bool) {
 	s.respond(req.ID, map[string]interface{}{})
 }
 
-// watchResources polls the mtime of every subscribed local-file resource and
-// emits notifications/resources/updated when one changes. Remote (d1/turso)
-// resources cannot be watched and are skipped. It exits when Serve returns.
+// watchResources polls every subscribed local-file resource and emits
+// notifications/resources/updated when it's actually worth telling the agent.
+// Remote (d1/turso) resources cannot be watched and are skipped. It exits when
+// Serve returns.
+//
+// Two different triggers are used depending on the resource:
+//   - schema/dictionary rarely change, so any file-mtime bump is notification-
+//     worthy.
+//   - health/locks are live diagnoses of a file that may be written constantly;
+//     using mtime here would fire on every single write even when nothing about
+//     severity changed, and — worse — would never fire when writes *stop*
+//     (a stale heartbeat, the exact case the check exists to catch). Instead
+//     these recompute the diagnosis each tick and notify only when the
+//     severity/verdict signature changes (see liveSignature).
 func (s *server) watchResources() {
 	mtimes := map[string]time.Time{}
+	states := map[string]string{}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -326,6 +338,14 @@ func (s *server) watchResources() {
 			}
 			s.mu.Unlock()
 			for _, u := range uris {
+				if sig, ok := liveSignature(u); ok {
+					prev, seen := states[u]
+					states[u] = sig
+					if seen && sig != prev {
+						s.notify("notifications/resources/updated", map[string]interface{}{"uri": u})
+					}
+					continue
+				}
 				path := resourceFilePath(u)
 				if path == "" {
 					continue // remote or unknown URI: not watchable

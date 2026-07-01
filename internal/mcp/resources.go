@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/croc100/litescope/internal/connector"
+	"github.com/croc100/litescope/internal/health"
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/schema"
 )
@@ -25,8 +27,15 @@ import (
 // concretely so simple clients can read them without filling a template.
 //
 // Unlike schema/dictionary, health and locks are computed fresh on every read
-// rather than cached — an agent that subscribes gets pushed an update
-// whenever the underlying file changes (see watchResources), without polling.
+// rather than cached. They also use a different subscription trigger: schema
+// rarely changes, so schema/dictionary notify on any file-mtime bump. Health
+// and locks recompute their verdict every tick and notify only when severity
+// or verdict actually changes — otherwise a busy database would fire an
+// "updated" notification on every single write. See watchResources/liveSignature.
+//
+// litescope://health/{source} accepts an optional ?stale_after=<duration>
+// (e.g. "1h") to flag a heartbeat stall — no writes within that window — the
+// same check as `litescope health --stale-after`. Omitted or zero disables it.
 const (
 	schemaScheme = "litescope://schema/"
 	dictScheme   = "litescope://dictionary/"
@@ -52,13 +61,13 @@ func resourceTemplates() []map[string]interface{} {
 		{
 			"uriTemplate": "litescope://health/{source}",
 			"name":        "Database health",
-			"description": "Live operational health for {source}: corruption, WAL bloat, fragmentation, reachability. Subscribe to get pushed updates as the file changes.",
+			"description": "Live operational health for {source}: corruption, WAL bloat, fragmentation, reachability. Append ?stale_after=1h to flag a heartbeat stall. Subscribe to be notified only when severity actually changes (not on every write).",
 			"mimeType":    "application/json",
 		},
 		{
 			"uriTemplate": "litescope://locks/{source}",
 			"name":        "Lock contention diagnosis",
-			"description": "Live lock/writer-starvation diagnosis for {source}. Subscribe to get pushed updates as the file changes.",
+			"description": "Live lock/writer-starvation diagnosis for {source}. Subscribe to be notified only when the verdict actually changes (not on every write).",
 			"mimeType":    "application/json",
 		},
 	}
@@ -118,11 +127,15 @@ func readResource(uri string) (text, mime string, err error) {
 		}
 		return renderDictionary(src, s), "text/markdown", nil
 	case strings.HasPrefix(uri, healthScheme):
-		src := strings.TrimPrefix(uri, healthScheme)
+		src, staleAfter := splitStaleAfter(strings.TrimPrefix(uri, healthScheme))
 		if src == "" {
 			return "", "", fmt.Errorf("resource URI is missing a source")
 		}
-		b, err := json.MarshalIndent(inspectHealth(src, false), "", "  ")
+		rep := inspectHealth(src, false)
+		if r, ok := rep.(*health.Report); ok {
+			r.CheckStaleness(staleAfter)
+		}
+		b, err := json.MarshalIndent(rep, "", "  ")
 		if err != nil {
 			return "", "", err
 		}
@@ -157,7 +170,7 @@ func resourceFilePath(uri string) string {
 	case strings.HasPrefix(uri, dictScheme):
 		src = strings.TrimPrefix(uri, dictScheme)
 	case strings.HasPrefix(uri, healthScheme):
-		src = strings.TrimPrefix(uri, healthScheme)
+		src, _ = splitStaleAfter(strings.TrimPrefix(uri, healthScheme))
 	case strings.HasPrefix(uri, locksScheme):
 		src = strings.TrimPrefix(uri, locksScheme)
 	default:
@@ -167,6 +180,54 @@ func resourceFilePath(uri string) string {
 		return ""
 	}
 	return src
+}
+
+// splitStaleAfter pulls a "?stale_after=<duration>" suffix off a health
+// resource's source, e.g. "app.db?stale_after=1h" -> ("app.db", time.Hour).
+// An absent, empty, or unparseable duration disables the check (0).
+func splitStaleAfter(raw string) (src string, staleAfter time.Duration) {
+	const key = "?stale_after="
+	i := strings.Index(raw, key)
+	if i < 0 {
+		return raw, 0
+	}
+	d, err := time.ParseDuration(raw[i+len(key):])
+	if err != nil {
+		return raw[:i], 0
+	}
+	return raw[:i], d
+}
+
+// liveSignature computes a short state signature for a health/locks resource
+// — severity for health, verdict for locks — that changes only when the
+// underlying diagnosis actually changes. The subscription watcher uses this
+// instead of raw file-mtime so a busy database doesn't fire a notification on
+// every write; only real severity/verdict transitions (including a heartbeat
+// going stale) are pushed. Returns ok=false for anything else (remote source,
+// unrecognized URI).
+func liveSignature(uri string) (sig string, ok bool) {
+	switch {
+	case strings.HasPrefix(uri, healthScheme):
+		src, staleAfter := splitStaleAfter(strings.TrimPrefix(uri, healthScheme))
+		if src == "" || isRemote(src) {
+			return "", false
+		}
+		r := health.Inspect(src, false)
+		r.CheckStaleness(staleAfter)
+		return fmt.Sprintf("%s|%d", r.SeverityLabel, len(r.Issues)), true
+	case strings.HasPrefix(uri, locksScheme):
+		src := strings.TrimPrefix(uri, locksScheme)
+		if src == "" || isRemote(src) {
+			return "", false
+		}
+		rep, err := locks.Diagnose(src)
+		if err != nil {
+			return "error", true
+		}
+		return fmt.Sprintf("%s|%d", rep.Verdict, len(rep.Findings)), true
+	default:
+		return "", false
+	}
 }
 
 func loadSchema(src string) (*schema.Schema, error) {
