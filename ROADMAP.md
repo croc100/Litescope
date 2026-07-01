@@ -68,13 +68,10 @@ Being *the* SQLite tool means going deeper than any generic DB client can.
      event history and WAL-checkpoint monitoring, feeding a multi-process
      contention timeline (fleet-level health timeline already ships; this is
      the per-DB drill-down).
-   - **Reversible-write MCP contract** — package the parts already shipped
-     (`litescope_query_write` dry-run + auto-snapshot + `litescope_rewind` +
-     diff) into one response shape: `{ rows_affected, blast_radius_diff,
-     rewind_token }` on every write, undoable in a single call. Currently the
-     pieces exist separately; agents have to stitch them together themselves.
-     This is also Phase J's headline bet — landing it here pulls it forward
-     because it's the single highest-leverage MCP-server gap identified.
+   - **Reversible-write MCP contract** ✅ shipped — `litescope_query_write`
+     (local) returns `{ rows_affected, blast_radius_diff, rewind_token }` in
+     one response, undoable via `litescope_write_undo`. This was also Phase J's
+     headline bet, pulled forward as the single highest-leverage MCP-server gap.
    - **Autopilot** — workload-driven index recommendations from a real query
      log, partial/expression-index proposals, cache & page-size tuning. ✅ shipped
    - **File superpowers** — automatic corruption recovery (pure-Go `.recover`
