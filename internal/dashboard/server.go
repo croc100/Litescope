@@ -560,7 +560,37 @@ func (s *Server) Handler() http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		if s.history != nil && res.LiveState != "" {
+			var holders []LockHolderInfo
+			for _, hd := range res.Holders {
+				holders = append(holders, LockHolderInfo{PID: hd.PID, Command: hd.Command})
+			}
+			_ = s.history.RecordLockEvent(res.Source, res.LiveState, res.WaitMS, holders, res.LiveDetail)
+		}
 		writeJSON(w, http.StatusOK, res)
+	})
+
+	// Returns the per-database lock-contention timeline (event-driven captures
+	// from live probes, not polling) for the lock doctor's trend view. The
+	// optional `since` query parameter (unix milliseconds) bounds how far back.
+	mux.HandleFunc("/api/locks/history", func(w http.ResponseWriter, r *http.Request) {
+		if s.history == nil {
+			writeJSON(w, http.StatusOK, []LockEvent{})
+			return
+		}
+		var since int64
+		if v := r.URL.Query().Get("since"); v != "" {
+			since, _ = strconv.ParseInt(v, 10, 64)
+		}
+		events, err := s.history.LockSeries(r.URL.Query().Get("db"), since)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if events == nil {
+			events = []LockEvent{}
+		}
+		writeJSON(w, http.StatusOK, events)
 	})
 
 	// Compares two databases (old → new) and returns the curated schema/data diff.

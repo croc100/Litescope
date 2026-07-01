@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/croc100/litescope/internal/dashboard"
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/spf13/cobra"
 )
@@ -84,11 +85,37 @@ when a writer currently holds the lock (--live).`,
 
 const liveProbeWait = 250 * time.Millisecond
 
+// recordLockEvent persists a live-lock observation to the shared history
+// store used by `serve`, so the lock doctor's contention timeline captures
+// probes made outside the dashboard too (e.g. a `locks --watch` sidecar).
+// Best-effort: a missing or unopenable store never fails the command.
+func recordLockEvent(p *locks.LiveProbe) {
+	if p == nil {
+		return
+	}
+	path, err := historyPath()
+	if err != nil {
+		return
+	}
+	hist, err := dashboard.OpenHistory(path)
+	if err != nil {
+		return
+	}
+	defer hist.Close()
+
+	var holders []dashboard.LockHolderInfo
+	for _, h := range p.Holders {
+		holders = append(holders, dashboard.LockHolderInfo{PID: h.PID, Command: h.Command})
+	}
+	_ = hist.RecordLockEvent(p.Source, string(p.State), p.WaitMS, holders, p.Detail)
+}
+
 func runLocksLive(src, format string) error {
 	p, err := locks.Probe(src, liveProbeWait)
 	if err != nil {
 		return err
 	}
+	recordLockEvent(p)
 	if format == "json" {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -114,6 +141,7 @@ func runLocksWatch(src string, interval time.Duration, format string) error {
 		styleDim.Render("●"), styleDim.Render(src))
 
 	return locks.Watch(src, interval, liveProbeWait, stop, func(p *locks.LiveProbe) {
+		recordLockEvent(p)
 		if format == "json" {
 			b, _ := json.Marshal(p)
 			fmt.Println(string(b))

@@ -304,6 +304,10 @@
   .diff-tbl { border:1px solid var(--border); border-radius:var(--r); margin:10px 0; overflow:hidden; }
   .diff-tbl-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--surface-2); font-weight:600; }
   .diff-tbl-body { padding:6px 12px 10px; font-size:13px; }
+  .lock-tl { display:flex; align-items:flex-end; gap:2px; height:20px; }
+  .lock-tl-bar { width:4px; height:100%; border-radius:1px; background:var(--ok); opacity:.85; cursor:default; }
+  .lock-tl-bar.warn { background:var(--gold); }
+  .lock-tl-bar.crit { background:var(--danger); height:100%; }
   .diff-line { padding:2px 0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .diff-add { color:var(--ok); }
   .diff-del { color:var(--danger); }
@@ -1482,14 +1486,35 @@ const liveLabel = (s) => ({
   readable: ["◐ Contended", "warn"], error: ["✕ Error", "warn"],
 }[s] || ["—", "ok"]);
 
+// lockTimeline renders a per-database contention timeline from event-driven
+// lock captures (real SQLITE_BUSY hits, not sampled polling) — a bar per
+// event, colored by state, most recent 60 shown oldest-to-newest.
+function lockTimeline(events) {
+  if (!events || !events.length) return "";
+  const recent = events.slice(-60);
+  const cls = (s) => s === "locked" ? "crit" : s === "readable" ? "warn" : s === "error" ? "warn" : "ok";
+  const bars = recent.map(e => {
+    const t = new Date(e.ts).toLocaleTimeString();
+    const title = `${t} · ${e.state}${e.wait_ms ? ` · ${e.wait_ms}ms` : ""}${e.detail ? " · " + e.detail : ""}`;
+    return `<span class="lock-tl-bar ${cls(e.state)}" title="${esc(title)}"></span>`;
+  }).join("");
+  const lockedCount = recent.filter(e => e.state === "locked").length;
+  return `<div class="diff-tbl"><div class="diff-tbl-head">contention timeline · last ${recent.length} event(s)${lockedCount ? ` · ${lockedCount} locked` : ""}</div>
+    <div class="diff-tbl-body"><div class="lock-tl">${bars}</div></div></div>`;
+}
+
 async function runLocks() {
   const db = $("#locksDb").value, hint = $("#locksHint"), out = $("#locksResult");
   if (!db) return;
   hint.textContent = "diagnosing…"; out.innerHTML = "";
   try {
-    const res = await fetch(`/api/locks?db=${encodeURIComponent(db)}`);
+    const [res, histRes] = await Promise.all([
+      fetch(`/api/locks?db=${encodeURIComponent(db)}`),
+      fetch(`/api/locks/history?db=${encodeURIComponent(db)}`),
+    ]);
     const d = await res.json();
     if (!res.ok) { hint.textContent = ""; out.innerHTML = `<div class="diff-ident" style="color:var(--danger)">${esc(d.error || "failed")}</div>`; return; }
+    const events = histRes.ok ? await histRes.json() : [];
     hint.textContent = "";
     let html = "";
     const vtag = sevClass(d.verdict === "critical" ? "critical" : d.verdict === "attention" ? "warning" : "ok");
@@ -1502,6 +1527,7 @@ async function runLocks() {
       if (d.hint) html += `<div class="diff-line diff-chg">${esc(d.hint)}</div>`;
       html += `</div></div>`;
     }
+    html += lockTimeline(events);
     for (const f of (d.findings || [])) {
       html += `<div class="diff-tbl"><div class="diff-tbl-head"><span class="dtag ${sevClass(f.severity)}">${esc(f.severity)}</span> ${esc(f.summary)}</div><div class="diff-tbl-body">`;
       if (f.detail) html += `<div class="diff-line">${esc(f.detail)}</div>`;

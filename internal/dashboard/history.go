@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"database/sql"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -32,9 +33,100 @@ type Sample struct {
 // SQLite file, no external time-series infrastructure required. It is safe for
 // concurrent use.
 type History struct {
-	db     *sql.DB
-	mu     sync.Mutex
-	lastTS time.Time
+	db         *sql.DB
+	mu         sync.Mutex
+	lastTS     time.Time
+	lockMu     sync.Mutex
+	lastLockTS map[string]time.Time
+}
+
+// minLockEventGap coalesces rapid live-lock probes (e.g. from `locks --watch`
+// polling every second) per source, so a sustained lock doesn't flood the
+// store with near-duplicate rows.
+const minLockEventGap = 5 * time.Second
+
+// maxLockEvents caps the lock-event ring buffer, same rationale as maxSamples.
+const maxLockEvents = 20000
+
+// LockHolderInfo is a process holding a database file open, recorded alongside
+// a lock event (mirrors locks.Holder, kept local to avoid an import cycle).
+type LockHolderInfo struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+}
+
+// LockEvent is one point-in-time observation of a database's lock state —
+// either an event-driven capture (a real SQLITE_BUSY hit during a litescope
+// operation) or a `locks --watch` poll. Source of truth for the lock doctor's
+// per-database contention timeline.
+type LockEvent struct {
+	TS      int64            `json:"ts"` // unix milliseconds
+	Source  string           `json:"source"`
+	State   string           `json:"state"` // "locked" | "readable" | "free" | "error"
+	WaitMS  int64            `json:"wait_ms"`
+	Holders []LockHolderInfo `json:"holders,omitempty"`
+	Detail  string           `json:"detail,omitempty"`
+}
+
+// RecordLockEvent stores one lock observation for source, rate-limited per
+// source by minLockEventGap. Free/steady-state events are also recorded (at
+// the coarser rate) so the timeline shows recovery, not just contention.
+func (h *History) RecordLockEvent(source, state string, waitMS int64, holders []LockHolderInfo, detail string) error {
+	if h == nil || h.db == nil || source == "" {
+		return nil
+	}
+	now := time.Now().UTC()
+	h.lockMu.Lock()
+	if last, ok := h.lastLockTS[source]; ok && now.Sub(last) < minLockEventGap {
+		h.lockMu.Unlock()
+		return nil
+	}
+	h.lastLockTS[source] = now
+	h.lockMu.Unlock()
+
+	var holdersJSON []byte
+	if len(holders) > 0 {
+		holdersJSON, _ = json.Marshal(holders)
+	}
+	if _, err := h.db.Exec(
+		`INSERT INTO lock_events (ts, source, state, wait_ms, holders, detail) VALUES (?, ?, ?, ?, ?, ?)`,
+		now.UnixMilli(), source, state, waitMS, string(holdersJSON), detail); err != nil {
+		return err
+	}
+	_, _ = h.db.Exec(
+		`DELETE FROM lock_events WHERE id NOT IN
+		 (SELECT id FROM lock_events ORDER BY id DESC LIMIT ?)`, maxLockEvents)
+	return nil
+}
+
+// LockSeries returns lock events for source with ts >= sinceMs (0 for all),
+// oldest first.
+func (h *History) LockSeries(source string, sinceMs int64) ([]LockEvent, error) {
+	if h == nil || h.db == nil {
+		return nil, nil
+	}
+	rows, err := h.db.Query(
+		`SELECT ts, source, state, wait_ms, holders, detail
+		 FROM lock_events WHERE source = ? AND ts >= ? ORDER BY ts ASC`, source, sinceMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LockEvent
+	for rows.Next() {
+		var e LockEvent
+		var holdersJSON, detail sql.NullString
+		if err := rows.Scan(&e.TS, &e.Source, &e.State, &e.WaitMS, &holdersJSON, &detail); err != nil {
+			return nil, err
+		}
+		e.Detail = detail.String
+		if holdersJSON.String != "" {
+			_ = json.Unmarshal([]byte(holdersJSON.String), &e.Holders)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // OpenHistory opens (creating if needed) the SQLite history store at path.
@@ -57,7 +149,25 @@ func OpenHistory(path string) (*History, error) {
 		db.Close()
 		return nil, err
 	}
-	h := &History{db: db}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS lock_events (
+			id       INTEGER PRIMARY KEY AUTOINCREMENT,
+			ts       INTEGER NOT NULL,
+			source   TEXT NOT NULL,
+			state    TEXT NOT NULL,
+			wait_ms  INTEGER NOT NULL,
+			holders  TEXT,
+			detail   TEXT
+		)`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS lock_events_source_ts ON lock_events (source, ts)`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	h := &History{db: db, lastLockTS: map[string]time.Time{}}
 	// Seed lastTS from the most recent persisted sample so a restart does not
 	// immediately write a duplicate.
 	var lastMs int64
