@@ -39,7 +39,7 @@ const sourcePropDesc = "Database source: a local file path (./app.db), a Cloudfl
 	"d1://TOKEN@ACCOUNT_ID/DB_ID), or a Turso DSN (turso://TOKEN@ORG/DB)."
 
 // Registry returns all MCP tools. When allowWrites is true, write-capable tools
-// are appended: litescope_query_write, litescope_migrate_apply,
+// are appended: litescope_query_write, litescope_migrate_apply, litescope_write_undo,
 // litescope_d1_create, litescope_d1_delete.
 func Registry(allowWrites bool) []Tool {
 	tools := []Tool{
@@ -706,6 +706,46 @@ func writeTools() []Tool {
 			},
 		},
 		{
+			Name: "litescope_write_undo",
+			Description: "Revert a local SQLite write made via litescope_query_write or " +
+				"litescope_migrate_apply, using the rewind_token from that call's response. " +
+				"The token is bound to the exact source path it was minted for — passing it " +
+				"with a different source is rejected rather than silently restoring the wrong " +
+				"database. This restores the pre-write snapshot in place, taking a pre-restore " +
+				"safety snapshot of the current (post-write) state first. Only available with " +
+				"--allow-writes; local files only.",
+			InputSchema: obj(props{
+				"source":       strProp("Local SQLite file path to restore into — must match the source the token was minted for."),
+				"rewind_token": strProp("The rewind_token returned by litescope_query_write / litescope_migrate_apply."),
+			}, "source", "rewind_token"),
+			Handler: func(args map[string]interface{}) (string, error) {
+				src, err := requireSource(args)
+				if err != nil {
+					return "", err
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("litescope_write_undo is for local SQLite files; %q is remote (use litescope_rewind for D1)", src)
+				}
+				token, _ := args["rewind_token"].(string)
+				if token == "" {
+					return "", fmt.Errorf("rewind_token is required")
+				}
+				snapPath, err := safewrite.DecodeRewindToken(token, src)
+				if err != nil {
+					return "", err
+				}
+				if err := snapshot.Restore(src, snapPath, true); err != nil {
+					return "", err
+				}
+				return toJSON(map[string]interface{}{
+					"ok":       true,
+					"source":   src,
+					"restored": snapPath,
+					"note":     "Reverted to the pre-write snapshot. A safety snapshot of the prior (post-write) state was taken first.",
+				})
+			},
+		},
+		{
 			Name: "litescope_d1_create",
 			Description: "Create a new Cloudflare D1 database in the account. Returns the UUID and " +
 				"DSN of the newly created database. Requires CLOUDFLARE_API_TOKEN and " +
@@ -955,6 +995,7 @@ func handleGuardedWrite(args map[string]interface{}) (string, error) {
 				"litescope_d1_pull to snapshot a D1 database locally first, or litescope_rewind to undo.",
 		})
 	}
+	beforeWrite := time.Now().UTC()
 	conn, err := connector.Open(src)
 	if err != nil {
 		return "", err
@@ -968,12 +1009,22 @@ func handleGuardedWrite(args map[string]interface{}) (string, error) {
 	if err := exec.Exec(stmts, false); err != nil {
 		return "", fmt.Errorf("write failed: %w", err)
 	}
-	return toJSON(map[string]interface{}{
+	out := map[string]interface{}{
 		"ok":         true,
 		"applied":    true,
 		"statements": len(stmts),
 		"source":     src,
-	})
+	}
+	if strings.HasPrefix(src, "d1://") {
+		// D1 Time Travel gives us a real undo point: the moment just before
+		// this write executed. litescope_rewind can restore to it directly.
+		out["rewind_token"] = beforeWrite.Format(time.RFC3339)
+		out["note"] = "Pass rewind_token as the 'to' argument of litescope_rewind to undo this write via D1 Time Travel."
+	} else {
+		out["note"] = "Turso has no server-side time-travel undo in litescope; take a litescope_d1_pull-style " +
+			"manual backup before writes you may need to revert."
+	}
+	return toJSON(out)
 }
 
 // fleetDBs loads the fleet config and returns the databases matching an optional tag.
@@ -1290,6 +1341,7 @@ var annotationsByName = map[string]toolAnnotations{
 
 	// Destructive — replace or remove data.
 	"litescope_restore":       {Title: "Restore from a snapshot", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: false},
+	"litescope_write_undo":    {Title: "Undo a guarded write", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: false},
 	"litescope_rewind":        {Title: "Rewind via D1 Time Travel", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},
 	"litescope_query_write":   {Title: "Run a write query", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},
 	"litescope_migrate_apply": {Title: "Apply a migration", ReadOnlyHint: false, DestructiveHint: true, OpenWorldHint: true},

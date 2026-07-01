@@ -9,8 +9,14 @@ package safewrite
 
 import (
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/locks"
 	"github.com/croc100/litescope/internal/migrate"
 
@@ -33,9 +39,15 @@ type Result struct {
 	RowsAffected int64         `json:"rows_affected"`
 	LastInsertID int64         `json:"last_insert_id,omitempty"`
 	BackupPath   string        `json:"backup_path,omitempty"`
-	Preview      []StmtPreview `json:"preview"`
-	Note         string        `json:"note"`
-	Error        string        `json:"error,omitempty"`
+	// RewindToken identifies the pre-write snapshot that undoes this write.
+	// It is the local snapshot path; pass it to litescope_write_undo to revert.
+	RewindToken string `json:"rewind_token,omitempty"`
+	// BlastRadiusDiff is the exact schema+data diff between the pre-write
+	// snapshot and the post-write database. Populated only after a real apply.
+	BlastRadiusDiff *diff.Result  `json:"blast_radius_diff,omitempty"`
+	Preview         []StmtPreview `json:"preview"`
+	Note            string        `json:"note"`
+	Error           string        `json:"error,omitempty"`
 	// Remediation is populated when a write fails because the database is
 	// locked/busy, giving the agent concrete PRAGMA/config fixes to retry with.
 	Remediation *Remediation `json:"remediation,omitempty"`
@@ -46,6 +58,46 @@ type Remediation struct {
 	Provider string         `json:"provider"`
 	Verdict  string         `json:"verdict"`
 	Fixes    []locks.Finding `json:"fixes"`
+}
+
+// rewindTokenPayload binds a snapshot to the exact source path it was taken
+// from, so a token minted for one database can't be replayed against another.
+type rewindTokenPayload struct {
+	Snapshot string `json:"snapshot"`
+	Source   string `json:"source"` // absolute path
+}
+
+// EncodeRewindToken produces an opaque token binding a snapshot file to the
+// source database it was taken from.
+func EncodeRewindToken(snapshotPath, dbPath string) string {
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		abs = dbPath
+	}
+	b, _ := json.Marshal(rewindTokenPayload{Snapshot: snapshotPath, Source: abs})
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// DecodeRewindToken recovers the snapshot path from a token and verifies it
+// was minted for dbPath. It refuses to decode a token minted for a different
+// source, preventing an agent from accidentally restoring the wrong database.
+func DecodeRewindToken(token, dbPath string) (snapshotPath string, err error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return "", fmt.Errorf("invalid rewind_token: %w", err)
+	}
+	var p rewindTokenPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return "", fmt.Errorf("invalid rewind_token: %w", err)
+	}
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		abs = dbPath
+	}
+	if p.Source != abs {
+		return "", fmt.Errorf("rewind_token was minted for %q, not %q — refusing to restore the wrong database", p.Source, abs)
+	}
+	return p.Snapshot, nil
 }
 
 // PlanLocal measures and optionally applies a mutating migration against a
@@ -103,6 +155,9 @@ func PlanLocal(dbPath, sqlText string, apply bool) (*Result, error) {
 		res.OK = true
 		res.Note = "Dry-run only — no changes applied. Re-run with apply=true to commit. " +
 			"A snapshot is taken automatically before any real write."
+		if d, derr := dryRunDiff(dbPath, sqlText); derr == nil {
+			res.BlastRadiusDiff = d
+		}
 		return res, nil
 	}
 
@@ -116,8 +171,44 @@ func PlanLocal(dbPath, sqlText string, apply bool) (*Result, error) {
 	res.OK = true
 	res.Applied = true
 	res.BackupPath = ar.BackupPath
-	res.Note = "Applied. A snapshot was taken before the write — one rewind away from undo."
+	res.RewindToken = EncodeRewindToken(ar.BackupPath, dbPath)
+	res.Note = "Applied. A snapshot was taken before the write — pass rewind_token to " +
+		"litescope_write_undo (with the same source) to revert."
+	if d, derr := diff.Compare(ar.BackupPath, dbPath); derr == nil {
+		res.BlastRadiusDiff = d
+	}
 	return res, nil
+}
+
+// dryRunDiff computes the exact blast-radius diff a write would produce
+// without touching dbPath: it VACUUM INTOs a scratch copy, applies the
+// statements for real against that copy, diffs it against the original, and
+// discards it. Non-deterministic SQL (random(), CURRENT_TIMESTAMP, etc.) can
+// make this differ slightly from a later real apply — it's a preview, not a
+// guarantee.
+func dryRunDiff(dbPath, sqlText string) (*diff.Result, error) {
+	tmp, err := os.CreateTemp("", "litescope-dryrun-*.db")
+	if err != nil {
+		return nil, err
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	os.Remove(tmpPath) // VACUUM INTO refuses to write to an existing file
+	defer os.Remove(tmpPath)
+
+	src, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+	if _, err := src.Exec("VACUUM INTO ?", tmpPath); err != nil {
+		return nil, err
+	}
+
+	if _, err := migrate.Apply(tmpPath, sqlText, migrate.ApplyOptions{NoBackup: true}); err != nil {
+		return nil, err
+	}
+	return diff.Compare(dbPath, tmpPath)
 }
 
 // remediate records the error on the result and, when it looks like a
