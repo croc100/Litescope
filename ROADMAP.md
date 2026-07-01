@@ -46,9 +46,14 @@ end — CLI, MCP tools, and the hosted/local dashboard.
   Travel panel, fleet-health-over-time timeline), `metrics`, `import`/`export`/`dump`
 - **MCP protocol** — 24 tools spanning read/write/fleet/D1-lifecycle, 4 canned
   prompts (`diagnose_locked_database`, `review_migration`, `safe_optimize`,
-  `health_checkup`), `schema`/`dictionary` resources, spec 2025-06-18
-  (annotations, structured output, argument completion, resource subscriptions,
-  Streamable HTTP transport with bearer auth + Origin allowlist)
+  `health_checkup`), `schema`/`dictionary`/`health`/`locks` resources (the
+  latter two computed live, notify only on severity/verdict change — not on
+  every write), spec 2025-06-18 (annotations, structured output, argument
+  completion, resource subscriptions, Streamable HTTP transport with bearer
+  auth + Origin allowlist)
+- **Heartbeat staleness** — `--stale-after` on `health`/`fleet health` and
+  `litescope://health/{source}?stale_after=`, flags a database that stopped
+  being written to
 - **D1 & Turso** — any-source DSN, env-var auth, D1 lifecycle tools, `d1 pull`/`push`
 - **Platform** — GitHub Action, dual license (`COMMERCIAL.md`), npm wrapper
   (published as [`litescope`](https://www.npmjs.com/package/litescope)),
@@ -64,10 +69,11 @@ end — CLI, MCP tools, and the hosted/local dashboard.
 Being *the* SQLite tool means going deeper than any generic DB client can.
 
 1. **Deeper moats, in priority order:**
-   - **Lock doctor time-series (top priority)** — per-database `SQLITE_BUSY`
-     event history and WAL-checkpoint monitoring, feeding a multi-process
-     contention timeline (fleet-level health timeline already ships; this is
-     the per-DB drill-down).
+   - **Lock doctor time-series (top priority — next up)** — per-database
+     `SQLITE_BUSY` event history and WAL-checkpoint monitoring, feeding a
+     multi-process contention timeline (fleet-level health timeline already
+     ships; this is the per-DB drill-down). The only unstarted item in this
+     list.
    - **Reversible-write MCP contract** ✅ shipped — `litescope_query_write`
      (local) returns `{ rows_affected, blast_radius_diff, rewind_token }` in
      one response, undoable via `litescope_write_undo`. This was also Phase J's
