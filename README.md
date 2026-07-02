@@ -1,6 +1,6 @@
 # Litescope
 
-**The operations tool for production SQLite — D1, Turso, and local files.**
+**Let AI agents touch production SQLite — safely.** Diagnose before the write, rewind after it. For Cloudflare D1, Turso, and local files.
 
 [Website](https://litescope-site.pages.dev) · [Roadmap](ROADMAP.md) · [Sponsor](https://github.com/sponsors/croc100)
 
@@ -11,7 +11,9 @@
 [![Contributors](https://gcv-five.vercel.app/api/badge/croc100/litescope)](https://gcv-five.vercel.app/croc100/litescope)
 [![Litescope MCP server](https://glama.ai/mcp/servers/croc100/Litescope/badges/score.svg)](https://glama.ai/mcp/servers/croc100/Litescope)
 
-Ask Claude about your D1 database. Rewind it. Migrate it. Diff it against local. All from chat.
+Ask Claude to change your D1 database — and undo it if it's wrong. Every write is dry-run by default with the exact blast radius, and one call away from revert.
+
+![Litescope reversible-write loop: dry-run blast radius, apply with a rewind token, then one-call undo](docs/assets/reversible-write-demo.svg)
 
 **Free and open source (AGPL-3.0)** — every command, every fleet operation, self-hostable, no license key. The only paid thing is the [hosted dashboard we run for you](#pricing--whats-free).
 

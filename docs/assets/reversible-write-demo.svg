@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 468" width="780" height="468" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15">
+<style>
+@keyframes L0{0%,1.8%{opacity:0}3.0%,98%{opacity:1}100%{opacity:0}}
+.l0{animation:L0 15s linear infinite}
+@keyframes L2{0%,10.1%{opacity:0}11.3%,98%{opacity:1}100%{opacity:0}}
+.l2{animation:L2 15s linear infinite}
+@keyframes L3{0%,18.5%{opacity:0}19.7%,98%{opacity:1}100%{opacity:0}}
+.l3{animation:L3 15s linear infinite}
+@keyframes L4{0%,26.8%{opacity:0}28.0%,98%{opacity:1}100%{opacity:0}}
+.l4{animation:L4 15s linear infinite}
+@keyframes L6{0%,35.1%{opacity:0}36.3%,98%{opacity:1}100%{opacity:0}}
+.l6{animation:L6 15s linear infinite}
+@keyframes L7{0%,43.5%{opacity:0}44.7%,98%{opacity:1}100%{opacity:0}}
+.l7{animation:L7 15s linear infinite}
+@keyframes L8{0%,51.8%{opacity:0}53.0%,98%{opacity:1}100%{opacity:0}}
+.l8{animation:L8 15s linear infinite}
+@keyframes L10{0%,60.1%{opacity:0}61.3%,98%{opacity:1}100%{opacity:0}}
+.l10{animation:L10 15s linear infinite}
+@keyframes L11{0%,68.5%{opacity:0}69.7%,98%{opacity:1}100%{opacity:0}}
+.l11{animation:L11 15s linear infinite}
+@keyframes L12{0%,76.8%{opacity:0}78.0%,98%{opacity:1}100%{opacity:0}}
+.l12{animation:L12 15s linear infinite}
+text{letter-spacing:.2px}
+</style>
+<rect x="1" y="1" width="778" height="466" rx="10" fill="#0d1117" stroke="#232a33"/>
+<rect x="1" y="1" width="778" height="40" rx="10" fill="#161b22"/>
+<rect x="1" y="30" width="778" height="10" fill="#161b22"/>
+<circle cx="24" cy="20" r="6" fill="#ff5f56"/>
+<circle cx="44" cy="20" r="6" fill="#ffbd2e"/>
+<circle cx="64" cy="20" r="6" fill="#27c93f"/>
+<text x="390.0" y="25" text-anchor="middle" fill="#7d8da0" font-size="13">Claude — litescope MCP · agent-safe writes to Cloudflare D1</text>
+<text class="l0" x="28" y="70" fill="#e8edf3" xml:space="preserve">› "delete every inactive user from the prod D1 database"</text>
+<text class="l2" x="28" y="120" fill="#7d8da0" xml:space="preserve">Claude calls litescope_query_write  apply=false →</text>
+<text class="l3" x="28" y="145" fill="#e0b341" xml:space="preserve">⚠  DRY-RUN — 1,284 rows would be deleted  (blast radius)</text>
+<text class="l4" x="28" y="170" fill="#7d8da0" xml:space="preserve">   measured on a pulled copy · production untouched</text>
+<text class="l6" x="28" y="220" fill="#e8edf3" xml:space="preserve">› "looks right — apply it"</text>
+<text class="l7" x="28" y="245" fill="#7d8da0" xml:space="preserve">Claude calls litescope_query_write  apply=true →</text>
+<text class="l8" x="28" y="270" fill="#4ade80" xml:space="preserve">✓  Applied · 1,284 rows · rewind_token: tt:bm-0f3a9c…</text>
+<text class="l10" x="28" y="320" fill="#e8edf3" xml:space="preserve">› "wait — wrong cohort. undo it."</text>
+<text class="l11" x="28" y="345" fill="#7d8da0" xml:space="preserve">Claude calls litescope_write_undo →</text>
+<text class="l12" x="28" y="370" fill="#4ade80" xml:space="preserve">✓  Reverted to the pre-write bookmark · 1,284 rows restored</text>
+</svg>
