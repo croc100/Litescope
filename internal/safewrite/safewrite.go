@@ -60,11 +60,14 @@ type Remediation struct {
 	Fixes    []locks.Finding `json:"fixes"`
 }
 
-// rewindTokenPayload binds a snapshot to the exact source path it was taken
+// rewindTokenPayload binds an undo point to the exact source it was taken
 // from, so a token minted for one database can't be replayed against another.
+// Local tokens carry a snapshot path; D1 tokens carry a Time Travel bookmark.
 type rewindTokenPayload struct {
-	Snapshot string `json:"snapshot"`
-	Source   string `json:"source"` // absolute path
+	Provider string `json:"provider,omitempty"` // "" (local) | "d1"
+	Snapshot string `json:"snapshot,omitempty"` // local: pre-write snapshot path
+	Bookmark string `json:"bookmark,omitempty"` // d1: pre-write Time Travel bookmark
+	Source   string `json:"source"`             // local: absolute path; d1: database ID
 }
 
 // EncodeRewindToken produces an opaque token binding a snapshot file to the
@@ -94,10 +97,44 @@ func DecodeRewindToken(token, dbPath string) (snapshotPath string, err error) {
 	if err != nil {
 		abs = dbPath
 	}
+	if p.Provider != "" {
+		return "", fmt.Errorf("rewind_token was minted for a %s database, not a local file", p.Provider)
+	}
 	if p.Source != abs {
 		return "", fmt.Errorf("rewind_token was minted for %q, not %q — refusing to restore the wrong database", p.Source, abs)
 	}
 	return p.Snapshot, nil
+}
+
+// EncodeD1RewindToken produces an opaque token binding a D1 Time Travel
+// bookmark to the database ID it was captured from.
+func EncodeD1RewindToken(bookmark, databaseID string) string {
+	b, _ := json.Marshal(rewindTokenPayload{Provider: "d1", Bookmark: bookmark, Source: databaseID})
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// DecodeD1RewindToken recovers the Time Travel bookmark from a token and
+// verifies it was minted for databaseID, refusing tokens minted for a
+// different database (or for a local file).
+func DecodeD1RewindToken(token, databaseID string) (bookmark string, err error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return "", fmt.Errorf("invalid rewind_token: %w", err)
+	}
+	var p rewindTokenPayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return "", fmt.Errorf("invalid rewind_token: %w", err)
+	}
+	if p.Provider != "d1" {
+		return "", fmt.Errorf("rewind_token is not a D1 token — it was minted for a local file; pass the matching local source instead")
+	}
+	if p.Source != databaseID {
+		return "", fmt.Errorf("rewind_token was minted for D1 database %q, not %q — refusing to restore the wrong database", p.Source, databaseID)
+	}
+	if p.Bookmark == "" {
+		return "", fmt.Errorf("rewind_token carries no bookmark")
+	}
+	return p.Bookmark, nil
 }
 
 // PlanLocal measures and optionally applies a mutating migration against a

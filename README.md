@@ -96,8 +96,9 @@ context window.
 
 | Tool | What it does |
 |---|---|
-| `litescope_query_write` | Mutating SQL — **dry-run by default**: measures exact rows affected, auto-snapshots before applying, returns lock-doctor remediation on failure |
-| `litescope_migrate_apply` | Apply a migration — dry-run by default, pre-migration snapshot, structured errors |
+| `litescope_query_write` | Mutating SQL — **dry-run by default** with exact rows affected and blast-radius diff (D1 dry-runs measured on a pulled copy); on apply, captures an undo point first (local: snapshot, D1: Time Travel bookmark) and returns it as a `rewind_token` |
+| `litescope_write_undo` | Revert a write in one call using its `rewind_token` — local files and D1 alike; tokens are bound to the database they were minted for |
+| `litescope_migrate_apply` | Apply a migration — same reversible contract as `litescope_query_write` |
 | `litescope_autopilot` | Self-driving optimization (ANALYZE, indexes, VACUUM) — dry-run by default |
 | `litescope_snapshot` | Take a point-in-time backup of a local database |
 | `litescope_restore` | Restore a local database from a snapshot |

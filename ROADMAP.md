@@ -1,6 +1,7 @@
 # Litescope Roadmap
 
-**Identity:** The MCP-first operations tool for SQLite and Cloudflare D1.
+**Identity:** The safety layer that lets AI agents touch production SQLite and
+Cloudflare D1 — diagnose before the write, rewind after it.
 
 Litescope gives AI agents (Claude, Cursor, any MCP client) and developers a
 complete operations layer for SQLite — inspect, diff, migrate, monitor, and
@@ -29,8 +30,9 @@ databases without hand-written glue and without footguns.
 ## Shipped
 
 All three moats (lock doctor, autopilot, file superpowers) are live, guarded by
-MCP write safety (dry-run + auto-snapshot on every write), and surfaced end to
-end — CLI, MCP tools, and the hosted/local dashboard.
+MCP write safety (dry-run + an automatic undo point on every write — file
+snapshot locally, Time Travel bookmark on D1), and surfaced end to end — CLI,
+MCP tools, and the hosted/local dashboard.
 
 - **Inspection & diagnosis** — `health`, `schema` (+ Mermaid ERD), `diff`,
   `advise`, `lint`, `doctor`, `check`, `locks` (static + `--live`/`--watch`
@@ -75,9 +77,13 @@ Being *the* SQLite tool means going deeper than any generic DB client can.
      percentiles, top lock holders, and WAL-checkpoint bloat detection. The
      fleet-level health timeline already shipped; this is the per-DB drill-down.
    - **Reversible-write MCP contract** ✅ shipped — `litescope_query_write`
-     (local) returns `{ rows_affected, blast_radius_diff, rewind_token }` in
-     one response, undoable via `litescope_write_undo`. This was also Phase J's
-     headline bet, pulled forward as the single highest-leverage MCP-server gap.
+     returns `{ rows_affected, blast_radius_diff, rewind_token }` in one
+     response, undoable via `litescope_write_undo`. Now uniform across local
+     files (snapshot-backed) and **Cloudflare D1** (Time Travel bookmark
+     captured before every write; dry-runs measured on a pulled copy, so the
+     blast radius is exact without touching production). This was also Phase
+     J's headline bet, pulled forward as the single highest-leverage
+     MCP-server gap.
    - **Autopilot** — workload-driven index recommendations from a real query
      log, partial/expression-index proposals, cache & page-size tuning. ✅ shipped
    - **File superpowers** — automatic corruption recovery (pure-Go `.recover`

@@ -13,6 +13,10 @@ import (
 	"github.com/croc100/litescope/internal/schema"
 )
 
+// APIBase is the Cloudflare API root. Overridable so tests can point the
+// connector at an httptest server.
+var APIBase = "https://api.cloudflare.com/client/v4"
+
 // d1Connector connects to a Cloudflare D1 database via the Workers API.
 //
 // DSN forms:
@@ -115,7 +119,132 @@ func D1TimeTravel(accountID, databaseID string, ts interface{ Unix() int64 }) (*
 
 	client := &http.Client{Timeout: 60 * time.Second}
 	url := fmt.Sprintf(
-		"https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/time_travel/restore",
+		APIBase+"/accounts/%s/d1/database/%s/time_travel/restore",
+		accountID, databaseID,
+	)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("D1 Time Travel request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("D1 Time Travel HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Result struct {
+			Bookmark  string `json:"bookmark"`
+			Timestamp string `json:"timestamp"`
+		} `json:"result"`
+		Success bool      `json:"success"`
+		Errors  []d1Error `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decoding Time Travel response: %w", err)
+	}
+	if !result.Success {
+		msgs := make([]string, len(result.Errors))
+		for i, e := range result.Errors {
+			msgs[i] = fmt.Sprintf("[%d] %s", e.Code, e.Message)
+		}
+		return nil, fmt.Errorf("D1 Time Travel error: %s", strings.Join(msgs, "; "))
+	}
+
+	return &D1TimeTravelResult{
+		Bookmark:  result.Result.Bookmark,
+		Timestamp: result.Result.Timestamp,
+	}, nil
+}
+
+// D1CurrentBookmark returns the database's current Time Travel bookmark — a
+// precise restore point marking the state of the database at this instant.
+// Capture it before a write and the write is exactly undoable, regardless of
+// what else touches the database afterwards.
+func D1CurrentBookmark(accountID, databaseID string) (string, error) {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if token == "" {
+		return "", fmt.Errorf("CLOUDFLARE_API_TOKEN must be set for Time Travel")
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	url := fmt.Sprintf(
+		APIBase+"/accounts/%s/d1/database/%s/time_travel/bookmark",
+		accountID, databaseID,
+	)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("D1 bookmark request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("D1 bookmark HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var result struct {
+		Result struct {
+			Bookmark string `json:"bookmark"`
+		} `json:"result"`
+		Success bool      `json:"success"`
+		Errors  []d1Error `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", fmt.Errorf("decoding D1 bookmark response: %w", err)
+	}
+	if !result.Success {
+		msgs := make([]string, len(result.Errors))
+		for i, e := range result.Errors {
+			msgs[i] = fmt.Sprintf("[%d] %s", e.Code, e.Message)
+		}
+		return "", fmt.Errorf("D1 bookmark error: %s", strings.Join(msgs, "; "))
+	}
+	if result.Result.Bookmark == "" {
+		return "", fmt.Errorf("D1 bookmark response contained no bookmark")
+	}
+	return result.Result.Bookmark, nil
+}
+
+// D1TimeTravelToBookmark restores a D1 database to an exact Time Travel
+// bookmark (as returned by D1CurrentBookmark or a previous restore).
+func D1TimeTravelToBookmark(accountID, databaseID, bookmark string) (*D1TimeTravelResult, error) {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN must be set for Time Travel")
+	}
+
+	type restoreReq struct {
+		Bookmark string `json:"bookmark"`
+	}
+	body, err := json.Marshal(restoreReq{Bookmark: bookmark})
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	url := fmt.Sprintf(
+		APIBase+"/accounts/%s/d1/database/%s/time_travel/restore",
 		accountID, databaseID,
 	)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
@@ -182,7 +311,7 @@ func D1CreateDatabase(name, location string) (*D1DatabaseInfo, error) {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database", accountID)
+	url := fmt.Sprintf(APIBase+"/accounts/%s/d1/database", accountID)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -242,7 +371,7 @@ func D1DeleteDatabase(databaseID string) error {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	url := fmt.Sprintf(
-		"https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s",
+		APIBase+"/accounts/%s/d1/database/%s",
 		accountID, databaseID,
 	)
 	req, err := http.NewRequest("DELETE", url, nil)
@@ -292,7 +421,7 @@ func ListD1Databases() ([]D1DatabaseInfo, error) {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database", accountID)
+	url := fmt.Sprintf(APIBase+"/accounts/%s/d1/database", accountID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -445,7 +574,7 @@ type d1Error struct {
 
 func (d *d1Connector) apiURL() string {
 	return fmt.Sprintf(
-		"https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query",
+		APIBase+"/accounts/%s/d1/database/%s/query",
 		d.accountID, d.databaseID,
 	)
 }

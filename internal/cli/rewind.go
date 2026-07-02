@@ -14,6 +14,7 @@ import (
 
 func cmdRewind() *cobra.Command {
 	var to string
+	var bookmark string
 
 	cmd := &cobra.Command{
 		Use:   "rewind <d1-source>",
@@ -27,9 +28,12 @@ last 30 days without needing a local snapshot.
   litescope rewind d1://DB_ID --to "2h ago"
   litescope rewind d1://DB_ID --to "yesterday"
   litescope rewind d1://DB_ID --to "2024-01-15T10:30:00Z"
+  litescope rewind d1://DB_ID --bookmark <bookmark>
   litescope rewind list d1://DB_ID
 
 Accepted time formats: "30m ago", "2h ago", "3d ago", "yesterday", RFC 3339.
+--bookmark restores to an exact Time Travel bookmark (as printed by a previous
+restore or minted as a rewind_token by the MCP write tools).
 
 ⚠  Restore is destructive — the database is overwritten with the historical
    snapshot. Use 'litescope rewind list' to see available restore points
@@ -40,13 +44,11 @@ Accepted time formats: "30m ago", "2h ago", "3d ago", "yesterday", RFC 3339.
 			if !strings.HasPrefix(src, "d1://") {
 				return fmt.Errorf("rewind only supports D1 databases (d1://DB_ID); got %q", src)
 			}
-			if to == "" {
-				return fmt.Errorf("--to is required (e.g. --to \"2h ago\"); run 'litescope rewind list %s' to see options", src)
+			if to == "" && bookmark == "" {
+				return fmt.Errorf("--to or --bookmark is required (e.g. --to \"2h ago\"); run 'litescope rewind list %s' to see options", src)
 			}
-
-			ts, err := parseRewindTime(to)
-			if err != nil {
-				return fmt.Errorf("--to %q: %w", to, err)
+			if to != "" && bookmark != "" {
+				return fmt.Errorf("--to and --bookmark are mutually exclusive")
 			}
 
 			_, accountID, databaseID, err := connector.ParseD1DSN(src)
@@ -54,9 +56,18 @@ Accepted time formats: "30m ago", "2h ago", "3d ago", "yesterday", RFC 3339.
 				return err
 			}
 
-			fmt.Printf("\n  Rewinding D1 database %s to %s …\n\n", databaseID, ts.UTC().Format(time.RFC3339))
-
-			result, err := connector.D1TimeTravel(accountID, databaseID, ts)
+			var result *connector.D1TimeTravelResult
+			if bookmark != "" {
+				fmt.Printf("\n  Rewinding D1 database %s to bookmark %s …\n\n", databaseID, bookmark)
+				result, err = connector.D1TimeTravelToBookmark(accountID, databaseID, bookmark)
+			} else {
+				ts, perr := parseRewindTime(to)
+				if perr != nil {
+					return fmt.Errorf("--to %q: %w", to, perr)
+				}
+				fmt.Printf("\n  Rewinding D1 database %s to %s …\n\n", databaseID, ts.UTC().Format(time.RFC3339))
+				result, err = connector.D1TimeTravel(accountID, databaseID, ts)
+			}
 			if err != nil {
 				return fmt.Errorf("time travel failed: %w", err)
 			}
@@ -68,6 +79,7 @@ Accepted time formats: "30m ago", "2h ago", "3d ago", "yesterday", RFC 3339.
 	}
 
 	cmd.Flags().StringVar(&to, "to", "", `Point in time: "2h ago", "yesterday", "3d ago", or RFC 3339`)
+	cmd.Flags().StringVar(&bookmark, "bookmark", "", "Exact Time Travel bookmark to restore to (mutually exclusive with --to)")
 	cmd.AddCommand(cmdRewindList())
 	return cmd
 }

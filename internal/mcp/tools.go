@@ -6,6 +6,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -669,10 +670,12 @@ func writeTools() []Tool {
 				"⚠ DRY-RUN BY DEFAULT: with apply=false (the default) the statement is NOT applied — " +
 				"it runs inside a transaction that is rolled back, and the tool returns the exact " +
 				"rows_affected (blast radius) so you can reason before committing. " +
-				"Set apply=true to commit; a snapshot is taken automatically before the write so it " +
-				"is one rewind away from undo. On a lock/busy failure the tool returns structured " +
-				"lock-doctor remediation instead of a raw error. Local SQLite files only for the " +
-				"guarded path; D1/Turso fall back to direct execution and require apply=true.",
+				"Set apply=true to commit; an undo point is captured automatically before the write " +
+				"(local: file snapshot; D1: Time Travel bookmark) and returned as a rewind_token for " +
+				"litescope_write_undo. D1 dry-runs are measured on a pulled copy, so rows_affected " +
+				"and blast_radius_diff are exact there too. On a lock/busy failure the tool returns " +
+				"structured lock-doctor remediation instead of a raw error. Turso is execute-only " +
+				"and requires apply=true.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
 				"sql":    strProp("SQL statement(s) to execute, separated by semicolons."),
@@ -688,10 +691,12 @@ func writeTools() []Tool {
 				"with --allow-writes.\n\n" +
 				"⚠ DRY-RUN BY DEFAULT: with apply=false (the default) the migration is validated " +
 				"inside a transaction and rolled back, returning per-statement rows_affected so you " +
-				"can review the blast radius first. Set apply=true to commit; a pre-migration " +
-				"snapshot is taken automatically and restored if the commit fails. Lock/busy errors " +
-				"return structured lock-doctor remediation. Local SQLite files only for the guarded " +
-				"path; D1/Turso fall back to sequential execution and require apply=true.",
+				"can review the blast radius first. Set apply=true to commit; an undo point is " +
+				"captured automatically before the migration (local: file snapshot, restored if the " +
+				"commit fails; D1: Time Travel bookmark) and returned as a rewind_token for " +
+				"litescope_write_undo. D1 dry-runs are measured on a pulled copy. Lock/busy errors " +
+				"return structured lock-doctor remediation. Turso is execute-only and requires " +
+				"apply=true.",
 			InputSchema: obj(props{
 				"source": strProp(sourcePropDesc),
 				"sql":    strProp("One or more SQL statements separated by semicolons."),
@@ -703,15 +708,16 @@ func writeTools() []Tool {
 		},
 		{
 			Name: "litescope_write_undo",
-			Description: "Revert a local SQLite write made via litescope_query_write or " +
-				"litescope_migrate_apply, using the rewind_token from that call's response. " +
-				"The token is bound to the exact source path it was minted for — passing it " +
-				"with a different source is rejected rather than silently restoring the wrong " +
-				"database. This restores the pre-write snapshot in place, taking a pre-restore " +
-				"safety snapshot of the current (post-write) state first. Only available with " +
-				"--allow-writes; local files only.",
+			Description: "Revert a write made via litescope_query_write or litescope_migrate_apply, " +
+				"using the rewind_token from that call's response. Works for local SQLite files " +
+				"(restores the pre-write snapshot) and Cloudflare D1 (restores the pre-write Time " +
+				"Travel bookmark). The token is bound to the exact source it was minted for — " +
+				"passing it with a different source is rejected rather than silently restoring the " +
+				"wrong database. Local restores take a pre-restore safety snapshot of the current " +
+				"(post-write) state first; D1 restores can be re-undone via Time Travel itself. " +
+				"Only available with --allow-writes. Turso is not supported.",
 			InputSchema: obj(props{
-				"source":       strProp("Local SQLite file path to restore into — must match the source the token was minted for."),
+				"source":       strProp("Source to restore — local SQLite file path or d1:// DSN; must match the source the token was minted for."),
 				"rewind_token": strProp("The rewind_token returned by litescope_query_write / litescope_migrate_apply."),
 			}, "source", "rewind_token"),
 			Handler: func(args map[string]interface{}) (string, error) {
@@ -719,12 +725,34 @@ func writeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				if isRemote(src) {
-					return "", fmt.Errorf("litescope_write_undo is for local SQLite files; %q is remote (use litescope_rewind for D1)", src)
-				}
 				token, _ := args["rewind_token"].(string)
 				if token == "" {
 					return "", fmt.Errorf("rewind_token is required")
+				}
+				if strings.HasPrefix(src, "d1://") {
+					_, accountID, databaseID, err := connector.ParseD1DSN(src)
+					if err != nil {
+						return "", err
+					}
+					bookmark, err := safewrite.DecodeD1RewindToken(token, databaseID)
+					if err != nil {
+						return "", err
+					}
+					res, err := connector.D1TimeTravelToBookmark(accountID, databaseID, bookmark)
+					if err != nil {
+						return "", err
+					}
+					return toJSON(map[string]interface{}{
+						"ok":       true,
+						"source":   src,
+						"restored": bookmark,
+						"bookmark": res.Bookmark,
+						"note": "Reverted to the pre-write Time Travel bookmark. The pre-undo state " +
+							"remains reachable via Time Travel for 30 days.",
+					})
+				}
+				if isRemote(src) {
+					return "", fmt.Errorf("litescope_write_undo supports local SQLite files and d1:// sources; %q is not supported", src)
 				}
 				snapPath, err := safewrite.DecodeRewindToken(token, src)
 				if err != nil {
@@ -1052,17 +1080,19 @@ func handleGuardedWrite(args map[string]interface{}) (string, error) {
 		return toJSON(res)
 	}
 
-	// Remote: no transactional dry-run available.
+	if strings.HasPrefix(src, "d1://") {
+		return handleD1GuardedWrite(src, sqlText, apply)
+	}
+
+	// Turso: no transactional dry-run and no server-side time travel.
 	if !apply {
 		return toJSON(map[string]interface{}{
 			"ok":      false,
 			"applied": false,
-			"note": "Remote databases (D1/Turso) have no client-side transaction, so dry-run " +
-				"impact preview is unavailable. Re-run with apply=true to execute. Consider " +
-				"litescope_d1_pull to snapshot a D1 database locally first, or litescope_rewind to undo.",
+			"note": "Turso has no client-side transaction, so dry-run impact preview is " +
+				"unavailable. Take a litescope_snapshot backup, then re-run with apply=true.",
 		})
 	}
-	beforeWrite := time.Now().UTC()
 	conn, err := connector.Open(src)
 	if err != nil {
 		return "", err
@@ -1076,22 +1106,84 @@ func handleGuardedWrite(args map[string]interface{}) (string, error) {
 	if err := exec.Exec(stmts, false); err != nil {
 		return "", fmt.Errorf("write failed: %w", err)
 	}
-	out := map[string]interface{}{
+	return toJSON(map[string]interface{}{
 		"ok":         true,
 		"applied":    true,
 		"statements": len(stmts),
 		"source":     src,
+		"note": "Turso has no server-side time-travel undo in litescope; take a litescope_snapshot " +
+			"backup before writes you may need to revert.",
+	})
+}
+
+// handleD1GuardedWrite gives D1 the same reversible-write contract as local
+// files, backed by D1's own physics instead of file snapshots:
+//
+//   - apply=false: the database is pulled to a scratch copy and the write is
+//     measured there — exact per-statement rows_affected and blast_radius_diff,
+//     production untouched.
+//   - apply=true: the current Time Travel bookmark is captured first, then the
+//     statements run; the bookmark comes back as a rewind_token that
+//     litescope_write_undo restores in one call.
+func handleD1GuardedWrite(src, sqlText string, apply bool) (string, error) {
+	_, accountID, databaseID, err := connector.ParseD1DSN(src)
+	if err != nil {
+		return "", err
 	}
-	if strings.HasPrefix(src, "d1://") {
-		// D1 Time Travel gives us a real undo point: the moment just before
-		// this write executed. litescope_rewind can restore to it directly.
-		out["rewind_token"] = beforeWrite.Format(time.RFC3339)
-		out["note"] = "Pass rewind_token as the 'to' argument of litescope_rewind to undo this write via D1 Time Travel."
-	} else {
-		out["note"] = "Turso has no server-side time-travel undo in litescope; take a litescope_d1_pull-style " +
-			"manual backup before writes you may need to revert."
+
+	if !apply {
+		tmp, err := os.CreateTemp("", "litescope-d1-dryrun-*.db")
+		if err != nil {
+			return "", err
+		}
+		tmpPath := tmp.Name()
+		tmp.Close()
+		defer os.Remove(tmpPath)
+		if err := d1sync.Pull(src, tmpPath, d1sync.PullOptions{}); err != nil {
+			return "", fmt.Errorf("pulling D1 database for dry-run: %w", err)
+		}
+		res, err := safewrite.PlanLocal(tmpPath, sqlText, false)
+		if err != nil {
+			return "", err
+		}
+		res.Provider = "d1"
+		res.Note = "Dry-run measured on a pulled copy of the D1 database — production untouched. " +
+			"Re-run with apply=true to commit; the pre-write Time Travel bookmark is captured " +
+			"automatically so the write is one litescope_write_undo away from revert."
+		return toJSON(res)
 	}
-	return toJSON(out)
+
+	// Capture the undo point BEFORE writing. If the bookmark can't be
+	// captured, refuse to write rather than silently losing reversibility.
+	bookmark, err := connector.D1CurrentBookmark(accountID, databaseID)
+	if err != nil {
+		return "", fmt.Errorf("capturing pre-write Time Travel bookmark (write not executed): %w", err)
+	}
+
+	conn, err := connector.Open(src)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	exec, ok := connector.AsExecutor(conn)
+	if !ok {
+		return "", fmt.Errorf("connector for %q does not support execution", src)
+	}
+	stmts := splitStatements(sqlText)
+	if err := exec.Exec(stmts, false); err != nil {
+		return "", fmt.Errorf("write failed (restore the pre-write state with litescope_write_undo, rewind_token %q): %w",
+			safewrite.EncodeD1RewindToken(bookmark, databaseID), err)
+	}
+	return toJSON(map[string]interface{}{
+		"ok":           true,
+		"applied":      true,
+		"provider":     "d1",
+		"statements":   len(stmts),
+		"source":       src,
+		"rewind_token": safewrite.EncodeD1RewindToken(bookmark, databaseID),
+		"note": "Applied. The pre-write Time Travel bookmark was captured — pass rewind_token to " +
+			"litescope_write_undo (with the same source) to revert.",
+	})
 }
 
 // fleetDBs loads the fleet config and returns the databases matching an optional tag.

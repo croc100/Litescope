@@ -114,3 +114,35 @@ func TestEmptySQL(t *testing.T) {
 		t.Errorf("empty SQL should not be OK: %+v", res)
 	}
 }
+
+func TestD1RewindTokenRoundTrip(t *testing.T) {
+	tok := EncodeD1RewindToken("bm-0123", "db-uuid-1")
+	bm, err := DecodeD1RewindToken(tok, "db-uuid-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bm != "bm-0123" {
+		t.Errorf("bookmark = %q, want bm-0123", bm)
+	}
+}
+
+func TestD1RewindTokenRejectsWrongDatabase(t *testing.T) {
+	tok := EncodeD1RewindToken("bm-0123", "db-uuid-1")
+	if _, err := DecodeD1RewindToken(tok, "db-uuid-2"); err == nil {
+		t.Fatal("expected error decoding token minted for a different database")
+	}
+}
+
+func TestD1RewindTokenRejectsLocalToken(t *testing.T) {
+	tok := EncodeRewindToken("/tmp/snap.db", "/tmp/app.db")
+	if _, err := DecodeD1RewindToken(tok, "db-uuid-1"); err == nil {
+		t.Fatal("expected error decoding a local token as D1")
+	}
+}
+
+func TestLocalDecodeRejectsD1Token(t *testing.T) {
+	tok := EncodeD1RewindToken("bm-0123", "db-uuid-1")
+	if _, err := DecodeRewindToken(tok, "/tmp/app.db"); err == nil {
+		t.Fatal("expected error decoding a D1 token as local")
+	}
+}
