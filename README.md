@@ -42,7 +42,28 @@ agents. Things a generic DB client structurally can't do.
 
 ## MCP — Give Claude direct access to your D1
 
-Add Litescope to your Claude Desktop or Claude Code config:
+**Claude Code** — one line (read-only):
+
+```bash
+claude mcp add litescope -- litescope mcp
+```
+
+With writes + D1 (Litescope still dry-runs every write and captures a rewind
+point before applying):
+
+```bash
+claude mcp add litescope \
+  -e CLOUDFLARE_API_TOKEN=your-token \
+  -e CLOUDFLARE_ACCOUNT_ID=your-account-id \
+  -- litescope mcp --allow-writes
+```
+
+**Cursor** — one-click:
+[**➕ Add litescope to Cursor**](cursor://anysphere.cursor-deeplink/mcp/install?name=litescope&config=eyJjb21tYW5kIjoibGl0ZXNjb3BlIiwiYXJncyI6WyJtY3AiXX0=)
+(installs read-only; add `--allow-writes` and the Cloudflare env vars in
+`mcp.json` to enable writes).
+
+**Claude Desktop / Windsurf / any MCP client** — add to the config file directly:
 
 ```json
 {
@@ -59,15 +80,21 @@ Add Litescope to your Claude Desktop or Claude Code config:
 }
 ```
 
+Also listed in the [MCP Registry](https://registry.modelcontextprotocol.io)
+as `io.github.croc100/litescope`.
+
 Then ask Claude things like:
 
 ```
 "List my D1 databases"
 "Show me the schema of the users table in d1://abc-123"
-"How many orders were placed in the last 7 days?"
+"Delete every inactive user from d1://prod-db-id"     ← dry-run first: shows the
+                                                        exact blast radius before
+                                                        you approve the write
+"Undo that — put it back the way it was"              ← one-call revert via the
+                                                        rewind_token from the write
 "The deploy at 2pm broke something — rewind prod to 1:45pm"
 "Diff my local dev.db against d1://prod-db-id and show me the migration SQL"
-"Apply this migration to d1://prod-db-id"
 ```
 
 ### Read-only tools (always available)
@@ -106,6 +133,11 @@ context window.
 | `litescope_d1_pull` | Download a D1 database to a local SQLite file |
 | `litescope_d1_create` | Create a new D1 database |
 | `litescope_d1_delete` | Delete a D1 database (irreversible) |
+
+Write tools are off unless you start the server with `--allow-writes`, every
+write is dry-run by default, and no write commits without an auto-captured undo
+point. See the [security model](SECURITY.md) for the full boundary — what each
+layer protects against, and what it doesn't.
 
 ### Prompts & Resources
 
