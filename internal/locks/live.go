@@ -43,6 +43,7 @@ type LiveProbe struct {
 	Holders   []Holder  `json:"holders,omitempty"` // processes with the file open (local only)
 	Hint      string    `json:"hint,omitempty"`    // remediation hint when contended
 	WALExists bool      `json:"wal_exists"`
+	WALBytes  int64     `json:"wal_bytes"` // WAL file size at probe time (0 if none)
 }
 
 // Probe observes the live lock state of a local SQLite database. It is
@@ -59,10 +60,12 @@ func Probe(path string, waitTimeout time.Duration) (*LiveProbe, error) {
 		return nil, fmt.Errorf("cannot open %s: %w", path, err)
 	}
 
+	walBytes := walFileSize(path)
 	p := &LiveProbe{
 		Source:    path,
 		Time:      time.Now(),
-		WALExists: walFileSize(path) > 0,
+		WALExists: walBytes > 0,
+		WALBytes:  walBytes,
 	}
 
 	// busy_timeout governs how long BEGIN IMMEDIATE waits for the write lock

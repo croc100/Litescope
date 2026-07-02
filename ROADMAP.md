@@ -69,11 +69,11 @@ end — CLI, MCP tools, and the hosted/local dashboard.
 Being *the* SQLite tool means going deeper than any generic DB client can.
 
 1. **Deeper moats, in priority order:**
-   - **Lock doctor time-series (top priority — next up)** — per-database
-     `SQLITE_BUSY` event history and WAL-checkpoint monitoring, feeding a
-     multi-process contention timeline (fleet-level health timeline already
-     ships; this is the per-DB drill-down). The only unstarted item in this
-     list.
+   - **Lock doctor time-series** ✅ shipped — per-database `SQLITE_BUSY` event
+     history with WAL-size tracking, aggregated into a per-DB contention
+     timeline (`litescope locks <db> --timeline`): contention windows, wait-time
+     percentiles, top lock holders, and WAL-checkpoint bloat detection. The
+     fleet-level health timeline already shipped; this is the per-DB drill-down.
    - **Reversible-write MCP contract** ✅ shipped — `litescope_query_write`
      (local) returns `{ rows_affected, blast_radius_diff, rewind_token }` in
      one response, undoable via `litescope_write_undo`. This was also Phase J's

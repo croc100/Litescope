@@ -565,7 +565,7 @@ func (s *Server) Handler() http.Handler {
 			for _, hd := range res.Holders {
 				holders = append(holders, LockHolderInfo{PID: hd.PID, Command: hd.Command})
 			}
-			_ = s.history.RecordLockEvent(res.Source, res.LiveState, res.WaitMS, holders, res.LiveDetail)
+			_ = s.history.RecordLockEvent(res.Source, res.LiveState, res.WaitMS, res.WALBytes, holders, res.LiveDetail)
 		}
 		writeJSON(w, http.StatusOK, res)
 	})

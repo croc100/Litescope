@@ -244,11 +244,16 @@ automatic snapshot.
 litescope locks app.db                        # static config diagnosis
 litescope locks app.db --live                 # is a writer holding the lock now?
 litescope locks app.db --watch                # stream lock-state changes
+litescope locks app.db --timeline             # recorded contention history
+litescope locks app.db --timeline --since 24h
 ```
 
 Inspects journal mode, `busy_timeout`, locking mode, and WAL bloat, and
 prescribes the exact PRAGMA/DSN fix. `--live` identifies the process holding
-the lock right now.
+the lock right now. `--watch` records every observation to a local history
+store; `--timeline` then aggregates it into a per-database contention view —
+when the database was jammed, for how long, which processes held it, wait-time
+percentiles, and whether the WAL checkpoint kept up.
 
 ### `diff` — schema and data diff
 

@@ -15,8 +15,8 @@ import (
 
 func cmdLocks() *cobra.Command {
 	var format string
-	var live, watch bool
-	var interval time.Duration
+	var live, watch, timeline bool
+	var interval, since time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "locks <database>",
@@ -42,12 +42,24 @@ Live detection (local files only) shows whether a writer is holding the lock
   litescope locks app.db --live       # one-shot live probe
   litescope locks app.db --watch      # stream lock state changes
 
-Exit code is 1 when the verdict is attention or critical (static mode), or
-when a writer currently holds the lock (--live).`,
+The timeline aggregates every recorded probe into a per-database contention
+history — when the database was jammed, which processes held it, and whether
+the WAL checkpoint kept up:
+
+  litescope locks app.db --timeline           # all recorded history
+  litescope locks app.db --timeline --since 24h
+  litescope locks app.db --timeline --format json
+
+Exit code is 1 when the verdict is attention or critical (static mode), when a
+writer currently holds the lock (--live), or when the timeline shows past
+contention or WAL bloat (--timeline).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src := args[0]
 
+			if timeline {
+				return runLocksTimeline(src, since, format)
+			}
 			if watch {
 				return runLocksWatch(src, interval, format)
 			}
@@ -79,7 +91,9 @@ when a writer currently holds the lock (--live).`,
 	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
 	cmd.Flags().BoolVar(&live, "live", false, "probe live lock state right now (local files only)")
 	cmd.Flags().BoolVar(&watch, "watch", false, "stream live lock state changes (local files only)")
+	cmd.Flags().BoolVar(&timeline, "timeline", false, "show the recorded per-database contention timeline")
 	cmd.Flags().DurationVar(&interval, "interval", time.Second, "poll interval for --watch")
+	cmd.Flags().DurationVar(&since, "since", 0, "for --timeline: only events within this window (e.g. 24h; 0 = all)")
 	return cmd
 }
 
@@ -107,7 +121,7 @@ func recordLockEvent(p *locks.LiveProbe) {
 	for _, h := range p.Holders {
 		holders = append(holders, dashboard.LockHolderInfo{PID: h.PID, Command: h.Command})
 	}
-	_ = hist.RecordLockEvent(p.Source, string(p.State), p.WaitMS, holders, p.Detail)
+	_ = hist.RecordLockEvent(p.Source, string(p.State), p.WaitMS, p.WALBytes, holders, p.Detail)
 }
 
 func runLocksLive(src, format string) error {
@@ -153,6 +167,97 @@ func runLocksWatch(src string, interval time.Duration, format string) error {
 			fmt.Printf("        %s %s pid=%d (%s)\n", styleDim.Render("holder:"), h.Command, h.PID, h.Access)
 		}
 	})
+}
+
+func runLocksTimeline(src string, since time.Duration, format string) error {
+	if strings.HasPrefix(src, "d1://") || strings.HasPrefix(src, "turso://") {
+		return fmt.Errorf("the contention timeline is only available for local SQLite files")
+	}
+	path, err := historyPath()
+	if err != nil {
+		return err
+	}
+	hist, err := dashboard.OpenHistory(path)
+	if err != nil {
+		return err
+	}
+	defer hist.Close()
+
+	var sinceMs int64
+	if since > 0 {
+		sinceMs = time.Now().Add(-since).UnixMilli()
+	}
+	events, err := hist.LockSeries(src, sinceMs)
+	if err != nil {
+		return err
+	}
+	tl := dashboard.BuildLockTimeline(src, sinceMs, events)
+
+	if format == "json" {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(tl)
+	}
+	printTimeline(&tl)
+	if tl.LockedEvents > 0 || tl.WALBloated {
+		os.Exit(1)
+	}
+	return nil
+}
+
+func printTimeline(t *dashboard.LockTimeline) {
+	fmt.Printf("\n  %s  %s\n", styleBold.Render("lock timeline"), styleDim.Render(t.Source))
+	if t.Events == 0 {
+		fmt.Printf("\n  %s\n\n", styleDim.Render("no recorded lock events yet — run `litescope locks <db> --watch` to capture some"))
+		return
+	}
+
+	span := styleDim.Render(fmt.Sprintf("%s → %s",
+		time.UnixMilli(t.FirstTS).Format("2006-01-02 15:04"),
+		time.UnixMilli(t.LastTS).Format("2006-01-02 15:04")))
+	fmt.Printf("  %s  %d events\n\n", span, t.Events)
+
+	contended := styleOK.Render(fmt.Sprintf("%d", t.LockedEvents))
+	if t.LockedEvents > 0 {
+		contended = styleErr.Render(fmt.Sprintf("%d", t.LockedEvents))
+	}
+	fmt.Printf("  %s  locked observations   %s  errors\n", contended,
+		styleDim.Render(fmt.Sprintf("%d", t.ErrorEvents)))
+	fmt.Printf("  %s  wait: max %dms, p95 %dms\n",
+		styleDim.Render("·"), t.MaxWaitMS, t.P95WaitMS)
+	fmt.Printf("  %s  WAL: now %s, peak %s%s\n\n",
+		styleDim.Render("·"), humanBytes(t.WALLastBytes), humanBytes(t.WALPeakBytes),
+		func() string {
+			if t.WALBloated {
+				return "  " + styleErr.Render("checkpoint starved")
+			}
+			return ""
+		}())
+
+	if len(t.Windows) > 0 {
+		fmt.Printf("  %s\n", styleBold.Render("contention windows"))
+		for _, w := range t.Windows {
+			hs := ""
+			if len(w.Holders) > 0 {
+				hs = styleDim.Render("  by " + strings.Join(w.Holders, ", "))
+			}
+			fmt.Printf("    %s  %s  %s%s\n",
+				styleErr.Render(time.UnixMilli(w.StartTS).Format("15:04:05")),
+				styleDim.Render(fmt.Sprintf("%ds", w.DurationMS/1000)),
+				fmt.Sprintf("%d hits, peak wait %dms", w.Events, w.PeakWaitMS),
+				hs)
+		}
+		fmt.Println()
+	}
+
+	if len(t.TopHolders) > 0 {
+		fmt.Printf("  %s\n", styleBold.Render("top holders"))
+		for _, h := range t.TopHolders {
+			fmt.Printf("    %s  %s\n", styleBold.Render(h.Command),
+				styleDim.Render(fmt.Sprintf("held during %d contended observations", h.Events)))
+		}
+		fmt.Println()
+	}
 }
 
 func liveStateLabel(s locks.LockState) string {

@@ -60,18 +60,19 @@ type LockHolderInfo struct {
 // operation) or a `locks --watch` poll. Source of truth for the lock doctor's
 // per-database contention timeline.
 type LockEvent struct {
-	TS      int64            `json:"ts"` // unix milliseconds
-	Source  string           `json:"source"`
-	State   string           `json:"state"` // "locked" | "readable" | "free" | "error"
-	WaitMS  int64            `json:"wait_ms"`
-	Holders []LockHolderInfo `json:"holders,omitempty"`
-	Detail  string           `json:"detail,omitempty"`
+	TS       int64            `json:"ts"` // unix milliseconds
+	Source   string           `json:"source"`
+	State    string           `json:"state"` // "locked" | "readable" | "free" | "error"
+	WaitMS   int64            `json:"wait_ms"`
+	WALBytes int64            `json:"wal_bytes"` // WAL file size at observation time (0 if none/remote)
+	Holders  []LockHolderInfo `json:"holders,omitempty"`
+	Detail   string           `json:"detail,omitempty"`
 }
 
 // RecordLockEvent stores one lock observation for source, rate-limited per
 // source by minLockEventGap. Free/steady-state events are also recorded (at
 // the coarser rate) so the timeline shows recovery, not just contention.
-func (h *History) RecordLockEvent(source, state string, waitMS int64, holders []LockHolderInfo, detail string) error {
+func (h *History) RecordLockEvent(source, state string, waitMS, walBytes int64, holders []LockHolderInfo, detail string) error {
 	if h == nil || h.db == nil || source == "" {
 		return nil
 	}
@@ -89,8 +90,8 @@ func (h *History) RecordLockEvent(source, state string, waitMS int64, holders []
 		holdersJSON, _ = json.Marshal(holders)
 	}
 	if _, err := h.db.Exec(
-		`INSERT INTO lock_events (ts, source, state, wait_ms, holders, detail) VALUES (?, ?, ?, ?, ?, ?)`,
-		now.UnixMilli(), source, state, waitMS, string(holdersJSON), detail); err != nil {
+		`INSERT INTO lock_events (ts, source, state, wait_ms, wal_bytes, holders, detail) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		now.UnixMilli(), source, state, waitMS, walBytes, string(holdersJSON), detail); err != nil {
 		return err
 	}
 	_, _ = h.db.Exec(
@@ -106,7 +107,7 @@ func (h *History) LockSeries(source string, sinceMs int64) ([]LockEvent, error) 
 		return nil, nil
 	}
 	rows, err := h.db.Query(
-		`SELECT ts, source, state, wait_ms, holders, detail
+		`SELECT ts, source, state, wait_ms, wal_bytes, holders, detail
 		 FROM lock_events WHERE source = ? AND ts >= ? ORDER BY ts ASC`, source, sinceMs)
 	if err != nil {
 		return nil, err
@@ -117,7 +118,7 @@ func (h *History) LockSeries(source string, sinceMs int64) ([]LockEvent, error) 
 	for rows.Next() {
 		var e LockEvent
 		var holdersJSON, detail sql.NullString
-		if err := rows.Scan(&e.TS, &e.Source, &e.State, &e.WaitMS, &holdersJSON, &detail); err != nil {
+		if err := rows.Scan(&e.TS, &e.Source, &e.State, &e.WaitMS, &e.WALBytes, &holdersJSON, &detail); err != nil {
 			return nil, err
 		}
 		e.Detail = detail.String
@@ -151,17 +152,21 @@ func OpenHistory(path string) (*History, error) {
 	}
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS lock_events (
-			id       INTEGER PRIMARY KEY AUTOINCREMENT,
-			ts       INTEGER NOT NULL,
-			source   TEXT NOT NULL,
-			state    TEXT NOT NULL,
-			wait_ms  INTEGER NOT NULL,
-			holders  TEXT,
-			detail   TEXT
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			ts        INTEGER NOT NULL,
+			source    TEXT NOT NULL,
+			state     TEXT NOT NULL,
+			wait_ms   INTEGER NOT NULL,
+			wal_bytes INTEGER NOT NULL DEFAULT 0,
+			holders   TEXT,
+			detail    TEXT
 		)`); err != nil {
 		db.Close()
 		return nil, err
 	}
+	// Migrate stores created before wal_bytes existed. ALTER fails harmlessly
+	// once the column is present, so the error is ignored.
+	_, _ = db.Exec(`ALTER TABLE lock_events ADD COLUMN wal_bytes INTEGER NOT NULL DEFAULT 0`)
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS lock_events_source_ts ON lock_events (source, ts)`); err != nil {
 		db.Close()
 		return nil, err
