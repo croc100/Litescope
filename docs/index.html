@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Litescope — the operations layer for the databases AI apps run on</title>
-<meta name="description" content="AI apps, agents, and edge services all ship on SQLite. Litescope is the ops layer that keeps it safe: visualize your schema, catch drift, corruption, and WAL bloat, and recover — from one local file to a fleet of thousands on Turso and Cloudflare D1." />
-<meta property="og:title" content="Litescope — the ops layer for the databases AI apps run on" />
-<meta property="og:description" content="Your AI app runs on SQLite. Litescope watches it: schema, drift, corruption, and recovery — one file or a fleet of thousands." />
+<title>Litescope — let AI agents touch production SQLite, safely</title>
+<meta name="description" content="Litescope is the safety layer for AI-agent writes to production SQLite and Cloudflare D1. Every write is dry-run by default with the exact blast radius, and one call away from undo — a local snapshot or a D1 Time Travel bookmark, captured automatically before the write. Exposed as MCP tools Claude can call directly." />
+<meta property="og:title" content="Litescope — let AI agents touch production SQLite, safely" />
+<meta property="og:description" content="The safety layer for agent writes to SQLite &amp; D1: dry-run blast radius before every write, one-call undo after. Diagnose before, rewind after — as MCP tools." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://litescope-site.pages.dev/" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -477,8 +477,8 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
 <header id="top">
   <div class="wrap">
     <div class="badge"><span class="pulse"></span>D1 · Turso · LiteFS · local SQLite</div>
-    <h1>The ops layer for<br/><span class="accent">production SQLite.</span></h1>
-    <p class="hero-sub">SQLite went to production on D1, Turso, and LiteFS — thousands of databases, one per tenant — but its tooling didn't. No <code>pg_stat</code>, no APM, no way to see why a database is locked. Litescope is the ops layer it never had: fleet observability, file-level rewind &amp; salvage, lock &amp; WAL diagnostics, and a safe MCP interface so Claude can operate it. One binary. Every write dry-run by default.</p>
+    <h1>Let AI agents touch<br/>production SQLite — <span class="accent">safely.</span></h1>
+    <p class="hero-sub">SQLite now runs in production on D1, Turso, and LiteFS — and AI agents are writing to it. Litescope is the safety layer: every write is dry-run by default with the exact blast radius, and one call away from undo — a local snapshot or a Cloudflare D1 Time Travel bookmark, captured automatically before the write. Diagnose before it, rewind after it — all as MCP tools Claude can call directly. One binary.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Get started free</a>
       <a class="btn btn-ghost" href="#pricing">Free &amp; open source</a>
@@ -489,23 +489,21 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
         <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
         <span class="term-title">Claude Desktop — litescope MCP</span>
       </div>
-      <div class="term-body"><span class="t-prompt">›</span> <span class="t-cmd">"list my D1 databases and show me the users table schema"</span>
+      <div class="term-body"><span class="t-prompt">›</span> <span class="t-cmd">"delete every inactive user from the prod D1 database"</span>
 
-<span class="t-dim">Claude calls</span> litescope_d1_list <span class="t-dim">→</span>
-<span class="t-ok">✓</span>  prod-users      <span class="t-dim">d1://a1b2c3d4  · 12 tables</span>
-<span class="t-ok">✓</span>  prod-analytics  <span class="t-dim">d1://e5f6g7h8  · 4 tables</span>
-<span class="t-ok">✓</span>  staging-users   <span class="t-dim">d1://i9j0k1l2  · 12 tables</span>
+<span class="t-dim">Claude calls</span> litescope_query_write <span class="t-dim">source=d1://a1b2c3d4  apply=false →</span>
+<span class="t-warn">⚠</span>  <span class="t-warn">DRY-RUN</span> <span class="t-dim">— nothing applied yet</span>
+    1,284 rows <span class="t-dim">would be deleted from</span> users <span class="t-dim">(blast radius)</span>
+    <span class="t-dim">measured on a pulled copy · production untouched</span>
 
-<span class="t-dim">Claude calls</span> litescope_schema <span class="t-dim">source=d1://a1b2c3d4 →</span>
-<span class="t-head">Table: users</span>
-  id         <span class="t-dim">INTEGER  PK</span>
-  email      <span class="t-dim">TEXT     NOT NULL</span>
-  created_at <span class="t-dim">TEXT</span>
-  plan       <span class="t-dim">TEXT     DEFAULT 'free'</span>
+<span class="t-prompt">›</span> <span class="t-cmd">"looks right — apply it"</span>
+<span class="t-dim">Claude calls</span> litescope_query_write <span class="t-dim">source=d1://a1b2c3d4  apply=true →</span>
+<span class="t-ok">✓</span>  Applied <span class="t-dim">· 1,284 rows · Time Travel bookmark captured before the write</span>
+    <span class="t-dim">rewind_token: tt:bm-0f3a9c…</span>
 
-<span class="t-prompt">›</span> <span class="t-cmd">"the email column is missing an index — add it"</span>
-<span class="t-dim">Claude calls</span> litescope_migrate_apply <span class="t-dim">source=d1://a1b2c3d4 →</span>
-<span class="t-ok">✓</span>  <span class="t-dim">Applied: CREATE INDEX idx_users_email ON users(email)</span></div>
+<span class="t-prompt">›</span> <span class="t-cmd">"wait — that was the wrong cohort. undo it."</span>
+<span class="t-dim">Claude calls</span> litescope_write_undo <span class="t-dim">source=d1://a1b2c3d4 →</span>
+<span class="t-ok">✓</span>  Reverted <span class="t-dim">to the pre-write bookmark · 1,284 rows restored</span></div>
     </div>
   </div>
 </header>
@@ -516,7 +514,7 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
       <div class="eyebrow">The problem</div>
       <h2>"It's just a file."<br/>Not anymore.</h2>
       <p>That was true when SQLite was a dev toy. Now D1, Turso, and LiteFS run it in production — per-tenant, globally distributed, thousands of instances. But the tooling stayed in the toy era: no way to observe a fleet, no bisect, no salvage, no <code>pg_stat</code> equivalent. <code>sqlite3</code> assumes one database; production assumes thousands.</p>
-      <p>Litescope is the ops layer SQLite never had — fleet health, file-level superpowers, lock &amp; WAL diagnostics, and an MCP interface so Claude can safely operate it. Things a generic DB client structurally can't do.</p>
+      <p>And now AI agents write to it directly. Litescope is the safety layer that makes that safe — dry-run blast radius before every write, one-call undo after — on top of the ops layer SQLite never had: fleet health, file-level superpowers, and lock &amp; WAL diagnostics a generic DB client structurally can't do.</p>
     </div>
     <div class="stack">
       <div class="stack-item">
