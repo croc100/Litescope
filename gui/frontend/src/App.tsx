@@ -14,7 +14,7 @@ import {
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
   RunSQL, ExportSQL, AuditLog, Policy
 } from '../wailsjs/go/main/App'
-import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -387,10 +387,32 @@ export default function App() {
   const viewProps = { recent, addRecent, removeRecent, status }
   const proGateProps = { onOpenSettings: () => setTool('settings'), onNag: handleNag }
 
+  // Native menu bar → app actions. Menu items emit menu:* events (see gui/menu.go).
+  useEffect(() => {
+    EventsOn('menu:open-db', async () => {
+      if (!isPro() && conns.length >= FREE_CONN_LIMIT) { setTool('settings'); return }
+      const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
+    })
+    EventsOn('menu:fleet', () => setTool('fleet'))
+    EventsOn('menu:settings', () => setTool('settings'))
+    EventsOn('menu:toggle-sidebar', () => setSidebarOpen(o => !o))
+    return () => {
+      EventsOff('menu:open-db'); EventsOff('menu:fleet')
+      EventsOff('menu:settings'); EventsOff('menu:toggle-sidebar')
+    }
+  }, [conns.length, addConn, addRecent])
+
   return (
     <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] text-[13px] font-sans overflow-hidden select-none">
-      {/* macOS titlebar drag region — sits above activity bar + sidebar */}
-      <div className="h-[28px] shrink-0 bg-[#161b22]" style={{ WebkitAppRegion: 'drag' } as any} />
+      {/* macOS titlebar drag region — sits above activity bar + sidebar.
+          Uses the Wails drag property (not -webkit-app-region, which WKWebView
+          ignores) so the strip drags the window. Wails doesn't forward
+          double-clicks to the native zoom, so we toggle maximise ourselves. */}
+      <div
+        className="h-[28px] shrink-0 bg-[#161b22]"
+        style={{ '--wails-draggable': 'drag' } as any}
+        onDoubleClick={() => WindowToggleMaximise()}
+      />
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar tool={tool} setTool={setTool} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(o => !o)} />
         {sidebarOpen && tool !== 'settings' && (
