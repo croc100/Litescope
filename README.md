@@ -377,6 +377,7 @@ litescope fleet discover d1 --account $CF_ACCOUNT_ID --token $CF_API_TOKEN
 
 # Triage the whole fleet
 litescope fleet health
+litescope fleet locks         # roll up "database is locked" contention, worst-first
 litescope fleet fingerprint   # cluster by schema — find drift before it bites
 
 # Stage a migration across the fleet

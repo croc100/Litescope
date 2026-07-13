@@ -12,6 +12,7 @@ import (
 
 	"github.com/croc100/litescope/internal/audit"
 	"github.com/croc100/litescope/internal/connector"
+	"github.com/croc100/litescope/internal/dashboard"
 	"github.com/croc100/litescope/internal/diff"
 	"github.com/croc100/litescope/internal/fleet"
 	"github.com/croc100/litescope/internal/health"
@@ -33,6 +34,7 @@ account as a single unit.
   fleet fingerprint  — cluster the fleet by schema to reveal how many you run
   fleet converge     — bring every drifted database back to canonical
   fleet health       — triage operational faults (corruption, WAL bloat, bloat)
+  fleet locks        — roll up "database is locked" contention, worst-first
   fleet blast-radius — map a fault to the shared cohort (group/region) at risk
   fleet recover      — restore faulted databases from backups; quarantine the rest
   fleet migrate      — roll one migration out across the fleet, staged
@@ -46,6 +48,7 @@ Fleet is a Pro feature.`,
 	cmd.AddCommand(cmdFleetFingerprint())
 	cmd.AddCommand(cmdFleetConverge())
 	cmd.AddCommand(cmdFleetHealth())
+	cmd.AddCommand(cmdFleetLocks())
 	cmd.AddCommand(cmdFleetBlastRadius())
 	cmd.AddCommand(cmdFleetRecover())
 	cmd.AddCommand(cmdFleetStatus())
@@ -348,6 +351,181 @@ into a scheduled job (cron + --webhook) to get paged on fleet faults.`,
 	cmd.Flags().IntVar(&concurrency, "concurrency", 0, "max parallel connections (default 8)")
 	cmd.Flags().DurationVar(&staleAfter, "stale-after", 0, "flag databases with no writes within this duration (e.g. 1h) — a dead-man's-switch; disabled by default")
 	return cmd
+}
+
+// ── locks ─────────────────────────────────────────────────────────────────
+
+func cmdFleetLocks() *cobra.Command {
+	var configPath, tag, format string
+	var since time.Duration
+
+	cmd := &cobra.Command{
+		Use:   "locks",
+		Short: "Roll up \"database is locked\" contention across the whole fleet",
+		Long: `Aggregate the recorded lock timelines of every database into one fleet-wide
+contention view, sorted worst-first — the fleet-scale answer to "which of my
+databases are jamming, how badly, and who is holding them?"
+
+Contention is captured whenever litescope probes a database: the dashboard's
+lock doctor, a ` + "`locks --watch`" + ` sidecar, or any guarded write that hits
+SQLITE_BUSY. This command reads that shared history and ranks the fleet.
+
+A database is flagged:
+  critical   WAL checkpoint starved, a jam ran ≥30s, or a writer stalled
+             others for ≥1s
+  warning    any lock contention observed in the window
+  ok         no contention recorded
+
+  litescope fleet locks
+  litescope fleet locks --since 24h
+  litescope fleet locks --format json
+
+Exit code is 1 when any database shows contention — drop it into a scheduled
+job to get paged when the fleet starts jamming. Remote databases (D1, Turso)
+have no local lock file and are skipped.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, dbs, err := loadFleet(configPath, tag)
+			if err != nil {
+				return err
+			}
+			dbs = freePreviewFleet(dbs)
+
+			// Only local files record lock events; remote sources never do.
+			var sources []dashboard.FleetSource
+			for _, db := range dbs {
+				if strings.HasPrefix(db.DSN, "d1://") || strings.HasPrefix(db.DSN, "turso://") {
+					continue
+				}
+				sources = append(sources, dashboard.FleetSource{Name: db.Name, Source: db.DSN})
+			}
+
+			path, err := historyPath()
+			if err != nil {
+				return err
+			}
+			hist, err := dashboard.OpenHistory(path)
+			if err != nil {
+				return err
+			}
+			defer hist.Close()
+
+			var sinceMs int64
+			if since > 0 {
+				sinceMs = time.Now().Add(-since).UnixMilli()
+			}
+			report, err := hist.FleetLockReport(sources, sinceMs)
+			if err != nil {
+				return err
+			}
+
+			if format == "json" {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return err
+				}
+			} else {
+				printFleetLocks(cfg, report)
+			}
+			if report.HasContention() {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "fleet config path (default: litescope.fleet.yaml)")
+	cmd.Flags().StringVar(&tag, "tag", "", "only operate on databases with this tag")
+	cmd.Flags().StringVar(&format, "format", "terminal", "output format: terminal, json")
+	cmd.Flags().DurationVar(&since, "since", 0, "only events within this window (e.g. 24h; 0 = all recorded)")
+	return cmd
+}
+
+func printFleetLocks(cfg *fleet.Config, report *dashboard.FleetLockReport) {
+	name := cfg.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	ok, warning, critical := report.Counts()
+
+	headline := styleOK.Render("no contention")
+	if critical > 0 || warning > 0 {
+		var parts []string
+		if critical > 0 {
+			parts = append(parts, styleErr.Render(fmt.Sprintf("%d critical", critical)))
+		}
+		if warning > 0 {
+			parts = append(parts, styleWarn.Render(fmt.Sprintf("%d contended", warning)))
+		}
+		headline = strings.Join(parts, styleDim.Render(" · "))
+	}
+	fmt.Printf("\n  Fleet lock doctor: %s · %d local database(s) · %s\n\n",
+		styleBold.Render(name), len(report.Databases), headline)
+
+	if len(report.Databases) == 0 {
+		fmt.Printf("  %s\n\n", styleDim.Render("no local databases in the fleet — remote sources have no local lock file"))
+		return
+	}
+
+	width := 0
+	for _, d := range report.Databases {
+		if len(d.Name) > width {
+			width = len(d.Name)
+		}
+	}
+
+	for _, d := range report.Databases {
+		var mark, detail string
+		switch d.Severity {
+		case "critical":
+			mark = styleErr.Render("✗")
+			detail = styleErr.Render(fleetLockDetail(d))
+		case "warning":
+			mark = styleWarn.Render("⚠")
+			detail = styleWarn.Render(fleetLockDetail(d))
+		default:
+			mark = styleOK.Render("●")
+			if d.Events == 0 {
+				detail = styleDim.Render("no lock events recorded")
+			} else {
+				detail = styleDim.Render(fmt.Sprintf("%d observations, no contention", d.Events))
+			}
+		}
+		fmt.Printf("  %s  %-*s  %s\n", mark, width, d.Name, detail)
+		if d.Severity != "ok" && len(d.TopHolders) > 0 {
+			holders := d.TopHolders
+			if len(holders) > 3 {
+				holders = holders[:3]
+			}
+			var hs []string
+			for _, h := range holders {
+				hs = append(hs, h.Command)
+			}
+			fmt.Printf("     %s  %s %s\n", strings.Repeat(" ", width),
+				styleDim.Render("held by"), styleDim.Render(strings.Join(hs, ", ")))
+		}
+	}
+
+	fmt.Printf("\n  %s\n\n", summaryLine(len(report.Databases),
+		kv{"clear", ok, styleOK},
+		kv{"contended", warning, styleWarn},
+		kv{"critical", critical, styleErr},
+	))
+}
+
+// fleetLockDetail summarizes one contended database in a single line.
+func fleetLockDetail(d dashboard.FleetLockSummary) string {
+	parts := []string{fmt.Sprintf("%d locked / %d obs", d.LockedEvents, d.Events)}
+	if d.LongestWindowMS > 0 {
+		parts = append(parts, fmt.Sprintf("longest jam %ds", d.LongestWindowMS/1000))
+	}
+	if d.MaxWaitMS > 0 {
+		parts = append(parts, fmt.Sprintf("wait max %dms/p95 %dms", d.MaxWaitMS, d.P95WaitMS))
+	}
+	if d.WALBloated {
+		parts = append(parts, "WAL checkpoint starved")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ── blast-radius ────────────────────────────────────────────────────────────

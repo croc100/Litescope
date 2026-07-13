@@ -116,7 +116,9 @@ on the live hosted backend's push ingestion.
 - Threshold alerts → email (Resend) on severity crossings
 - Fleet assertions (push-time, pytest-style expectation checks)
 - Scheduled push, packaged (systemd timer / cron recipes)
-- Lock doctor for the fleet (surface contention fleet-wide)
+- Lock doctor for the fleet ✅ shipped — `fleet locks` rolls up every
+  database's recorded contention into one worst-first view (locked windows,
+  wait p95, top holders, WAL checkpoint starvation); JSON + exit-1 for cron
 - Remote actions — trigger rewind/bisect/lock resolution from the dashboard
 
 ### Phase J — Agent-native operations ← queued
