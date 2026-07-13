@@ -750,6 +750,22 @@ export namespace schema {
 	        this.PK = source["PK"];
 	    }
 	}
+	export class ForeignKey {
+	    From: string;
+	    Table: string;
+	    To: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ForeignKey(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.From = source["From"];
+	        this.Table = source["Table"];
+	        this.To = source["To"];
+	    }
+	}
 	export class Index {
 	    Name: string;
 	    Table: string;
@@ -772,6 +788,7 @@ export namespace schema {
 	    Name: string;
 	    Columns: Column[];
 	    Indexes: Index[];
+	    ForeignKeys: ForeignKey[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Table(source);
@@ -782,6 +799,7 @@ export namespace schema {
 	        this.Name = source["Name"];
 	        this.Columns = this.convertValues(source["Columns"], Column);
 	        this.Indexes = this.convertValues(source["Indexes"], Index);
+	        this.ForeignKeys = this.convertValues(source["ForeignKeys"], ForeignKey);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

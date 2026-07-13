@@ -1,12 +1,18 @@
 package main
 
 import (
+	"path/filepath"
 	"runtime"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// recentSubmenu is the File ▸ Open Recent submenu. It is rebuilt at runtime from
+// the frontend's recent-files list (see App.SetRecentFiles) — the app is
+// single-window, so a package-level handle is sufficient.
+var recentSubmenu *menu.Menu
 
 // buildMenu constructs the native application menu bar. Items that act on app
 // state emit menu:* events the React frontend listens for, keeping the window
@@ -27,6 +33,8 @@ func (a *App) buildMenu() *menu.Menu {
 	file.AddText("Open Fleet Config…", nil, func(_ *menu.CallbackData) {
 		wailsRuntime.EventsEmit(a.ctx, "menu:fleet")
 	})
+	recentSubmenu = file.AddSubmenu("Open Recent")
+	recentSubmenu.AddText("No Recent Files", nil, nil).Disabled = true
 	file.AddSeparator()
 	file.AddText("Settings…", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
 		wailsRuntime.EventsEmit(a.ctx, "menu:settings")
@@ -40,7 +48,8 @@ func (a *App) buildMenu() *menu.Menu {
 	}
 
 	// Standard Cut/Copy/Paste/Select-All — WKWebView needs an explicit Edit
-	// menu for these shortcuts to work at all on macOS.
+	// menu for these shortcuts to work at all on macOS. On Windows/Linux the
+	// WebView provides them natively, so no Edit menu is added there.
 	if runtime.GOOS == "darwin" {
 		m.Append(menu.EditMenu())
 	}
@@ -67,4 +76,32 @@ func (a *App) buildMenu() *menu.Menu {
 	}
 
 	return m
+}
+
+// SetRecentFiles rebuilds the File ▸ Open Recent submenu from the frontend's
+// recent-files list. Bound to the frontend (Wails) and called whenever the list
+// changes, so the native menu mirrors the in-app recent connections. Each entry
+// opens its path via a menu:open-path event.
+func (a *App) SetRecentFiles(paths []string) {
+	if recentSubmenu == nil {
+		return
+	}
+	recentSubmenu.Items = nil
+	if len(paths) == 0 {
+		recentSubmenu.AddText("No Recent Files", nil, nil).Disabled = true
+	} else {
+		for _, p := range paths {
+			p := p // capture per iteration
+			recentSubmenu.AddText(filepath.Base(p), nil, func(_ *menu.CallbackData) {
+				wailsRuntime.EventsEmit(a.ctx, "menu:open-path", p)
+			})
+		}
+		recentSubmenu.AddSeparator()
+		recentSubmenu.AddText("Clear Menu", nil, func(_ *menu.CallbackData) {
+			wailsRuntime.EventsEmit(a.ctx, "menu:clear-recent")
+		})
+	}
+	if a.ctx != nil {
+		wailsRuntime.MenuUpdateApplicationMenu(a.ctx)
+	}
 }

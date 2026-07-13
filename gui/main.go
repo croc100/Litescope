@@ -12,6 +12,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var appIcon []byte
+
+// appVersion is shown in the About panel. Keep in step with npm/package.json.
+const appVersion = "0.7.0"
+
 func main() {
 	app := NewApp()
 
@@ -41,8 +47,9 @@ func main() {
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			About: &mac.AboutInfo{
-				Title:   "Litescope",
-				Message: "SQLite production operations",
+				Title:   "Litescope " + appVersion,
+				Message: "The safety layer for production SQLite & Cloudflare D1.\ndiagnose before the write · rewind after it\n\n© 2026 croc100 · crode.net",
+				Icon:    appIcon,
 			},
 		},
 	})

@@ -67,6 +67,8 @@ export function SaveFile(arg1:string):Promise<string>;
 
 export function Schema(arg1:string):Promise<schema.Schema>;
 
+export function SetRecentFiles(arg1:Array<string>):Promise<void>;
+
 export function TableDiffRows(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<Array<main.DiffedRow>>;
 
 export function UpdateCell(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string,arg6:boolean):Promise<void>;

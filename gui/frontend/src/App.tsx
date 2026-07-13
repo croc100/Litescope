@@ -12,7 +12,7 @@ import {
   MonitorWatchStart, MonitorWatchStop, MonitorWatchIsRunning,
   FleetDiscover, FleetLoadConfig, OpenFleetConfig, FleetSnapshot, FleetCheck,
   FleetFingerprint, FleetConverge, FleetHealth, FleetRecover, FleetTopology,
-  RunSQL, ExportSQL, AuditLog, Policy
+  RunSQL, ExportSQL, AuditLog, Policy, SetRecentFiles
 } from '../wailsjs/go/main/App'
 import { OnFileDrop, OnFileDropOff, EventsOn, EventsOff, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 
@@ -36,6 +36,9 @@ interface Connection {
 const CONN_KEY = 'litescope_connections_v1'
 const RECENT_KEY = 'litescope_recent_v2'
 const MAX_RECENT = 12
+
+// APP_VERSION — keep in step with gui/main.go appVersion and npm/package.json.
+const APP_VERSION = '0.7.0'
 
 function connType(path: string): ConnType {
   if (path.startsWith('turso://')) return 'turso'
@@ -332,6 +335,32 @@ function SettingsView() {
             </a>
           </div>
         )}
+
+        {/* About section */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-4 mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Database size={14} className="text-[#4ec9b0]" strokeWidth={1.5} />
+            <span className="text-[13px] font-medium text-[#e6edf3]">About</span>
+            <span className="ml-auto text-[11px] text-[#6e7681] font-mono">v{APP_VERSION}</span>
+          </div>
+          <div className="text-[11px] text-[#6e7681] leading-relaxed mb-3">
+            The safety layer for production SQLite &amp; Cloudflare D1 — diagnose before
+            the write, rewind after it.
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+            {[
+              ['Documentation', 'https://github.com/croc100/Litescope#readme'],
+              ['GitHub', 'https://github.com/croc100/Litescope'],
+              ['Report an issue', 'https://github.com/croc100/Litescope/issues'],
+              ['Changelog', 'https://github.com/croc100/Litescope/releases'],
+            ].map(([label, href]) => (
+              <a key={href} href={href} target="_blank"
+                className="inline-flex items-center gap-1 text-[#6e7681] hover:text-[#4ec9b0] transition-colors">
+                {label} <ExternalLink size={10} />
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -389,18 +418,27 @@ export default function App() {
 
   // Native menu bar → app actions. Menu items emit menu:* events (see gui/menu.go).
   useEffect(() => {
+    const openPath = (p: string) => {
+      touch(p); addConn(p); addRecent(p); injectRef?.current?.(p)
+    }
     EventsOn('menu:open-db', async () => {
       if (!isPro() && conns.length >= FREE_CONN_LIMIT) { setTool('settings'); return }
       const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
     })
+    EventsOn('menu:open-path', (p: string) => { if (p) openPath(p) })
+    EventsOn('menu:clear-recent', () => { recent.forEach(removeRecent) })
     EventsOn('menu:fleet', () => setTool('fleet'))
     EventsOn('menu:settings', () => setTool('settings'))
     EventsOn('menu:toggle-sidebar', () => setSidebarOpen(o => !o))
     return () => {
-      EventsOff('menu:open-db'); EventsOff('menu:fleet')
+      EventsOff('menu:open-db'); EventsOff('menu:open-path')
+      EventsOff('menu:clear-recent'); EventsOff('menu:fleet')
       EventsOff('menu:settings'); EventsOff('menu:toggle-sidebar')
     }
-  }, [conns.length, addConn, addRecent])
+  }, [conns.length, addConn, addRecent, removeRecent, touch, recent])
+
+  // Mirror the recent-files list into the native File ▸ Open Recent submenu.
+  useEffect(() => { SetRecentFiles(recent) }, [recent])
 
   return (
     <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3] text-[13px] font-sans overflow-hidden select-none">
