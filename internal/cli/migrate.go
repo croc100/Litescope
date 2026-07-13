@@ -259,7 +259,7 @@ func cmdMigrateUp() *cobra.Command {
 	var dryRun, noBackup bool
 	cmd := &cobra.Command{
 		Use:   "up <db>",
-		Short: "Apply all pending versioned migrations in order (Pro)",
+		Short: "Apply all pending versioned migrations in order",
 		Long: `Apply every pending migration in order, each through the safe pipeline:
 pre-flight integrity check, VACUUM INTO backup, single transaction, foreign-key
 verification, and rollback on failure. Each applied migration is recorded in the

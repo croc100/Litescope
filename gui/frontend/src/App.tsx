@@ -3,7 +3,7 @@ import {
   GitCompare, Table2, ShieldCheck, GitMerge, Activity,
   FolderOpen, RefreshCw, Hash, AlertCircle, CheckCircle2,
   ChevronRight, ChevronLeft, Database, Clock, X, Plus,
-  AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil, Check as CheckIcon,
+  AlertTriangle, Play, Eye, Save, FileJson, Layers, Pencil,
   Settings, Key, ExternalLink, Terminal, Lock, Unlock, Search, ArrowUp, ArrowDown, Trash2, History
 } from 'lucide-react'
 import {
@@ -104,237 +104,36 @@ function useConnections() {
   return { conns, add, remove, rename, touch }
 }
 
-// ── Pro gate ──────────────────────────────────────────────────────────────────
-
-const FREE_CONN_LIMIT = 1
-const LICENSE_KEY = 'litescope_license'
-const NAG_KEY = 'litescope_nag_count'
-const NAG_THRESHOLD = 3
-
-function getLicenseKey(): string {
-  return localStorage.getItem(LICENSE_KEY) ?? ''
-}
-
-function isPro(key?: string): boolean {
-  return (key ?? getLicenseKey()).startsWith('lsc_pro_')
-}
-
-function useIsPro(): boolean {
-  const [pro, setPro] = useState(() => isPro())
-  useEffect(() => {
-    const handler = () => setPro(isPro())
-    window.addEventListener('litescope:license-changed', handler)
-    return () => window.removeEventListener('litescope:license-changed', handler)
-  }, [])
-  return pro
-}
-
-function getNagCount(): number {
-  return parseInt(localStorage.getItem(NAG_KEY) ?? '0', 10)
-}
-
-function bumpNagCount(): number {
-  const next = getNagCount() + 1
-  localStorage.setItem(NAG_KEY, String(next))
-  return next
-}
-
-function NagModal({ feature, onClose, onOpenSettings }: {
-  feature?: string
-  onClose: () => void
-  onOpenSettings: () => void
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl w-[380px] p-6 flex flex-col items-center text-center gap-4">
-        <button onClick={onClose} className="absolute top-3 right-3 text-[#484f58] hover:text-[#e6edf3] transition-colors">
-          <X size={14} />
-        </button>
-        <div className="w-14 h-14 rounded-full bg-[#0d1117] border border-[#00d4aa]/30 flex items-center justify-center">
-          <Key size={22} className="text-[#00d4aa]" strokeWidth={1.5} />
-        </div>
-        <div>
-          <div className="text-[15px] font-semibold text-[#e6edf3] mb-1">{feature ?? 'Pro Feature'}</div>
-          <div className="text-[12px] text-[#6e7681] leading-relaxed">
-            You've been exploring Pro features. Unlock <span className="text-[#e6edf3]">drift monitoring, migrations, fleet ops,</span> and more for $89/year.
-          </div>
-        </div>
-        <div className="w-full bg-[#0d1117] border border-[#30363d] rounded-sm p-3 text-left">
-          <div className="text-[11px] text-[#6e7681] mb-1.5">What you get with Pro</div>
-          {['Continuous drift monitoring', 'Migration Studio with auto-backup', 'Fleet ops across Turso & D1', 'Unlimited connections'].map(f => (
-            <div key={f} className="flex items-center gap-2 text-[12px] text-[#e6edf3] py-0.5">
-              <CheckCircle2 size={11} className="text-[#00d4aa] shrink-0" />
-              {f}
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 w-full">
-          <a
-            href="https://litescope-site.pages.dev/#pricing"
-            target="_blank"
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] font-medium rounded-sm transition-colors"
-          >
-            Get Pro — $89/yr <ExternalLink size={11} />
-          </a>
-          <button
-            onClick={() => { onOpenSettings(); onClose() }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#1c2128] hover:bg-[#21262d] text-[#e6edf3] text-[12px] rounded-sm transition-colors border border-[#30363d]"
-          >
-            <Key size={12} />Enter key
-          </button>
-        </div>
-        <button onClick={onClose} className="text-[11px] text-[#484f58] hover:text-[#6e7681] transition-colors">
-          Maybe later
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ProGate({ children, feature, onOpenSettings, onNag }: {
-  children: React.ReactNode
-  feature?: string
-  onOpenSettings?: () => void
-  onNag?: (feature: string) => void
-}) {
-  const pro = useIsPro()
-  const nagFiredRef = useRef(false)
-
-  useEffect(() => {
-    if (!pro && !nagFiredRef.current) {
-      nagFiredRef.current = true
-      const count = bumpNagCount()
-      if (count >= NAG_THRESHOLD) {
-        onNag?.(feature ?? 'Pro Feature')
-      }
-    }
-  }, [pro])
-
-  if (pro) return <>{children}</>
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
-      <div className="w-14 h-14 rounded-full bg-[#1c2128] flex items-center justify-center mb-1">
-        <Key size={24} className="text-[#dcdcaa]" strokeWidth={1.5} />
-      </div>
-      <div className="text-[15px] text-[#e6edf3] font-semibold">{feature ?? 'Pro Feature'}</div>
-      <div className="text-[13px] text-[#6e7681] max-w-[300px] leading-relaxed">
-        This feature requires Litescope Pro — $89/year.
-      </div>
-      <div className="flex gap-2 mt-1">
-        <a
-          href="https://litescope-site.pages.dev/#pricing"
-          target="_blank"
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
-        >
-          Get Pro <ExternalLink size={11} />
-        </a>
-        {onOpenSettings && (
-          <button
-            onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#161b22] hover:bg-[#21262d] text-[#e6edf3] text-[12px] rounded-sm transition-colors"
-          >
-            <Key size={12} />Enter key
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
 function SettingsView() {
-  const [key, setKey] = useState(() => getLicenseKey())
-  const [saved, setSaved] = useState(false)
-  const [err, setErr] = useState('')
-
-  function save() {
-    const trimmed = key.trim()
-    if (trimmed && !trimmed.startsWith('lsc_pro_')) {
-      setErr('Invalid key format. Keys start with lsc_pro_')
-      return
-    }
-    localStorage.setItem(LICENSE_KEY, trimmed)
-    window.dispatchEvent(new Event('litescope:license-changed'))
-    setSaved(true)
-    setErr('')
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  function remove() {
-    setKey('')
-    localStorage.removeItem(LICENSE_KEY)
-    window.dispatchEvent(new Event('litescope:license-changed'))
-  }
-
-  const currentKey = getLicenseKey()
-  const active = isPro(currentKey)
-
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-lg">
         <div className="text-[15px] font-semibold text-[#e6edf3] mb-1">Settings</div>
-        <div className="text-[12px] text-[#484f58] mb-6">License and preferences</div>
+        <div className="text-[12px] text-[#484f58] mb-6">About &amp; resources</div>
 
-        {/* License section */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Key size={14} className="text-[#dcdcaa]" strokeWidth={1.5} />
-            <span className="text-[13px] font-medium text-[#e6edf3]">License</span>
-            <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${active ? 'bg-[#0d2a22] text-[#4ec9b0]' : 'bg-[#1c2128] text-[#6e7681]'}`}>
-              {active ? 'Pro' : 'Free'}
-            </span>
+        {/* This desktop app — and the whole CLI — is free and fully featured.
+            The only paid product is the hosted Litescope Cloud dashboard. */}
+        <div className="bg-[#0d1117] border border-[#00d4aa]/30 rounded-sm p-4 mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Activity size={14} className="text-[#00d4aa]" strokeWidth={1.5} />
+            <span className="text-[12px] text-[#e6edf3] font-medium">Litescope Cloud</span>
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#1c2128] text-[#6e7681]">hosted</span>
           </div>
-
-          {active && (
-            <div className="text-[11px] text-[#484f58] font-mono bg-[#0d1117] px-3 py-2 rounded-sm border border-[#30363d] mb-3 truncate">
-              {currentKey}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <input
-              value={key}
-              onChange={e => { setKey(e.target.value); setErr('') }}
-              onKeyDown={e => e.key === 'Enter' && save()}
-              placeholder="lsc_pro_…"
-              className="flex-1 bg-[#0d1117] border border-[#30363d] text-[#e6edf3] text-[12px] px-3 py-1.5 rounded-md outline-none focus:border-[#00d4aa] font-mono placeholder-[#484848]"
-            />
-            <button
-              onClick={save}
-              className="px-3 py-1.5 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
-            >
-              {saved ? <CheckIcon size={13} /> : 'Activate'}
-            </button>
-            {active && (
-              <button
-                onClick={remove}
-                className="px-3 py-1.5 bg-[#161b22] hover:bg-[#21262d] text-[#6e7681] text-[12px] rounded-sm transition-colors"
-              >
-                Remove
-              </button>
-            )}
+          <div className="text-[11px] text-[#6e7681] mb-3 leading-relaxed">
+            This app is free with every feature unlocked. Litescope Cloud is the
+            optional hosted control plane — push metrics from your fleet, continuous
+            drift &amp; health monitoring, and alerting across Turso &amp; D1.
           </div>
-          {err && <div className="text-[11px] text-[#f44747] mt-2">{err}</div>}
-          {saved && <div className="text-[11px] text-[#4ec9b0] mt-2">License activated.</div>}
+          <a
+            href="https://litescope-site.pages.dev/#pricing"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
+          >
+            Learn more <ExternalLink size={11} />
+          </a>
         </div>
-
-        {!active && (
-          <div className="bg-[#0d1117] border border-[#00d4aa]/30 rounded-sm p-4">
-            <div className="text-[12px] text-[#e6edf3] font-medium mb-1">Litescope Pro — $89/year</div>
-            <div className="text-[11px] text-[#6e7681] mb-3 leading-relaxed">
-              Continuous drift monitoring, fleet operations across Turso & D1, unlimited connections.
-            </div>
-            <a
-              href="https://litescope-site.pages.dev/#pricing"
-              target="_blank"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00d4aa] hover:bg-[#00bfaa] text-[#031a14] text-[12px] rounded-sm transition-colors"
-            >
-              Buy Pro <ExternalLink size={11} />
-            </a>
-          </div>
-        )}
 
         {/* About section */}
         <div className="bg-[#161b22] border border-[#30363d] rounded-sm p-4 mt-4">
@@ -396,7 +195,6 @@ export default function App() {
   const { conns, add: addConn, remove: removeConn, rename: renameConn, touch } = useConnections()
   const { recent, addRecent, removeRecent } = useRecent()
   const [statusMsg, setStatusMsg] = useState<{ text: string; kind: 'ok' | 'warn' | 'err' | 'idle' }>({ text: 'Ready', kind: 'idle' })
-  const [nagFeature, setNagFeature] = useState<string | null>(null)
 
   // inject: sidebarで connection をクリックすると active view に path が注入される
   const injectRef = useRef<((path: string) => void) | null>(null)
@@ -409,12 +207,7 @@ export default function App() {
     injectRef?.current?.(conn.path)
   }
 
-  function handleNag(feature: string) {
-    setNagFeature(feature)
-  }
-
   const viewProps = { recent, addRecent, removeRecent, status }
-  const proGateProps = { onOpenSettings: () => setTool('settings'), onNag: handleNag }
 
   // Native menu bar → app actions. Menu items emit menu:* events (see gui/menu.go).
   useEffect(() => {
@@ -422,7 +215,6 @@ export default function App() {
       touch(p); addConn(p); addRecent(p); injectRef?.current?.(p)
     }
     EventsOn('menu:open-db', async () => {
-      if (!isPro() && conns.length >= FREE_CONN_LIMIT) { setTool('settings'); return }
       const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
     })
     EventsOn('menu:open-path', (p: string) => { if (p) openPath(p) })
@@ -457,10 +249,6 @@ export default function App() {
           <Sidebar
             conns={conns} onConnClick={handleConnClick}
             onAddConn={async () => {
-              if (!isPro() && conns.length >= FREE_CONN_LIMIT) {
-                setTool('settings')
-                return
-              }
               const p = await OpenFile(); if (p) { addConn(p); addRecent(p) }
             }}
             onRemoveConn={removeConn} onRenameConn={renameConn}
@@ -472,22 +260,15 @@ export default function App() {
           {tool === 'diff'     && <DiffView    {...viewProps} injectRef={injectRef} />}
           {tool === 'explorer' && <ExplorerView {...viewProps} injectRef={injectRef} />}
           {tool === 'query'    && <QueryView    {...viewProps} injectRef={injectRef} />}
-          {tool === 'check'    && <ProGate feature="Backup Check" {...proGateProps}><CheckView   {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'migrate'  && <ProGate feature="Migration Studio" {...proGateProps}><MigrateView  {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'monitor'  && <ProGate feature="Drift Monitor" {...proGateProps}><MonitorView  {...viewProps} injectRef={injectRef} /></ProGate>}
-          {tool === 'fleet'    && <ProGate feature="Fleet Operations" {...proGateProps}><FleetView    {...viewProps} /></ProGate>}
+          {tool === 'check'    && <CheckView   {...viewProps} injectRef={injectRef} />}
+          {tool === 'migrate'  && <MigrateView  {...viewProps} injectRef={injectRef} />}
+          {tool === 'monitor'  && <MonitorView  {...viewProps} injectRef={injectRef} />}
+          {tool === 'fleet'    && <FleetView    {...viewProps} />}
           {tool === 'log'      && <LogView {...viewProps} />}
           {tool === 'settings' && <SettingsView />}
         </main>
       </div>
       <StatusBar msg={statusMsg} tool={tool} />
-      {nagFeature && (
-        <NagModal
-          feature={nagFeature}
-          onClose={() => setNagFeature(null)}
-          onOpenSettings={() => setTool('settings')}
-        />
-      )}
     </div>
   )
 }
@@ -617,12 +398,6 @@ function Sidebar({ conns, onConnClick, onAddConn, onRemoveConn, onRenameConn, ac
         <div className="text-[10px] text-[#484f58] leading-relaxed">
           Click a DB to inject into the active panel
         </div>
-        {!useIsPro() && (
-          <div className="text-[10px] text-[#484f58] mt-1">
-            Free: {conns.length}/{FREE_CONN_LIMIT} connections ·{' '}
-            <button onClick={onOpenSettings} className="text-[#00d4aa] hover:underline bg-transparent border-0 p-0 cursor-pointer text-[10px]">Upgrade</button>
-          </div>
-        )}
       </div>
     </div>
   )

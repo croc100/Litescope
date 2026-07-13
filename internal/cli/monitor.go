@@ -16,7 +16,7 @@ import (
 )
 
 // isRemoteDSN reports whether a source points at a hosted provider (Turso/D1)
-// rather than a local file. Remote monitoring is a Pro capability.
+// rather than a local file.
 func isRemoteDSN(dsn string) bool {
 	return strings.HasPrefix(dsn, "turso://") || strings.HasPrefix(dsn, "d1://")
 }
@@ -112,7 +112,7 @@ func cmdMonitorCheck() *cobra.Command {
 		Long: `Compare the current schema against a saved baseline snapshot.
 Exits 0 if no drift, exits 1 if drift is detected.
 
-Use --save-report to append results to a JSONL report file for CI history (Pro).
+Use --save-report to append results to a JSONL report file for CI history.
 
 Examples:
   litescope monitor check production.db --baseline baseline.json
@@ -122,7 +122,7 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dsn := args[0]
 
-			// --save-report is a Pro feature
+			// --save-report appends to a JSONL report file
 			if saveReport != "" {
 				if err := license.RequirePro(); err != nil {
 					return err
@@ -298,9 +298,9 @@ func cmdMonitorHistory() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "history <report.jsonl>",
-		Short: "Show drift history from saved reports (Pro)",
+		Short: "Show drift history from saved reports",
 		Long: `Display a timeline of past drift checks from a JSONL report file.
-Build the report with: litescope monitor check --save-report report.jsonl (Pro)
+Build the report with: litescope monitor check --save-report report.jsonl
 
 Examples:
   litescope monitor history reports/drift.jsonl

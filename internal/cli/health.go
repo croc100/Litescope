@@ -32,7 +32,7 @@ func cmdHealth() *cobra.Command {
 
 Exit code is 1 when the database is in a warning or critical state.
 
-Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
+Triage an entire Turso/D1 fleet at once with: litescope fleet health`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := health.Inspect(args[0], deep)

@@ -22,11 +22,11 @@ func cmdCheck() *cobra.Command {
 		Short: "Verify backup database integrity and schema consistency",
 		Long: `Runs three levels of verification:
   1. File integrity   — PRAGMA integrity_check (free)
-  2. Schema match     — compare against --against reference (Pro)
-  3. Row count match  — compare row counts per table (Pro)
+  2. Schema match     — compare against --against reference
+  3. Row count match  — compare row counts per table
 
-Multiple backup files can be checked in one run (Pro).
-Use --save-report to append results to a JSONL file for history (Pro).
+Multiple backup files can be checked in one run.
+Use --save-report to append results to a JSONL file for history.
 
 Examples:
   litescope check backup.db

@@ -24,7 +24,7 @@ import (
 func cmdFleet() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fleet",
-		Short: "Manage many databases at once: discover, baseline, drift-check (Pro)",
+		Short: "Manage many databases at once: discover, baseline, drift-check",
 		Long: `Fleet operates on every SQLite database in a Turso org or Cloudflare D1
 account as a single unit.
 
@@ -38,9 +38,7 @@ account as a single unit.
   fleet blast-radius — map a fault to the shared cohort (group/region) at risk
   fleet recover      — restore faulted databases from backups; quarantine the rest
   fleet migrate      — roll one migration out across the fleet, staged
-  fleet status       — show the configured fleet
-
-Fleet is a Pro feature.`,
+  fleet status       — show the configured fleet`,
 	}
 	cmd.AddCommand(cmdFleetDiscover())
 	cmd.AddCommand(cmdFleetSnapshot())

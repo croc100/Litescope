@@ -49,7 +49,7 @@ doctor combines:
 Exit code is 1 when the database needs attention (a health warning/critical
 state or any performance warning) — safe to drop into CI as a quality gate.
 
-Triage an entire Turso/D1 fleet at once with: litescope fleet health (Pro)`,
+Triage an entire Turso/D1 fleet at once with: litescope fleet health`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := args[0]
