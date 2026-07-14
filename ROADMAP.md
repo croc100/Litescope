@@ -113,7 +113,16 @@ apps, edge, devices, and per-tenant stores — invisible to those tools. Builds
 on the live hosted backend's push ingestion.
 
 - Heartbeat / staleness detection (Cloudflare Cron dead-man's-switch)
-- Threshold alerts → email (Resend) on severity crossings
+- **Alerting on the hosted dashboard** — fire when a database crosses a
+  severity threshold (critical/warning), goes stale, or the WAL checkpoint
+  starves. Two surfaces:
+  - *In-dashboard live alarm* — a loud, unmistakable audible + visual alert
+    while the dashboard is open, so an on-call operator can't miss it.
+  - *Notification channels* — email (Resend) plus outbound webhooks/APIs for
+    Slack, Discord, Telegram, and Microsoft Teams. Per-org channel config,
+    de-duped and rate-limited so one flapping database doesn't spam.
+  - Runs entirely on the existing Cloudflare free tier + D1 (Cron trigger
+    evaluates recent push data; no extra infra).
 - Fleet assertions (push-time, pytest-style expectation checks)
 - Scheduled push, packaged (systemd timer / cron recipes)
 - Lock doctor for the fleet ✅ shipped — `fleet locks` rolls up every
