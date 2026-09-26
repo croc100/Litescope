@@ -8,13 +8,9 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/croc100/litescope/internal/connector"
 )
-
-// protocolVersion is the MCP revision this server implements.
-const protocolVersion = "2025-06-18"
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -24,8 +20,9 @@ type rpcRequest struct {
 }
 
 type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
 }
 
 type rpcResponse struct {
@@ -35,7 +32,10 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-// server holds the per-connection state shared across requests.
+// server holds the state shared across requests on one connection. Under the
+// modern (stateless) revision nothing about a request is inferred from an
+// earlier one; the mutable state below belongs either to the handshake-era
+// session or to an explicitly opened subscription stream.
 type server struct {
 	tools         []Tool
 	byName        map[string]Tool
@@ -48,15 +48,17 @@ type server struct {
 	// goroutine and the request loop can both emit messages safely.
 	mu sync.Mutex
 	// respondSink receives JSON-RPC responses (replies to a request); notifySink
-	// receives server-initiated notifications (logging, resource updates). Over
-	// stdio both write to the same stream; over Streamable HTTP responses go back
-	// on the POST body while notifications go to the session's SSE stream.
+	// receives server-initiated notifications for the handshake-era session.
+	// Over stdio both write to the same stream; over Streamable HTTP responses
+	// go back on the POST body. Modern subscription streams carry their own
+	// sink (see subscription.sink).
 	respondSink func([]byte)
 	notifySink  func([]byte)
-	logLevel    string          // current minimum log level (RFC 5424 names)
-	subs        map[string]bool // subscribed resource URIs
-	watching    bool            // true once the resource watcher goroutine is running
-	stop        chan struct{}   // closed when the connection ends, stopping the watcher
+	logLevel    string                   // handshake-era minimum log level (RFC 5424 names)
+	subs        map[string]bool          // legacy resources/subscribe URIs
+	listens     map[string]*subscription // open subscriptions/listen streams, by request id
+	watching    bool                     // true once the resource watcher goroutine is running
+	stop        chan struct{}            // closed when the connection ends, stopping the watcher
 }
 
 // newServer builds a server with its tool/prompt registries populated. The
@@ -78,6 +80,7 @@ func newServer(version string, allowWrites bool, defaultSource string) *server {
 		version: version, defaultSource: defaultSource,
 		logLevel: "info",
 		subs:     map[string]bool{},
+		listens:  map[string]*subscription{},
 		stop:     make(chan struct{}),
 	}
 }
@@ -117,39 +120,101 @@ func Serve(in io.Reader, out io.Writer, version string, allowWrites bool, defaul
 	}
 }
 
+// handleLine dispatches one message on a stdio-style shared stream, where a
+// subscription's notifications go to the same sink as everything else.
 func (s *server) handleLine(line []byte) {
+	s.handleMessage(line, s.notifySinkFn())
+}
+
+func (s *server) notifySinkFn() func([]byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.notifySink
+}
+
+// handleMessage dispatches one JSON-RPC message. listenSink is the stream a
+// subscriptions/listen request writes to; it returns the subscription it opened
+// so a transport that gives each request its own stream (Streamable HTTP) can
+// hold that stream open and tear it down when the client goes away.
+func (s *server) handleMessage(line []byte, listenSink func([]byte)) *subscription {
 	var req rpcRequest
 	if err := json.Unmarshal(line, &req); err != nil {
-		return // ignore malformed input
+		return nil // ignore malformed input
 	}
 	isNotification := len(req.ID) == 0
 
+	// Decide the era of this single request. A request carrying
+	// io.modelcontextprotocol/protocolVersion is served statelessly under that
+	// revision; anything else is handshake-era.
+	meta := parseRequestMeta(req.Params)
+	rc := legacyCtx()
+	switch {
+	case meta.hasVersion:
+		if !supportsVersion(meta.version) {
+			if !isNotification {
+				s.respondErrorData(req.ID, errUnsupportedVersion, "unsupported protocol version",
+					map[string]interface{}{"supported": supportedVersions(), "requested": meta.version})
+			}
+			return nil
+		}
+		if meta.version == protocolVersion {
+			rc = &reqCtx{modern: true, version: meta.version, logLevel: meta.logLevel}
+			// protocolVersion and clientCapabilities are both required on every
+			// modern request; a request missing one is malformed.
+			if !meta.hasClientCaps {
+				if !isNotification {
+					s.respondError(req.ID, -32602, "missing required _meta field: "+metaClientCaps)
+				}
+				return nil
+			}
+		}
+	case isModernOnlyMethod(req.Method):
+		// server/discover doubles as the client's backward-compatibility probe,
+		// so answer it even when the probe carries no metadata at all.
+		rc = &reqCtx{modern: true, version: protocolVersion}
+	}
+
+	if rc.modern && isRemovedInModern(req.Method) {
+		if !isNotification {
+			s.respondError(req.ID, -32601, "method not found in "+protocolVersion+": "+req.Method)
+		}
+		return nil
+	}
+
 	switch req.Method {
+	case "server/discover":
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{
+			"supportedVersions": supportedVersions(),
+			"capabilities":      s.capabilities(rc),
+			"instructions": "Operations layer for SQLite, Cloudflare D1 and Turso. Diagnose before a write " +
+				"(health, locks, advise, lint), and rewind after one (every write tool captures an undo point).",
+		})
+	case "subscriptions/listen":
+		if isNotification {
+			return nil
+		}
+		return s.handleListen(req, rc, listenSink)
 	case "initialize":
 		// Agree to the client's requested protocol version when it sends one;
-		// otherwise fall back to ours.
-		ver := protocolVersion
+		// otherwise fall back to the handshake-era default.
+		ver := legacyVersion
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
 		}
 		if json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
 			ver = p.ProtocolVersion
 		}
-		s.respond(req.ID, map[string]interface{}{
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{
 			"protocolVersion": ver,
-			"capabilities": map[string]interface{}{
-				"tools":       map[string]interface{}{},
-				"prompts":     map[string]interface{}{},
-				"resources":   map[string]interface{}{"subscribe": true},
-				"logging":     map[string]interface{}{},
-				"completions": map[string]interface{}{},
-			},
-			"serverInfo": map[string]interface{}{"name": "litescope", "version": s.version},
+			"capabilities":    s.capabilities(rc),
+			"serverInfo":      map[string]interface{}{"name": "litescope", "version": s.version},
 		})
-	case "notifications/initialized", "notifications/cancelled":
-		// notifications: no response
+	case "notifications/initialized":
+		// notification: no response
+	case "notifications/cancelled":
+		s.cancelListen(req.Params)
 	case "ping":
-		s.respond(req.ID, map[string]interface{}{})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{})
 	case "logging/setLevel":
 		var p struct {
 			Level string `json:"level"`
@@ -159,37 +224,56 @@ func (s *server) handleLine(line []byte) {
 			s.logLevel = p.Level
 			s.mu.Unlock()
 		}
-		s.respond(req.ID, map[string]interface{}{})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{})
 	case "tools/list":
 		// cursor is accepted for spec compliance; the full set fits in one page,
 		// so no nextCursor is returned.
-		s.respond(req.ID, map[string]interface{}{"tools": toolDescriptors(s.tools)})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"tools": toolDescriptors(s.tools)})
 	case "tools/call":
-		s.handleToolCall(req)
+		s.handleToolCall(req, rc)
 	case "prompts/list":
-		s.respond(req.ID, map[string]interface{}{"prompts": promptDescriptors(s.prompts)})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"prompts": promptDescriptors(s.prompts)})
 	case "prompts/get":
-		s.handlePromptGet(req)
+		s.handlePromptGet(req, rc)
 	case "resources/list":
-		s.respond(req.ID, map[string]interface{}{"resources": concreteResources(s.defaultSource)})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"resources": concreteResources(s.defaultSource)})
 	case "resources/templates/list":
-		s.respond(req.ID, map[string]interface{}{"resourceTemplates": resourceTemplates()})
+		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"resourceTemplates": resourceTemplates()})
 	case "resources/read":
-		s.handleResourceRead(req)
+		s.handleResourceRead(req, rc)
 	case "resources/subscribe":
-		s.handleSubscribe(req, true)
+		s.handleSubscribe(req, rc, true)
 	case "resources/unsubscribe":
-		s.handleSubscribe(req, false)
+		s.handleSubscribe(req, rc, false)
 	case "completion/complete":
-		s.handleComplete(req)
+		s.handleComplete(req, rc)
 	default:
 		if !isNotification {
 			s.respondError(req.ID, -32601, "method not found: "+req.Method)
 		}
 	}
+	return nil
 }
 
-func (s *server) handleToolCall(req rpcRequest) {
+// capabilities describes what this server supports, per era. Logging, roots
+// and sampling are deprecated in the modern revision and are not advertised
+// there; subscriptions are opened with subscriptions/listen instead of
+// resources/subscribe, but the resources.subscribe flag still signals that
+// resource updates are available.
+func (s *server) capabilities(rc *reqCtx) map[string]interface{} {
+	caps := map[string]interface{}{
+		"tools":       map[string]interface{}{},
+		"prompts":     map[string]interface{}{},
+		"resources":   map[string]interface{}{"subscribe": true},
+		"completions": map[string]interface{}{},
+	}
+	if !rc.modern {
+		caps["logging"] = map[string]interface{}{}
+	}
+	return caps
+}
+
+func (s *server) handleToolCall(req rpcRequest, rc *reqCtx) {
 	var params struct {
 		Name      string                 `json:"name"`
 		Arguments map[string]interface{} `json:"arguments"`
@@ -203,23 +287,23 @@ func (s *server) handleToolCall(req rpcRequest) {
 		s.respondError(req.ID, -32602, "unknown tool: "+params.Name)
 		return
 	}
-	s.log("debug", map[string]interface{}{"event": "tool_call", "tool": params.Name})
+	s.log(rc, "debug", map[string]interface{}{"event": "tool_call", "tool": params.Name})
 	text, err := tool.Handler(params.Arguments)
 	if err != nil {
 		// Tool-level errors are returned in the result with isError, not as a
 		// protocol error, so the model can read and react to them.
-		s.log("error", map[string]interface{}{"event": "tool_error", "tool": params.Name, "error": err.Error()})
-		s.respond(req.ID, toolResult(fmt.Sprintf("Error: %v", err), true))
+		s.log(rc, "error", map[string]interface{}{"event": "tool_error", "tool": params.Name, "error": err.Error()})
+		s.reply(rc, req.ID, req.Method, "", toolResult(fmt.Sprintf("Error: %v", err), true))
 		return
 	}
-	s.respond(req.ID, toolResult(text, false))
+	s.reply(rc, req.ID, req.Method, "", toolResult(text, false))
 }
 
 // structuredOf parses a tool's JSON text output into an object for the
-// structuredContent field (MCP 2025-06-18). Every litescope tool emits a JSON
-// object via toJSON, so this lets clients consume results without re-parsing the
-// text block themselves. Returns nil (omitting structuredContent) when the text
-// is not a JSON object — e.g. an error string.
+// structuredContent field. Every litescope tool emits a JSON object via toJSON,
+// so this lets clients consume results without re-parsing the text block.
+// Returns nil (omitting structuredContent) when the text is not a JSON object —
+// e.g. an error string.
 func structuredOf(text string) map[string]interface{} {
 	var obj map[string]interface{}
 	if err := json.Unmarshal([]byte(text), &obj); err != nil {
@@ -228,7 +312,7 @@ func structuredOf(text string) map[string]interface{} {
 	return obj
 }
 
-func (s *server) handlePromptGet(req rpcRequest) {
+func (s *server) handlePromptGet(req rpcRequest, rc *reqCtx) {
 	var params struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
@@ -248,7 +332,7 @@ func (s *server) handlePromptGet(req rpcRequest) {
 			return
 		}
 	}
-	s.respond(req.ID, map[string]interface{}{
+	s.reply(rc, req.ID, req.Method, "", map[string]interface{}{
 		"description": p.Description,
 		"messages": []map[string]interface{}{{
 			"role":    "user",
@@ -257,7 +341,7 @@ func (s *server) handlePromptGet(req rpcRequest) {
 	})
 }
 
-func (s *server) handleResourceRead(req rpcRequest) {
+func (s *server) handleResourceRead(req rpcRequest, rc *reqCtx) {
 	var params struct {
 		URI string `json:"uri"`
 	}
@@ -267,10 +351,12 @@ func (s *server) handleResourceRead(req rpcRequest) {
 	}
 	text, mime, err := readResource(params.URI)
 	if err != nil {
+		// Invalid Params, per the 2026-07-28 alignment with JSON-RPC (the old
+		// -32002 "resource not found" code is retired).
 		s.respondError(req.ID, -32602, err.Error())
 		return
 	}
-	s.respond(req.ID, map[string]interface{}{
+	s.reply(rc, req.ID, req.Method, params.URI, map[string]interface{}{
 		"contents": []map[string]interface{}{{
 			"uri":      params.URI,
 			"mimeType": mime,
@@ -279,10 +365,10 @@ func (s *server) handleResourceRead(req rpcRequest) {
 	})
 }
 
-// handleSubscribe records (or removes) a resource subscription and starts the
-// watcher goroutine on the first subscribe. The watcher emits
-// notifications/resources/updated when a local-file-backed resource changes.
-func (s *server) handleSubscribe(req rpcRequest, subscribe bool) {
+// handleSubscribe records (or removes) a handshake-era resource subscription
+// and starts the watcher goroutine on the first subscribe. Modern clients use
+// subscriptions/listen instead (see subscriptions.go).
+func (s *server) handleSubscribe(req rpcRequest, rc *reqCtx, subscribe bool) {
 	var p struct {
 		URI string `json:"uri"`
 	}
@@ -304,72 +390,14 @@ func (s *server) handleSubscribe(req rpcRequest, subscribe bool) {
 	if start {
 		go s.watchResources()
 	}
-	s.respond(req.ID, map[string]interface{}{})
-}
-
-// watchResources polls every subscribed local-file resource and emits
-// notifications/resources/updated when it's actually worth telling the agent.
-// Remote (d1/turso) resources cannot be watched and are skipped. It exits when
-// Serve returns.
-//
-// Two different triggers are used depending on the resource:
-//   - schema/dictionary rarely change, so any file-mtime bump is notification-
-//     worthy.
-//   - health/locks are live diagnoses of a file that may be written constantly;
-//     using mtime here would fire on every single write even when nothing about
-//     severity changed, and — worse — would never fire when writes *stop*
-//     (a stale heartbeat, the exact case the check exists to catch). Instead
-//     these recompute the diagnosis each tick and notify only when the
-//     severity/verdict signature changes (see liveSignature).
-func (s *server) watchResources() {
-	mtimes := map[string]time.Time{}
-	states := map[string]string{}
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.stop:
-			return
-		case <-ticker.C:
-			s.mu.Lock()
-			uris := make([]string, 0, len(s.subs))
-			for u := range s.subs {
-				uris = append(uris, u)
-			}
-			s.mu.Unlock()
-			for _, u := range uris {
-				if sig, ok := liveSignature(u); ok {
-					prev, seen := states[u]
-					states[u] = sig
-					if seen && sig != prev {
-						s.notify("notifications/resources/updated", map[string]interface{}{"uri": u})
-					}
-					continue
-				}
-				path := resourceFilePath(u)
-				if path == "" {
-					continue // remote or unknown URI: not watchable
-				}
-				fi, err := os.Stat(path)
-				if err != nil {
-					continue
-				}
-				mt := fi.ModTime()
-				prev, seen := mtimes[u]
-				mtimes[u] = mt
-				if seen && mt.After(prev) {
-					s.notify("notifications/resources/updated", map[string]interface{}{"uri": u})
-				}
-			}
-		}
-	}
+	s.reply(rc, req.ID, req.Method, "", map[string]interface{}{})
 }
 
 // handleComplete answers completion/complete for argument autocompletion. The
 // only argument we can meaningfully complete is a database "source" (also
 // exposed as old/new on diff/migrate tools): we suggest the bound default
 // source and, when Cloudflare credentials are present, the account's D1 DSNs.
-func (s *server) handleComplete(req rpcRequest) {
+func (s *server) handleComplete(req rpcRequest, rc *reqCtx) {
 	var p struct {
 		Argument struct {
 			Name  string `json:"name"`
@@ -385,7 +413,7 @@ func (s *server) handleComplete(req rpcRequest) {
 	case "source", "old", "new":
 		values = s.completeSource(p.Argument.Value)
 	}
-	s.respond(req.ID, map[string]interface{}{
+	s.reply(rc, req.ID, req.Method, "", map[string]interface{}{
 		"completion": map[string]interface{}{
 			"values":  values,
 			"total":   len(values),
@@ -445,7 +473,7 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 		"isError": isErr,
 	}
 	// Mirror successful JSON output into structuredContent so agents can consume
-	// it directly instead of parsing the text block (MCP 2025-06-18).
+	// it directly instead of parsing the text block.
 	if !isErr {
 		if obj := structuredOf(text); obj != nil {
 			res["structuredContent"] = obj
@@ -456,25 +484,48 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 
 // ── message writing (thread-safe) ───────────────────────────────────────────
 
-func (s *server) respond(id json.RawMessage, result interface{}) {
-	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Result: result})
+// reply answers a request, adding the fields the modern revision requires
+// (resultType, serverInfo, caching hints) and leaving handshake-era results
+// exactly as they were. uri is the resource URI for resources/read, which
+// determines its caching hint; it is empty for every other method.
+func (s *server) reply(rc *reqCtx, id json.RawMessage, method, uri string, result interface{}) {
+	if len(id) == 0 {
+		return // notification: nothing to answer
+	}
+	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Result: s.decorate(rc, method, uri, result)})
 }
 
 func (s *server) respondError(id json.RawMessage, code int, msg string) {
 	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
 }
 
-// notify writes a JSON-RPC notification (no id) to the client.
+func (s *server) respondErrorData(id json.RawMessage, code int, msg string, data interface{}) {
+	s.write(s.respondSink, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg, Data: data}})
+}
+
+// notify writes a JSON-RPC notification (no id) to the handshake-era client.
 func (s *server) notify(method string, params interface{}) {
 	s.write(s.notifySink, map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params})
 }
 
 // log emits a notifications/message log record when level passes the client's
 // configured minimum (set via logging/setLevel; default "info").
-func (s *server) log(level string, data interface{}) {
-	s.mu.Lock()
-	min := s.logLevel
-	s.mu.Unlock()
+//
+// Logging is deprecated in 2026-07-28 and is gated on the client asking for it
+// per request: a server MUST NOT emit notifications/message for a request that
+// did not carry io.modelcontextprotocol/logLevel.
+func (s *server) log(rc *reqCtx, level string, data interface{}) {
+	min := ""
+	if rc != nil && rc.modern {
+		if rc.logLevel == "" {
+			return
+		}
+		min = rc.logLevel
+	} else {
+		s.mu.Lock()
+		min = s.logLevel
+		s.mu.Unlock()
+	}
 	if logSeverity(level) < logSeverity(min) {
 		return
 	}

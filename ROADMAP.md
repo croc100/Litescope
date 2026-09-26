@@ -50,9 +50,12 @@ MCP tools, and the hosted/local dashboard.
   prompts (`diagnose_locked_database`, `review_migration`, `safe_optimize`,
   `health_checkup`), `schema`/`dictionary`/`health`/`locks` resources (the
   latter two computed live, notify only on severity/verdict change — not on
-  every write), spec 2025-06-18 (annotations, structured output, argument
-  completion, resource subscriptions, Streamable HTTP transport with bearer
-  auth + Origin allowlist)
+  every write), **spec 2026-07-28** — the stateless revision: `server/discover`,
+  per-request protocol metadata, `resultType`, caching hints (`ttlMs`/`cacheScope`),
+  `subscriptions/listen` streams, and the standard Streamable HTTP request
+  headers — served dual-era alongside handshake clients on 2025-06-18
+  (annotations, structured output, argument completion, resource subscriptions,
+  Streamable HTTP transport with bearer auth + Origin allowlist)
 - **Heartbeat staleness** — `--stale-after` on `health`/`fleet health` and
   `litescope://health/{source}?stale_after=`, flags a database that stopped
   being written to

@@ -332,3 +332,10 @@ func primaryKey(t schema.Table) string {
 	}
 	return strings.Join(cols, ", ")
 }
+
+// isLiveResource reports whether a URI names a resource that is recomputed on
+// every read (health, locks) rather than derived from a file that rarely
+// changes (schema, dictionary). Live resources are never handed a cache TTL.
+func isLiveResource(uri string) bool {
+	return strings.HasPrefix(uri, healthScheme) || strings.HasPrefix(uri, locksScheme)
+}
