@@ -1,6 +1,9 @@
 package mcp
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Litescope speaks two eras of MCP at once (a "dual-era" server, in the words
 // of the 2026-07-28 spec):
@@ -139,6 +142,11 @@ func cacheHintFor(method, uri string) (cacheHint, bool) {
 	case "server/discover", "tools/list", "prompts/list", "resources/list", "resources/templates/list":
 		return cacheHint{ttlMs: hourMs, cacheScope: "public"}, true
 	case "resources/read":
+		// A UI view is a static document compiled into the binary: it cannot
+		// change while the process runs and holds no database content.
+		if strings.HasPrefix(uri, uiScheme) {
+			return cacheHint{ttlMs: hourMs, cacheScope: "public"}, true
+		}
 		// health/locks are recomputed on every read by design; handing a client
 		// a TTL on them would let it serve a stale verdict.
 		if isLiveResource(uri) {
