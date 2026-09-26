@@ -236,6 +236,9 @@ func (s *server) handleMessage(line []byte, listenSink func([]byte)) *subscripti
 	case "prompts/get":
 		s.handlePromptGet(req, rc)
 	case "resources/list":
+		// UI views are addressed by a tool's _meta.ui.resourceUri and fetched
+		// by URI, so they stay out of the listing a user browses (the Apps
+		// extension explicitly allows omitting them).
 		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"resources": concreteResources(s.defaultSource)})
 	case "resources/templates/list":
 		s.reply(rc, req.ID, req.Method, "", map[string]interface{}{"resourceTemplates": resourceTemplates()})
@@ -266,6 +269,10 @@ func (s *server) capabilities(rc *reqCtx) map[string]interface{} {
 		"prompts":     map[string]interface{}{},
 		"resources":   map[string]interface{}{"subscribe": true},
 		"completions": map[string]interface{}{},
+		// MCP Apps: tools that have an interactive view name it in their
+		// _meta.ui. Advertised in both eras — the extension predates the
+		// stateless revision and hosts on either one can render a view.
+		"extensions": map[string]interface{}{uiExtension: uiCapability()},
 	}
 	if !rc.modern {
 		caps["logging"] = map[string]interface{}{}
@@ -347,6 +354,17 @@ func (s *server) handleResourceRead(req rpcRequest, rc *reqCtx) {
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		s.respondError(req.ID, -32602, "invalid params")
+		return
+	}
+	if html, ok := readUIResource(params.URI); ok {
+		s.reply(rc, req.ID, req.Method, params.URI, map[string]interface{}{
+			"contents": []map[string]interface{}{{
+				"uri":      params.URI,
+				"mimeType": uiMimeType,
+				"text":     html,
+				"_meta":    uiResourceMeta(),
+			}},
+		})
 		return
 	}
 	text, mime, err := readResource(params.URI)
@@ -461,6 +479,14 @@ func toolDescriptors(tools []Tool) []map[string]interface{} {
 		}
 		if title := annotationsFor(t.Name).Title; title != "" {
 			d["title"] = title
+		}
+		// MCP Apps: a host that implements the extension renders this tool's
+		// result with the named view; one that doesn't ignores _meta and shows
+		// the text result, which is why every tool still returns one.
+		if uri := uiResourceFor(t.Name); uri != "" {
+			d["_meta"] = map[string]interface{}{
+				"ui": map[string]interface{}{"resourceUri": uri},
+			}
 		}
 		out = append(out, d)
 	}
