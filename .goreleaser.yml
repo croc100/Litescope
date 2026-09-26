@@ -62,7 +62,7 @@ brews:
   - name: litescope
     homepage: "https://github.com/croc100/Litescope"
     description: "The database operations layer for AI apps — schema, migrations & fleet health for SQLite/Turso"
-    license: "Elastic-2.0"
+    license: "AGPL-3.0"
     repository:
       owner: croc100
       name: homebrew-tap

@@ -18,6 +18,24 @@ npx litescope diff local.db d1://DB_ID
 npx litescope mcp --allow-writes
 ```
 
+## Claude Code
+
+Install the plugin instead of wiring the MCP server by hand — it brings the
+server plus five skills (lock doctor, safe writes, migration review, fleet
+sweep, corruption recovery) that tell the agent what to do when a database is
+actually broken:
+
+```
+/plugin marketplace add croc100/Litescope
+/plugin install litescope@litescope
+```
+
+Four tools answer with an interactive panel inside the conversation via the
+[MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) extension: the
+lock doctor, a health panel, a write's blast radius, and the fleet grid. The
+MCP server speaks spec **2026-07-28** (stateless) and still serves
+handshake-era clients on 2025-06-18.
+
 Install globally if you prefer:
 
 ```bash
