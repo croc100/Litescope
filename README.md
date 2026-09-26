@@ -44,7 +44,16 @@ agents. Things a generic DB client structurally can't do.
 
 ## MCP — Give Claude direct access to your D1
 
-**Claude Code** — one line (read-only):
+**Claude Code** — install the plugin, which brings the MCP server plus five
+skills (lock doctor, safe writes, migration review, fleet sweep, corruption
+recovery) that teach the agent how to use it when something is wrong:
+
+```
+/plugin marketplace add croc100/Litescope
+/plugin install litescope@litescope
+```
+
+Or just the MCP server, one line (read-only):
 
 ```bash
 claude mcp add litescope -- litescope mcp
@@ -160,6 +169,26 @@ per-request protocol metadata, `resultType`, caching hints (`ttlMs` /
 `outputSchema`) and argument completion. It is **dual-era**: a client that still
 opens with the `initialize` handshake is served MCP **2025-06-18** unchanged, so
 older MCP clients keep working.
+
+### Interactive views (MCP Apps)
+
+Four tools answer with an interactive panel rendered inside the conversation,
+via the [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps)
+extension (`io.modelcontextprotocol/ui`):
+
+| Tool | View |
+| --- | --- |
+| `litescope_locks` | Lock doctor — verdict, each finding's exact PRAGMA/DSN fix, live lock probe |
+| `litescope_health` | Health panel — integrity, WAL, fragmentation, snapshot cover |
+| `litescope_query_write` / `litescope_migrate_apply` | Blast radius — rows affected per statement, schema impact, rewind token |
+| `litescope_fleet_health` | Fleet grid — every database worst-first, with drill-down |
+
+The views are single self-contained documents compiled into the binary. They
+load nothing from the network, so the host's strictest CSP applies and a
+database's contents cannot leave the iframe. They never write, either: a button
+that would apply or undo a write hands the request back to the conversation,
+because a click inside an embedded panel is not the user approving a production
+write. A host without the extension gets the same results as text.
 
 ### Remote / hosted (Streamable HTTP)
 

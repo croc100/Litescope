@@ -60,6 +60,12 @@ MCP tools, and the hosted/local dashboard.
   `litescope://health/{source}?stale_after=`, flags a database that stopped
   being written to
 - **D1 & Turso** — any-source DSN, env-var auth, D1 lifecycle tools, `d1 pull`/`push`
+- **MCP Apps** — interactive in-conversation views for the lock doctor, health,
+  a write's blast radius and the fleet grid (extension `io.modelcontextprotocol/ui`),
+  self-contained and network-free, with text fallback on hosts without the extension
+- **Claude Code plugin** — `croc100/Litescope` marketplace: the MCP server plus
+  five skills (lock doctor, safe writes, migration review, fleet sweep,
+  corruption recovery), read-only by default
 - **Platform** — GitHub Action, dual license (`COMMERCIAL.md`), npm wrapper
   (published as [`litescope`](https://www.npmjs.com/package/litescope)),
   hosted Enterprise dashboard (Cloudflare Workers + D1) live with org auth,

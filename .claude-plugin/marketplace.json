@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "litescope",
+  "description": "Operations tooling for SQLite, Cloudflare D1 and Turso — the safety layer that lets an agent touch a production database.",
+  "owner": { "name": "croc100", "url": "https://github.com/croc100" },
+  "plugins": [
+    {
+      "name": "litescope",
+      "source": "./plugin",
+      "description": "Diagnose before the write, rewind after it: lock doctor, health checks, blast-radius previews, fleet sweeps and corruption salvage for SQLite, Cloudflare D1 and Turso.",
+      "category": "database",
+      "tags": ["sqlite", "cloudflare-d1", "turso", "database", "migrations", "incident-response"]
+    }
+  ]
+}

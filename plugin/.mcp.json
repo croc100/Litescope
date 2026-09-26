@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "litescope": {
+      "command": "npx",
+      "args": ["-y", "litescope", "mcp"],
+      "env": {}
+    }
+  }
+}
