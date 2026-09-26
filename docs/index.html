@@ -772,7 +772,7 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
     <div>
       <div class="eyebrow">MCP-first</div>
       <h2>Claude speaks D1<br/>natively.</h2>
-      <p class="section-sub">Litescope is the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" style="color:var(--teal)">MCP</a> server built for Cloudflare D1. One config line and Claude can inspect, query, migrate, and rewind any D1 database — no API code, no dashboard.</p>
+      <p class="section-sub">Litescope is the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" style="color:var(--teal)">MCP</a> server built for Cloudflare D1. One config line and Claude can inspect, query, migrate, and rewind any D1 database — no API code, no dashboard. Speaks the current <b>2026-07-28</b> spec, and still serves older clients on 2025-06-18.</p>
       <ul class="spot-list">
         <li>
           <span class="spot-icon">🔍</span>
@@ -785,6 +785,14 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
         <li>
           <span class="spot-icon">📚</span>
           <div><b>Prompts &amp; resources</b> <span>Canned workflows (<em>diagnose_locked_database</em>, <em>review_migration</em>) and readable schema + data-dictionary resources, so the agent gets context without spending a tool call.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">🧩</span>
+          <div><b>One command in Claude Code</b> <span>Install the plugin and you get the server plus five skills — lock doctor, safe writes, migration review, fleet sweep, corruption recovery — so the agent knows what to do when a database is actually broken. <code>/plugin marketplace add croc100/Litescope</code>, then <code>/plugin install litescope@litescope</code>.</span></div>
+        </li>
+        <li>
+          <span class="spot-icon">🖥️</span>
+          <div><b>Panels, not walls of JSON</b> <span>Four tools answer with an interactive view rendered inside the conversation (<a href="https://modelcontextprotocol.io/docs/extensions/apps" target="_blank" rel="noopener" style="color:var(--teal)">MCP Apps</a>): the lock doctor, a health panel, a write&#39;s blast radius, and the fleet grid. They fetch nothing, and they never write — an apply or undo button hands the request back to the chat.</span></div>
         </li>
         <li>
           <span class="spot-icon">⏪</span>
@@ -961,6 +969,7 @@ footer { border-top: 1px solid var(--border); background: var(--bg-2); padding: 
       <div class="install-tabs">
         <button class="active" data-cmd="brew install croc100/tap/litescope">Homebrew</button>
         <button data-cmd="npx litescope doctor app.db">npx</button>
+        <button data-cmd="claude mcp add litescope -- npx -y litescope mcp">Claude Code</button>
         <button data-cmd="# Download litescope_windows_amd64.zip from the link below">Windows</button>
         <button data-cmd="# Download binary from github.com/croc100/Litescope/releases">Linux</button>
       </div>
