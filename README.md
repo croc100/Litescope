@@ -153,9 +153,13 @@ with `litescope mcp ./app.db`, or address any source via
 `litescope://schema/{source}`, `litescope://dictionary/{source}`,
 `litescope://health/{source}`, and `litescope://locks/{source}`.
 
-The server implements **MCP 2025-06-18**: tool annotations (read-only /
-destructive hints), structured output (`structuredContent` + `outputSchema`),
-argument completion, resource-change subscriptions, and server logging.
+The server implements **MCP 2026-07-28**, the stateless revision: `server/discover`,
+per-request protocol metadata, `resultType`, caching hints (`ttlMs` /
+`cacheScope`), and `subscriptions/listen` streams — alongside tool annotations
+(read-only / destructive hints), structured output (`structuredContent` +
+`outputSchema`) and argument completion. It is **dual-era**: a client that still
+opens with the `initialize` handshake is served MCP **2025-06-18** unchanged, so
+older MCP clients keep working.
 
 ### Remote / hosted (Streamable HTTP)
 
@@ -166,9 +170,12 @@ setup, serve over the Streamable HTTP transport instead:
 litescope mcp --http :7577 --http-token "$LITESCOPE_MCP_TOKEN"
 ```
 
-POST a JSON-RPC message to the endpoint (`/mcp` by default), or open a `GET` SSE
-stream for server notifications; each client gets its own session via the
-`Mcp-Session-Id` header.
+POST a JSON-RPC message to the endpoint (`/mcp` by default). Modern clients are
+served statelessly — no session — with each request carrying its own protocol
+metadata and the standard `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`
+headers, and change notifications arriving on a `subscriptions/listen` response
+stream. Handshake-era clients still get a session via the `Mcp-Session-Id`
+header and a `GET` SSE stream.
 
 Before exposing it publicly, lock it down: `--http-token` (or the
 `LITESCOPE_MCP_TOKEN` env var) requires `Authorization: Bearer <token>` on every

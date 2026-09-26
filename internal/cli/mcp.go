@@ -55,9 +55,12 @@ transport instead of stdio:
 
   litescope mcp --http :7577
 
-This exposes a single endpoint (default /mcp) speaking MCP 2025-06-18 Streamable
-HTTP: POST a JSON-RPC message, GET an SSE stream for server notifications. Each
-client gets its own session via the Mcp-Session-Id header.
+This exposes a single endpoint (default /mcp) speaking MCP 2026-07-28 Streamable
+HTTP: POST each JSON-RPC message, statelessly, with the standard
+MCP-Protocol-Version / Mcp-Method / Mcp-Name headers. Change notifications come
+back on the response stream of a subscriptions/listen request. Clients that
+still open with the initialize handshake are served MCP 2025-06-18 on the same
+endpoint, with a session (Mcp-Session-Id) and a GET SSE stream.
 
 Pass an optional database source (e.g. 'litescope mcp ./app.db') to bind it as
 MCP resources — its schema and a data dictionary become readable to the agent

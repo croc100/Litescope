@@ -64,8 +64,9 @@ func TestServe_Initialize(t *testing.T) {
 	if !ok {
 		t.Fatalf("no result in initialize response: %v", r[1])
 	}
-	if res["protocolVersion"] != protocolVersion {
-		t.Errorf("protocolVersion = %v, want %s", res["protocolVersion"], protocolVersion)
+	// A handshake with no requested version stays in the era it opened in.
+	if res["protocolVersion"] != legacyVersion {
+		t.Errorf("protocolVersion = %v, want %s", res["protocolVersion"], legacyVersion)
 	}
 	info := res["serverInfo"].(map[string]interface{})
 	if info["name"] != "litescope" || info["version"] != "test" {

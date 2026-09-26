@@ -32,7 +32,7 @@ type Tool struct {
 	Name         string
 	Description  string
 	InputSchema  map[string]interface{} // JSON Schema for the arguments
-	OutputSchema map[string]interface{} // optional JSON Schema for structuredContent (MCP 2025-06-18)
+	OutputSchema map[string]interface{} // optional JSON Schema for structuredContent
 	Handler      func(args map[string]interface{}) (string, error)
 }
 
