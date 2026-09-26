@@ -3,7 +3,7 @@
   "name": "litescope",
   "displayName": "Litescope — SQLite & D1 operations",
   "description": "Diagnose, migrate, monitor and repair SQLite, Cloudflare D1 and Turso databases from the agent: lock doctor, health, blast-radius previews with an undo point on every write, fleet sweeps and corruption salvage.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "author": { "name": "croc100", "url": "https://github.com/croc100" },
   "homepage": "https://litescope.crode.net",
   "repository": "https://github.com/croc100/Litescope",
